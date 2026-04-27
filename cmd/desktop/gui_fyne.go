@@ -84,6 +84,9 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	tree.onError = func(err error) {
 		fyne.Do(func() { dialog.ShowError(err, w) })
 	}
+	tree.onContextMenu = func(uid string, abs fyne.Position) {
+		showTreeContextMenu(w, a, b, tree, sessions, uid, abs)
+	}
 	sessions.tree = tree
 
 	// Search bar above tree.
@@ -186,8 +189,10 @@ func (r *sessionRegistry) add(st *sessionTab) {
 	r.items[st.hid] = st
 	count := len(r.items)
 	r.mu.Unlock()
-	r.tabs.Append(st.tabItem)
-	r.tabs.Select(st.tabItem)
+	if st.tabItem != nil {
+		r.tabs.Append(st.tabItem)
+		r.tabs.Select(st.tabItem)
+	}
 	r.setStatus(fmt.Sprintf("Connected: %s", st.cv.Name))
 	r.setSessionCount(count)
 }
@@ -202,7 +207,12 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	count := len(r.items)
 	r.mu.Unlock()
 	if ok {
-		r.tabs.Remove(st.tabItem)
+		if st.tabItem != nil {
+			r.tabs.Remove(st.tabItem)
+		}
+		if st.window != nil {
+			fyne.Do(func() { st.window.Close() })
+		}
 		r.setStatus(fmt.Sprintf("Disconnected: %s", st.cv.Name))
 	}
 	r.setSessionCount(count)
@@ -288,6 +298,13 @@ type connTree struct {
 
 	// onError is invoked when a drag-and-drop reparent fails.
 	onError func(error)
+
+	// onContextMenu is invoked when the user right-clicks a row. The
+	// callback receives the node uid and the absolute screen position
+	// where the popup menu should appear. Wired from runGUI so the menu
+	// can call into the session registry, dialogs, etc., without the
+	// tree itself needing to know about them.
+	onContextMenu func(uid string, abs fyne.Position)
 }
 
 func newConnTree(b *Bindings, onOpen func(string)) *connTree {
@@ -474,6 +491,20 @@ func (r *treeRow) Dragged(e *fyne.DragEvent) {
 // node is reparented under it; otherwise the operation is a no-op.
 func (r *treeRow) DragEnd() {
 	r.ct.handleDragEnd()
+}
+
+// TappedSecondary opens a per-row context menu (right-click on desktop, or
+// long-press / two-finger tap on touch devices). Selection is updated to
+// the right-clicked row first so menu actions operate on the obvious
+// target instead of whatever was previously selected.
+func (r *treeRow) TappedSecondary(e *fyne.PointEvent) {
+	if r.uid == "" || r.ct == nil {
+		return
+	}
+	r.ct.tree.Select(r.uid)
+	if r.ct.onContextMenu != nil {
+		r.ct.onContextMenu(r.uid, e.AbsolutePosition)
+	}
 }
 
 func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
@@ -930,6 +961,87 @@ func attachSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iap
 	})
 }
 
+// openSessionInWindow opens a session for connID in a brand-new fyne.Window
+// rather than as a tab. Useful when the user wants a side-by-side or
+// secondary-monitor layout. Closing the window terminates the session.
+func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry, connID string) {
+	if !sessions.reserveConn(connID) {
+		dialog.ShowInformation("Already Open",
+			"A session for this connection is already active. Close it before opening a new window.", parent)
+		return
+	}
+	ctx := context.Background()
+	cv, err := b.GetConnection(ctx, connID)
+	if err != nil {
+		sessions.releaseConn(connID)
+		dialog.ShowError(err, parent)
+		return
+	}
+	if needsInteractivePassword(cv) {
+		// Reuse the standard prompt path; it will release the conn on
+		// cancel, and on success it calls attachSession which uses tabs.
+		// For "open in window" we keep things simple and do not yet
+		// support interactive-password sessions in detached windows.
+		sessions.releaseConn(connID)
+		dialog.ShowInformation("Password required",
+			"This connection requires an interactive password and is not yet supported in a separate window. Open it as a tab instead.", parent)
+		return
+	}
+	go func() {
+		handle, err := b.OpenSession(context.Background(), connID)
+		if err != nil {
+			sessions.releaseConn(connID)
+			fyne.Do(func() { dialog.ShowError(err, parent) })
+			return
+		}
+		fyne.Do(func() { attachSessionInWindow(a, b, sessions, cv, connID, handle) })
+	}()
+}
+
+func attachSessionInWindow(a fyne.App, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID, handle string) {
+	hid, err := domain.ParseID(handle)
+	if err != nil {
+		sessions.releaseConn(connID)
+		return
+	}
+	label := cv.Name
+	if label == "" {
+		label = cv.EffectiveHost
+	}
+	win := a.NewWindow("goremote — " + label)
+	win.Resize(fyne.NewSize(900, 600))
+
+	st := &sessionTab{
+		b:      b,
+		cv:     cv,
+		handle: handle,
+		hid:    hid,
+		connID: connID,
+		window: win,
+	}
+	st.ctx, st.cancel = context.WithCancel(context.Background())
+	win.SetContent(st.content())
+
+	// Window close → terminate the session on a worker; the run goroutine
+	// will exit and trigger sessions.remove which is a no-op on the window
+	// (it's already closing).
+	win.SetCloseIntercept(func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = st.b.CloseSession(ctx, st.handle)
+		}()
+		win.Close()
+	})
+
+	sessions.add(st)
+	win.Show()
+
+	go st.run(func() {
+		fyne.Do(func() { sessions.remove(hid) })
+	})
+}
+
 func closeCurrentSession(sessions *sessionRegistry) {
 	selected := sessions.tabs.Selected()
 	if selected == nil {
@@ -1036,6 +1148,7 @@ func duplicateSelectedNode(w fyne.Window, b *Bindings, tree *connTree) {
 		Description: cv.Description,
 		Tags:        append([]string(nil), cv.Tags...),
 		Environment: cv.Environment,
+		Settings:    cloneSettingsMap(cv.Settings),
 		CredentialRef: CredentialRefInput{
 			ProviderID: cv.CredentialRef.ProviderID,
 			Key:        cv.CredentialRef.EntryID,
@@ -2086,4 +2199,105 @@ actions = append(actions, hint)
 
 right := container.NewHBox(actions...)
 return container.NewBorder(nil, idLabel, nil, right, stateLabel)
+}
+
+// showTreeContextMenu builds and shows a per-row right-click menu for the
+// connection tree. Items shown depend on whether the row is a folder or a
+// connection. The row is selected before the menu is shown so existing
+// selection-driven helpers (editSelectedNode, deleteSelectedNode, etc.)
+// operate on it.
+func showTreeContextMenu(w fyne.Window, a fyne.App, b *Bindings, tree *connTree, sessions *sessionRegistry, uid string, abs fyne.Position) {
+tree.mu.RLock()
+root := tree.view.Root
+tree.mu.RUnlock()
+n := tree.findNode(root, uid)
+if n == nil {
+return
+}
+tree.tree.Select(uid)
+
+var items []*fyne.MenuItem
+if n.Kind == "connection" {
+connID := n.ID
+host := n.Host
+port := n.Port
+items = append(items,
+fyne.NewMenuItem("Connect", func() {
+openSession(w, b, sessions, connID)
+}),
+fyne.NewMenuItem("Open in new window…", func() {
+openSessionInWindow(w, a, b, sessions, connID)
+}),
+fyne.NewMenuItemSeparator(),
+fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
+fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }),
+fyne.NewMenuItemSeparator(),
+fyne.NewMenuItem("Copy host", func() {
+if host == "" {
+return
+}
+w.Clipboard().SetContent(host)
+}),
+fyne.NewMenuItem("Copy host:port", func() {
+if host == "" {
+return
+}
+if port > 0 {
+w.Clipboard().SetContent(fmt.Sprintf("%s:%d", host, port))
+} else {
+w.Clipboard().SetContent(host)
+}
+}),
+fyne.NewMenuItemSeparator(),
+fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
+)
+} else {
+items = append(items,
+fyne.NewMenuItem("New connection here…", func() {
+showNewConnectionDialog(w, b, tree)
+}),
+fyne.NewMenuItem("New folder here…", func() {
+showNewFolderDialog(w, b, tree)
+}),
+fyne.NewMenuItemSeparator(),
+fyne.NewMenuItem("Expand all", func() {
+expandAllUnder(tree, n)
+}),
+fyne.NewMenuItem("Collapse all", func() {
+collapseAllUnder(tree, n)
+}),
+fyne.NewMenuItemSeparator(),
+fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
+fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
+)
+}
+menu := fyne.NewMenu("", items...)
+pop := widget.NewPopUpMenu(menu, w.Canvas())
+pop.ShowAtPosition(abs)
+}
+
+// expandAllUnder expands the given folder and all descendant folders.
+func expandAllUnder(tree *connTree, n *iapp.NodeView) {
+if n == nil {
+return
+}
+tree.tree.OpenBranch(n.ID)
+for _, c := range n.Children {
+if c != nil && c.Kind == "folder" {
+expandAllUnder(tree, c)
+}
+}
+}
+
+// collapseAllUnder collapses the given folder and all descendant folders.
+func collapseAllUnder(tree *connTree, n *iapp.NodeView) {
+if n == nil {
+return
+}
+for _, c := range n.Children {
+if c != nil && c.Kind == "folder" {
+collapseAllUnder(tree, c)
+}
+}
+tree.tree.CloseBranch(n.ID)
 }

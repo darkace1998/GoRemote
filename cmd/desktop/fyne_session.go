@@ -17,7 +17,9 @@ import (
 	"github.com/goremote/goremote/internal/domain"
 )
 
-// sessionTab represents a single open session displayed in the AppTabs.
+// sessionTab represents a single open session displayed in the AppTabs
+// (when tabItem is non-nil) or in a standalone window (when window is
+// non-nil). Exactly one of tabItem / window is set per session.
 type sessionTab struct {
 	b       *Bindings
 	cv      iapp.ConnectionView
@@ -25,6 +27,7 @@ type sessionTab struct {
 	hid     domain.ID
 	connID  string // connection ID that spawned this session
 	tabItem *container.TabItem
+	window  fyne.Window
 	term    *terminal.Terminal
 	ctx     context.Context
 	cancel  context.CancelFunc
