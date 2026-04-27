@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -382,7 +383,10 @@ func (p FolderPatchInput) toAppPatch() app.FolderPatch {
 // --- main ---------------------------------------------------------------
 
 func main() {
-	logger := logging.New(logging.Options{Writer: os.Stderr, Level: slog.LevelInfo})
+	logger := logging.New(logging.Options{
+		Writer: chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout),
+		Level:  slog.LevelInfo,
+	})
 
 	dir, err := resolveStateDir()
 	if err != nil {
@@ -444,6 +448,13 @@ func main() {
 	defer cancel()
 	runCLI(ctx, bindings, logger)
 	shutdown(a, logger)
+}
+
+func chooseLogWriter(goos string, stderr io.Writer, stdout io.Writer) io.Writer {
+	if goos == "windows" {
+		return io.MultiWriter(stderr, stdout)
+	}
+	return stderr
 }
 
 // shutdown tears down the application with a bounded timeout.

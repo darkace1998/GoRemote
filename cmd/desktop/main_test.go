@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -81,5 +82,35 @@ func TestRegisterBuiltins_SkipsUnsupportedPlatformModules(t *testing.T) {
 	}
 	if _, ok := a.ProtocolHost().Module("io.goremote.protocol.ssh"); !ok {
 		t.Fatalf("ssh should be registered")
+	}
+}
+
+func TestChooseLogWriter_WindowsMirrorsToStdoutAndStderr(t *testing.T) {
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	w := chooseLogWriter("windows", &stderr, &stdout)
+	if _, err := w.Write([]byte("logline")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if got := stderr.String(); got != "logline" {
+		t.Fatalf("stderr = %q, want %q", got, "logline")
+	}
+	if got := stdout.String(); got != "logline" {
+		t.Fatalf("stdout = %q, want %q", got, "logline")
+	}
+}
+
+func TestChooseLogWriter_NonWindowsUsesStderrOnly(t *testing.T) {
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	w := chooseLogWriter("linux", &stderr, &stdout)
+	if _, err := w.Write([]byte("logline")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if got := stderr.String(); got != "logline" {
+		t.Fatalf("stderr = %q, want %q", got, "logline")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
 	}
 }
