@@ -280,6 +280,11 @@ type connTree struct {
 	dragSrc    string
 	dragTarget string
 
+	// dragAnim pulses the source row's hilite while a drag is in
+	// progress to give the user visual feedback that the drag is live.
+	dragAnim    *fyne.Animation
+	dragAnimUID string
+
 	// onError is invoked when a drag-and-drop reparent fails.
 	onError func(error)
 }
@@ -474,9 +479,14 @@ func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
 	ct.dragSrc = srcUID
 	drv := fyne.CurrentApp().Driver()
 	var target *treeRow
+	var srcRow *treeRow
 	ct.rowsMu.RLock()
 	for row := range ct.rows {
-		if row.uid == "" || row.uid == srcUID {
+		if row.uid == "" {
+			continue
+		}
+		if row.uid == srcUID {
+			srcRow = row
 			continue
 		}
 		pos := drv.AbsolutePositionForObject(row)
@@ -496,6 +506,11 @@ func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
 	ct.rowsMu.RUnlock()
 
 	for _, row := range rows {
+		if row.uid == srcUID {
+			// The source row's tint is owned by the drag pulse
+			// animation; don't fight it from here.
+			continue
+		}
 		want := color.Color(color.Transparent)
 		if row == target {
 			want = theme.Color(theme.ColorNameHover)
@@ -505,6 +520,14 @@ func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
 			row.hilite.Refresh()
 		}
 	}
+
+	// (Re)start the source-row pulse animation if we don't already
+	// have one running for this uid.
+	if srcRow != nil && ct.dragAnimUID != srcUID {
+		ct.stopDragAnim()
+		ct.startDragAnim(srcRow)
+	}
+
 	if target != nil {
 		newTgt := target.uid
 		if ct.dragTarget != newTgt {
@@ -524,6 +547,55 @@ func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
 	}
 }
 
+// startDragAnim pulses the given row's hilite between the theme's primary
+// colour and its hover colour to indicate that this row is being dragged.
+func (ct *connTree) startDragAnim(row *treeRow) {
+	if row == nil {
+		return
+	}
+	primary := theme.Color(theme.ColorNamePrimary)
+	hover := theme.Color(theme.ColorNameHover)
+	pr, pg, pb, _ := primary.RGBA()
+	start := color.NRGBA{R: uint8(pr >> 8), G: uint8(pg >> 8), B: uint8(pb >> 8), A: 0x55}
+	hr, hg, hb, _ := hover.RGBA()
+	end := color.NRGBA{R: uint8(hr >> 8), G: uint8(hg >> 8), B: uint8(hb >> 8), A: 0xAA}
+
+	row.hilite.FillColor = start
+	row.hilite.Refresh()
+
+	anim := canvas.NewColorRGBAAnimation(start, end, 450*time.Millisecond, func(c color.Color) {
+		row.hilite.FillColor = c
+		row.hilite.Refresh()
+	})
+	anim.AutoReverse = true
+	anim.RepeatCount = fyne.AnimationRepeatForever
+	anim.Start()
+	ct.dragAnim = anim
+	ct.dragAnimUID = row.uid
+}
+
+// stopDragAnim halts the source-row pulse animation, if any, and clears the
+// hilite on every row that still references the previous animation uid.
+func (ct *connTree) stopDragAnim() {
+	if ct.dragAnim != nil {
+		ct.dragAnim.Stop()
+		ct.dragAnim = nil
+	}
+	prevUID := ct.dragAnimUID
+	ct.dragAnimUID = ""
+	if prevUID == "" {
+		return
+	}
+	ct.rowsMu.RLock()
+	defer ct.rowsMu.RUnlock()
+	for row := range ct.rows {
+		if row.uid == prevUID && !sameColor(row.hilite.FillColor, color.Transparent) {
+			row.hilite.FillColor = color.Transparent
+			row.hilite.Refresh()
+		}
+	}
+}
+
 func (ct *connTree) handleDragEnd() {
 	src := ct.dragSrc
 	tgt := ct.dragTarget
@@ -534,6 +606,8 @@ func (ct *connTree) handleDragEnd() {
 		slog.String("src", src),
 		slog.String("target", tgt),
 	)
+
+	ct.stopDragAnim()
 
 	ct.rowsMu.RLock()
 	rows := make([]*treeRow, 0, len(ct.rows))
