@@ -801,6 +801,7 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		widget.NewToolbarAction(theme.DownloadIcon(), func() { showBackupDialog(w, b) }),
 		widget.NewToolbarAction(theme.UploadIcon(), func() { showRestoreDialog(w, b, tree) }),
 		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.LoginIcon(), func() { showCredentialsDialog(w, b) }),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { showSettingsDialog(w, b, a) }),
 		widget.NewToolbarAction(theme.InfoIcon(), func() { showAboutDialog(w) }),
 	)
@@ -1994,4 +1995,95 @@ func indexOf(xs []string, v string) int {
 		}
 	}
 	return -1
+}
+
+// showCredentialsDialog presents the registered credential providers in a
+// list with their current state and a per-provider Unlock / Lock action.
+// The Bitwarden CLI provider, for example, shows up as "locked" when bw is
+// installed but the master password hasn't been entered yet; clicking
+// "Unlock" prompts for the master password and pipes it to `bw unlock`.
+func showCredentialsDialog(w fyne.Window, b *Bindings) {
+ctx := context.Background()
+providers := b.ListCredentialProviders(ctx)
+
+// rebuildContent generates the dialog body. It is captured below by
+// individual action callbacks so each successful unlock/lock refreshes
+// the listing without dismissing the dialog.
+var dlg dialog.Dialog
+var rebuild func()
+rebuild = func() {
+providers = b.ListCredentialProviders(ctx)
+rows := []fyne.CanvasObject{}
+if len(providers) == 0 {
+rows = append(rows, widget.NewLabel("No credential providers registered."))
+}
+for _, p := range providers {
+p := p
+row := buildCredentialRow(w, b, p, func() {
+if rebuild != nil {
+rebuild()
+}
+})
+rows = append(rows, row)
+}
+body := container.NewVBox(rows...)
+if dlg != nil {
+dlg.Hide()
+}
+dlg = dialog.NewCustom("Credential providers", "Close",
+container.NewVScroll(body), w)
+dlg.Resize(fyne.NewSize(520, 360))
+dlg.Show()
+}
+rebuild()
+}
+
+func buildCredentialRow(w fyne.Window, b *Bindings, p CredentialProviderInfo, onChange func()) fyne.CanvasObject {
+stateLabel := widget.NewLabel(fmt.Sprintf("%s (%s)", p.Name, p.State))
+stateLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+idLabel := widget.NewLabel(p.ID)
+idLabel.Wrapping = fyne.TextWrapBreak
+
+var actions []fyne.CanvasObject
+switch p.State {
+case "locked":
+actions = append(actions, widget.NewButtonWithIcon("Unlock", theme.LoginIcon(), func() {
+pwEntry := widget.NewPasswordEntry()
+pwEntry.SetPlaceHolder("master password")
+form := dialog.NewForm("Unlock "+p.Name, "Unlock", "Cancel",
+[]*widget.FormItem{widget.NewFormItem("Password", pwEntry)},
+func(ok bool) {
+if !ok {
+return
+}
+if err := b.UnlockCredentialProvider(context.Background(), p.ID, pwEntry.Text); err != nil {
+dialog.ShowError(err, w)
+return
+}
+if onChange != nil {
+onChange()
+}
+}, w)
+form.Resize(fyne.NewSize(360, 160))
+form.Show()
+}))
+case "unlocked":
+actions = append(actions, widget.NewButtonWithIcon("Lock", theme.LogoutIcon(), func() {
+if err := b.LockCredentialProvider(context.Background(), p.ID); err != nil {
+dialog.ShowError(err, w)
+return
+}
+if onChange != nil {
+onChange()
+}
+}))
+case "unavailable":
+hint := widget.NewLabel("Provider unavailable.")
+hint.TextStyle = fyne.TextStyle{Italic: true}
+actions = append(actions, hint)
+}
+
+right := container.NewHBox(actions...)
+return container.NewBorder(nil, idLabel, nil, right, stateLabel)
 }

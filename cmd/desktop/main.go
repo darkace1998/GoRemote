@@ -36,6 +36,7 @@ import (
 
 	credfile "github.com/goremote/goremote/plugins/credential-file"
 	credkeychain "github.com/goremote/goremote/plugins/credential-keychain"
+	credbw "github.com/goremote/goremote/plugins/credential-bitwarden"
 	protohttp "github.com/goremote/goremote/plugins/protocol-http"
 	protomosh "github.com/goremote/goremote/plugins/protocol-mosh"
 	protopowershell "github.com/goremote/goremote/plugins/protocol-powershell"
@@ -401,6 +402,74 @@ func (b *Bindings) SaveWorkspace(ctx context.Context, w workspace.Workspace) err
 	return b.workspace.Save(ctx, w)
 }
 
+// --- Credential providers ----------------------------------------------
+
+// CredentialProviderInfo is a UI-facing snapshot of a registered credential
+// provider, including its current lock/unlock state.
+type CredentialProviderInfo struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
+// ListCredentialProviders returns one entry per registered provider with
+// its manifest name and current state ("unlocked", "locked", "unavailable",
+// "ready"). The credential host is consulted lazily so this is safe even
+// when the host is misconfigured.
+func (b *Bindings) ListCredentialProviders(ctx context.Context) []CredentialProviderInfo {
+	if b.app == nil || b.app.CredentialHost() == nil {
+		return nil
+	}
+	ch := b.app.CredentialHost()
+	provs := ch.List()
+	out := make([]CredentialProviderInfo, 0, len(provs))
+	for _, p := range provs {
+		m := p.Manifest()
+		st := ch.State(ctx, m.ID)
+		out = append(out, CredentialProviderInfo{
+			ID:    m.ID,
+			Name:  m.Name,
+			State: string(st),
+		})
+	}
+	return out
+}
+
+// UnlockCredentialProvider unlocks the provider identified by id using the
+// supplied passphrase. The 30-second timeout matches the host-default and
+// gives the Bitwarden CLI room to talk to a remote server.
+func (b *Bindings) UnlockCredentialProvider(ctx context.Context, id, passphrase string) error {
+	if b.app == nil || b.app.CredentialHost() == nil {
+		return errors.New("credential host not initialised")
+	}
+	logging.Trace(b.logger, "credential.Unlock", slog.String("provider", id))
+	if err := b.app.CredentialHost().Unlock(ctx, id, passphrase, 30*time.Second); err != nil {
+		b.logger.Error("credential unlock failed",
+			slog.String("provider", id),
+			slog.String("err", err.Error()))
+		return err
+	}
+	b.logger.Info("credential provider unlocked", slog.String("provider", id))
+	return nil
+}
+
+// LockCredentialProvider locks the provider identified by id. Idempotent
+// for providers that are already locked.
+func (b *Bindings) LockCredentialProvider(ctx context.Context, id string) error {
+	if b.app == nil || b.app.CredentialHost() == nil {
+		return errors.New("credential host not initialised")
+	}
+	logging.Trace(b.logger, "credential.Lock", slog.String("provider", id))
+	if err := b.app.CredentialHost().Lock(ctx, id, 10*time.Second); err != nil {
+		b.logger.Error("credential lock failed",
+			slog.String("provider", id),
+			slog.String("err", err.Error()))
+		return err
+	}
+	b.logger.Info("credential provider locked", slog.String("provider", id))
+	return nil
+}
+
 // --- Input helpers ------------------------------------------------------
 
 // ConnectionInput mirrors app.ConnectionOpts but with string IDs for
@@ -712,9 +781,27 @@ func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
 			logger.Warn("credential provider unsupported on this platform; skipping",
 				slog.String("provider", "credential-keychain"),
 				slog.String("err", err.Error()))
-			return nil
+		} else {
+			return fmt.Errorf("register credential-keychain: %w", err)
 		}
-		return fmt.Errorf("register credential-keychain: %w", err)
+	}
+
+	// Bitwarden CLI provider. The provider construction itself never fails:
+	// when `bw` is missing it simply reports StateUnavailable. Allow the user
+	// to override the binary path and (for self-hosted servers) the server
+	// URL via env vars without needing a settings UI section yet.
+	bwOpts := credbw.Options{
+		BWBinary:  os.Getenv("GOREMOTE_BW_BINARY"),
+		ServerURL: os.Getenv("GOREMOTE_BW_SERVER_URL"),
+	}
+	if err := a.RegisterCredential(ctx, credbw.New(bwOpts), sdkplugin.TrustCore); err != nil {
+		if errors.Is(err, pluginhost.ErrPlatformUnsupported) {
+			logger.Warn("credential provider unsupported on this platform; skipping",
+				slog.String("provider", "credential-bitwarden"),
+				slog.String("err", err.Error()))
+		} else {
+			return fmt.Errorf("register credential-bitwarden: %w", err)
+		}
 	}
 	return nil
 }
