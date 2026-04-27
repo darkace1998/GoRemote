@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Connections Name="Confcons" Export="false" EncryptionEngine="AES" BlockCipherMode="GCM" KdfIterations="1000" FullFileEncryption="false" Protected="" ConfVersion="2.7">
+  <Node Name="citrix-farm" Type="Connection"
+        Id="99999999-9999-9999-9999-999999999999"
+        Hostname="citrix.example.com" Protocol="ICA" Port="1494"
+        Username="user1" Password=""
+        FutureAttribute="some-new-value"
+        AnotherUnknown="42"/>
+</Connections>

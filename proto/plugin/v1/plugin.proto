@@ -1,0 +1,45 @@
+// Plugin IPC contract for goremote out-of-process plugins.
+//
+// Transport: gRPC over Unix domain sockets (POSIX) or named pipes (Windows,
+// not yet implemented). See host/plugin/ipc for the reference transport
+// implementation.
+syntax = "proto3";
+
+package goremote.plugin.v1;
+
+option go_package = "github.com/goremote/goremote/proto/plugin/v1;pluginv1";
+
+// PluginHandshake is the very first service the host calls after connecting
+// to a plugin process. It allows the plugin to declare its identity and
+// capabilities, and the host to advertise its version so plugins can adapt.
+service PluginHandshake {
+  rpc Hello(HelloRequest) returns (HelloResponse);
+}
+
+message HelloRequest {
+  string host_version = 1;
+  string plugin_id    = 2;
+}
+
+message HelloResponse {
+  string plugin_version       = 1;
+  repeated string capabilities = 2;
+  // status is one of "ready" or "degraded:<reason>".
+  string status               = 3;
+  int64 server_time_unix      = 4;
+}
+
+// Echo is a smoke-test service used by the IPC reference tests and by host
+// liveness probes. It must be implemented by every external plugin.
+service Echo {
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+message PingRequest {
+  bytes payload = 1;
+}
+
+message PingResponse {
+  bytes payload          = 1;
+  int64 received_at_unix = 2;
+}

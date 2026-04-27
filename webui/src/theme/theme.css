@@ -1,0 +1,42 @@
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+body[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --bg-elevated: #252526;
+  --bg-input: #2d2d30;
+  --fg: #d4d4d4;
+  /* Bumped from #9d9d9d → #b0b0b0 to keep 12px muted text above
+     WCAG AA 4.5:1 on every elevated surface in this theme. */
+  --fg-muted: #b0b0b0;
+  --border: #3c3c3c;
+  --accent: #0e639c;
+  --accent-fg: #ffffff;
+  --danger: #ef8590;
+  --warning: #d19a66;
+  --info: #56b6c2;
+  --focus-ring: #4d9aff;
+  --tab-active-bg: #1e1e1e;
+  --tab-inactive-bg: #2d2d30;
+}
+
+body[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-elevated: #f3f3f3;
+  --bg-input: #ffffff;
+  --fg: #1f1f1f;
+  --fg-muted: #606060;
+  --border: #d0d0d0;
+  --accent: #005fb8;
+  --accent-fg: #ffffff;
+  --danger: #c62828;
+  --warning: #b26500;
+  --info: #006a9b;
+  --focus-ring: #005fb8;
+  --tab-active-bg: #ffffff;
+  --tab-inactive-bg: #ececec;
+}

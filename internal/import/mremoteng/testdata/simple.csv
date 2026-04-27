@@ -1,0 +1,4 @@
+Name,Type,Hostname,Protocol,Port,Username,Domain,Descr,Icon,Panel,Id,InheritUsername,InheritPort,InheritProtocol
+web1,Connection,web1.example.com,SSH2,22,admin,,primary web,Computer,prod,22222222-2222-2222-2222-222222222222,True,False,False
+win1,Connection,win1.example.com,RDP,3389,administrator,CORP,windows box,Computer,prod,33333333-3333-3333-3333-333333333333,False,False,True
+vnc-box,Connection,kvm.stage.example.com,VNC,5900,,,kvm console,Computer,stage,55555555-5555-5555-5555-555555555555,False,False,False
