@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -76,10 +77,46 @@ func (st *sessionTab) run(onClose func()) {
 	}
 	defer br.Close()
 
+	// Forward terminal resize events to the remote session.
+	cfgCh := make(chan terminal.Config, 4)
+	st.term.AddListener(cfgCh)
+	defer st.term.RemoveListener(cfgCh)
+	go st.forwardResize(cfgCh)
+
 	if err := st.term.RunWithConnection(br, br); err != nil {
 		slog.Warn("terminal session ended with error", "handle", st.handle, "err", err)
 	}
 	_, _ = st.term.Write([]byte("\r\n[Session closed]\r\n"))
+}
+
+// forwardResize plumbs config changes from the terminal widget through to the
+// remote session as PTY resize events.
+func (st *sessionTab) forwardResize(ch <-chan terminal.Config) {
+	var lastCols, lastRows uint16
+	for {
+		select {
+		case <-st.ctx.Done():
+			return
+		case cfg, ok := <-ch:
+			if !ok {
+				return
+			}
+			cols := uint16(cfg.Columns)
+			rows := uint16(cfg.Rows)
+			if cols == 0 || rows == 0 {
+				continue
+			}
+			if cols == lastCols && rows == lastRows {
+				continue
+			}
+			lastCols, lastRows = cols, rows
+			rctx, cancel := context.WithTimeout(st.ctx, 2*time.Second)
+			if err := st.b.Resize(rctx, st.handle, cols, rows); err != nil {
+				slog.Debug("resize forward", "handle", st.handle, "err", err)
+			}
+			cancel()
+		}
+	}
 }
 
 // --- sessionBridge ---------------------------------------------------------
