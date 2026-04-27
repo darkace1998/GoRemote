@@ -65,6 +65,7 @@ func TestFileStore_RoundTrip(t *testing.T) {
 	in.AutoReconnect = true
 	in.ReconnectMaxN = 5
 	in.ReconnectDelayMs = 1000
+	in.LogLevel = LogLevelDebug
 
 	saved, err := store.Update(context.Background(), in)
 	if err != nil {
@@ -228,5 +229,8 @@ func TestFileStore_PartialFileGetsDefaultsMerged(t *testing.T) {
 	}
 	if got.ReconnectMaxN != Default().ReconnectMaxN {
 		t.Errorf("ReconnectMaxN = %d, want default %d", got.ReconnectMaxN, Default().ReconnectMaxN)
+	}
+	if got.LogLevel != Default().LogLevel {
+		t.Errorf("LogLevel = %q, want default %q", got.LogLevel, Default().LogLevel)
 	}
 }

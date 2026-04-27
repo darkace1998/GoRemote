@@ -191,6 +191,9 @@ func mergeWithDefaults(in Settings) Settings {
 		in.ReconnectMaxN = d.ReconnectMaxN
 		in.ReconnectDelayMs = d.ReconnectDelayMs
 	}
+	if in.LogLevel == "" {
+		in.LogLevel = d.LogLevel
+	}
 	return in
 }
 

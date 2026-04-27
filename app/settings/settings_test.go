@@ -31,6 +31,9 @@ func TestDefault(t *testing.T) {
 	if d.TelemetryEnabled {
 		t.Errorf("TelemetryEnabled = true, want false")
 	}
+	if d.LogLevel != LogLevelInfo {
+		t.Errorf("LogLevel = %q, want %q", d.LogLevel, LogLevelInfo)
+	}
 	if err := d.Validate(); err != nil {
 		t.Errorf("Default().Validate() = %v", err)
 	}
@@ -51,6 +54,7 @@ func TestValidate(t *testing.T) {
 		{"reconnect max big", func(s *Settings) { s.ReconnectMaxN = 51 }, "reconnectMaxN"},
 		{"delay neg", func(s *Settings) { s.ReconnectDelayMs = -1 }, "reconnectDelayMs"},
 		{"delay big", func(s *Settings) { s.ReconnectDelayMs = 60_001 }, "reconnectDelayMs"},
+		{"bad log level", func(s *Settings) { s.LogLevel = "verbose" }, "logLevel"},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -71,12 +75,12 @@ func TestValidate(t *testing.T) {
 
 func TestValidateMultipleErrors(t *testing.T) {
 	t.Parallel()
-	s := Settings{Theme: "neon", FontSizePx: 4, ReconnectMaxN: 999, ReconnectDelayMs: -1}
+	s := Settings{Theme: "neon", FontSizePx: 4, ReconnectMaxN: 999, ReconnectDelayMs: -1, LogLevel: "nope"}
 	err := s.Validate()
 	if err == nil {
 		t.Fatal("Validate() = nil, want error")
 	}
-	for _, want := range []string{"theme", "fontSizePx", "reconnectMaxN", "reconnectDelayMs"} {
+	for _, want := range []string{"theme", "fontSizePx", "reconnectMaxN", "reconnectDelayMs", "logLevel"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q missing %q", err.Error(), want)
 		}
@@ -94,6 +98,7 @@ func TestJSONRoundTrip(t *testing.T) {
 		ReconnectMaxN:    7,
 		ReconnectDelayMs: 1500,
 		TelemetryEnabled: true,
+		LogLevel:         LogLevelDebug,
 		UpdatedAt:        time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
 	data, err := json.Marshal(in)
@@ -111,7 +116,7 @@ func TestJSONRoundTrip(t *testing.T) {
 	for _, key := range []string{
 		"\"theme\"", "\"fontFamily\"", "\"fontSizePx\"", "\"confirmOnClose\"",
 		"\"autoReconnect\"", "\"reconnectMaxN\"", "\"reconnectDelayMs\"",
-		"\"telemetryEnabled\"", "\"updatedAt\"",
+		"\"telemetryEnabled\"", "\"logLevel\"", "\"updatedAt\"",
 	} {
 		if !strings.Contains(string(data), key) {
 			t.Errorf("encoded JSON missing key %s: %s", key, string(data))

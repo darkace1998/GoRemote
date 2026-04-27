@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	appsettings "github.com/goremote/goremote/app/settings"
 	iapp "github.com/goremote/goremote/internal/app"
 	"github.com/goremote/goremote/internal/domain"
 )
@@ -530,9 +531,23 @@ func showSettingsDialog(w fyne.Window, b *Bindings) {
 	autoReconnect := widget.NewCheck("", nil)
 	autoReconnect.SetChecked(s.AutoReconnect)
 
+	logLevels := []string{
+		appsettings.LogLevelTrace,
+		appsettings.LogLevelDebug,
+		appsettings.LogLevelInfo,
+		appsettings.LogLevelWarn,
+		appsettings.LogLevelError,
+	}
+	logLevelSelect := widget.NewSelect(logLevels, nil)
+	if s.LogLevel == "" {
+		s.LogLevel = appsettings.LogLevelInfo
+	}
+	logLevelSelect.SetSelected(s.LogLevel)
+
 	items := []*widget.FormItem{
 		widget.NewFormItem("Theme", themeSelect),
 		widget.NewFormItem("Font size (px)", fontEntry),
+		widget.NewFormItem("Log level", logLevelSelect),
 		widget.NewFormItem("Confirm on close", confirmCheck),
 		widget.NewFormItem("Auto-reconnect", autoReconnect),
 	}
@@ -547,6 +562,7 @@ func showSettingsDialog(w fyne.Window, b *Bindings) {
 		}
 		s.Theme = themeSelect.Selected
 		s.FontSizePx = px
+		s.LogLevel = logLevelSelect.Selected
 		s.ConfirmOnClose = confirmCheck.Checked
 		s.AutoReconnect = autoReconnect.Checked
 		if _, err := b.UpdateSettings(ctx, s); err != nil {

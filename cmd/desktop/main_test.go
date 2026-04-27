@@ -136,3 +136,15 @@ func TestResolveLogLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestSelectLogLevel(t *testing.T) {
+	if got := selectLogLevel("debug", "error"); got.Level() != slog.LevelDebug {
+		t.Fatalf("env override failed: got %v want %v", got.Level(), slog.LevelDebug)
+	}
+	if got := selectLogLevel("", "trace"); got.Level() != slog.Level(-8) {
+		t.Fatalf("settings level failed: got %v want %v", got.Level(), slog.Level(-8))
+	}
+	if got := selectLogLevel("", ""); got.Level() != slog.LevelInfo {
+		t.Fatalf("default level failed: got %v want %v", got.Level(), slog.LevelInfo)
+	}
+}

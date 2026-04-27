@@ -19,6 +19,15 @@ const (
 	ThemeDark   = "dark"
 )
 
+// Log level values.
+const (
+	LogLevelTrace = "trace"
+	LogLevelDebug = "debug"
+	LogLevelInfo  = "info"
+	LogLevelWarn  = "warn"
+	LogLevelError = "error"
+)
+
 // Limits (inclusive).
 const (
 	MinFontSizePx       = 8
@@ -40,6 +49,7 @@ type Settings struct {
 	ReconnectMaxN    int       `json:"reconnectMaxN"`
 	ReconnectDelayMs int       `json:"reconnectDelayMs"`
 	TelemetryEnabled bool      `json:"telemetryEnabled"`
+	LogLevel         string    `json:"logLevel"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
@@ -54,6 +64,7 @@ func Default() Settings {
 		ReconnectMaxN:    3,
 		ReconnectDelayMs: 2000,
 		TelemetryEnabled: false,
+		LogLevel:         LogLevelInfo,
 	}
 }
 
@@ -79,6 +90,12 @@ func (s *Settings) Validate() error {
 	if s.ReconnectDelayMs < MinReconnectDelayMs || s.ReconnectDelayMs > MaxReconnectDelayMs {
 		errs = append(errs, fmt.Errorf("reconnectDelayMs %d out of range [%d,%d]",
 			s.ReconnectDelayMs, MinReconnectDelayMs, MaxReconnectDelayMs))
+	}
+	switch s.LogLevel {
+	case LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError:
+	default:
+		errs = append(errs, fmt.Errorf("invalid logLevel %q: want one of %s|%s|%s|%s|%s",
+			s.LogLevel, LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError))
 	}
 	if len(errs) == 0 {
 		return nil
