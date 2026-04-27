@@ -1,0 +1,155 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
+
+	terminal "github.com/fyne-io/terminal"
+
+	iapp "github.com/goremote/goremote/internal/app"
+	"github.com/goremote/goremote/internal/domain"
+)
+
+// sessionTab represents a single open session displayed in the AppTabs.
+type sessionTab struct {
+	b       *Bindings
+	cv      iapp.ConnectionView
+	handle  string
+	hid     domain.ID
+	tabItem *container.TabItem
+	term    *terminal.Terminal
+	ctx     context.Context
+	cancel  context.CancelFunc
+}
+
+// terminalProtocols lists the protocol IDs rendered with an in-process
+// terminal widget. All others launch an external process.
+var terminalProtocols = map[string]bool{
+	"ssh":        true,
+	"telnet":     true,
+	"rlogin":     true,
+	"rawsocket":  true,
+	"powershell": true,
+}
+
+// content builds the Fyne canvas object for this session tab.
+// For terminal-capable protocols it creates a terminal.Terminal widget;
+// for external protocols it returns a descriptive label.
+func (st *sessionTab) content() fyne.CanvasObject {
+	proto := st.cv.EffectiveProtocol
+	if proto == "" {
+		proto = st.cv.Protocol
+	}
+	if terminalProtocols[proto] {
+		st.term = terminal.New()
+		return st.term
+	}
+	msg := fmt.Sprintf("External session launched\nProtocol: %s\nHost: %s",
+		proto, st.cv.EffectiveHost)
+	return container.NewCenter(widget.NewLabel(msg))
+}
+
+// run drives the session lifecycle in a goroutine. onClose is called deferred
+// so it always fires when the session exits, even on error.
+func (st *sessionTab) run(onClose func()) {
+	defer st.cancel()
+	defer onClose()
+
+	if st.term == nil {
+		// External session: wait until the context is cancelled (e.g. by the
+		// user clicking Disconnect, or by window close).
+		<-st.ctx.Done()
+		return
+	}
+
+	br, err := newSessionBridge(st.ctx, st.b, st.handle)
+	if err != nil {
+		_, _ = st.term.Write([]byte("\r\n[Error: " + err.Error() + "]\r\n"))
+		return
+	}
+	defer br.Close()
+
+	_ = st.term.RunWithConnection(br, br)
+	_, _ = st.term.Write([]byte("\r\n[Session closed]\r\n"))
+}
+
+// --- sessionBridge ---------------------------------------------------------
+
+// sessionBridge plumbs a fyne-io/terminal widget to a goremote session.
+//
+//   - Read: delivers server output to the terminal (reads from the pipe fed by
+//     SubscribeOutput).
+//   - Write: forwards terminal keystrokes to the session via SendInput.
+//   - Close: tears down the subscription context and closes the read pipe.
+type sessionBridge struct {
+	pr     *io.PipeReader
+	pw     *io.PipeWriter
+	b      *Bindings
+	handle string
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// newSessionBridge subscribes to a session's output stream and returns a
+// bridge that the terminal widget can use as its I/O connection.
+func newSessionBridge(ctx context.Context, b *Bindings, handle string) (*sessionBridge, error) {
+	hid, err := domain.ParseID(handle)
+	if err != nil {
+		return nil, fmt.Errorf("session bridge: parse handle: %w", err)
+	}
+
+	pr, pw := io.Pipe()
+	bctx, cancel := context.WithCancel(ctx)
+
+	ch, err := b.app.SubscribeOutput(bctx, hid, 256)
+	if err != nil {
+		cancel()
+		_ = pr.Close()
+		_ = pw.Close()
+		return nil, fmt.Errorf("session bridge: subscribe output: %w", err)
+	}
+
+	go func() {
+		for chunk := range ch {
+			if _, werr := pw.Write(chunk); werr != nil {
+				break
+			}
+		}
+		_ = pw.Close()
+	}()
+
+	return &sessionBridge{
+		pr:     pr,
+		pw:     pw,
+		b:      b,
+		handle: handle,
+		ctx:    bctx,
+		cancel: cancel,
+	}, nil
+}
+
+// Read implements io.Reader — the terminal reads server output from here.
+func (br *sessionBridge) Read(p []byte) (int, error) {
+	return br.pr.Read(p)
+}
+
+// Write implements io.WriteCloser — the terminal writes keystrokes here to
+// forward them to the remote session.
+func (br *sessionBridge) Write(p []byte) (int, error) {
+	if err := br.b.SendInput(br.ctx, br.handle, p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// Close cancels the subscription context and closes the read pipe.
+func (br *sessionBridge) Close() error {
+	br.cancel()
+	_ = br.pr.Close()
+	return nil
+}

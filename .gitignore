@@ -7,8 +7,6 @@
 .coverage
 coverage.txt
 node_modules/
-webui/dist/
-webui/.vite/
 .DS_Store
 *.swp
 .idea/

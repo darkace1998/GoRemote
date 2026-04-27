@@ -33,16 +33,8 @@ audit: lint vuln sec
 tidy:
 	$(GO) mod tidy
 
-webui-build:
-	cd webui && (test -f package-lock.json && npm ci || npm install) && npm run build
-
-webui-test:
-	cd webui && npm test -- --run
-
-webui: webui-build
-
 clean:
-	rm -rf bin dist build webui/dist webui/node_modules
+	rm -rf bin dist build
 
 # ---- Distribution packaging ------------------------------------------------
 
