@@ -24,6 +24,7 @@ import (
 
 	"github.com/goremote/goremote/app/settings"
 	"github.com/goremote/goremote/app/workspace"
+	pluginhost "github.com/goremote/goremote/host/plugin"
 	"github.com/goremote/goremote/internal/app"
 	"github.com/goremote/goremote/internal/domain"
 	"github.com/goremote/goremote/internal/logging"
@@ -492,6 +493,7 @@ func quarantineStateDir(dir string) (string, error) {
 
 // registerBuiltins registers the in-process protocol and credential plugins.
 func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
+	logger := a.Logger().With(slog.String("component", "bootstrap"))
 	protos := []struct {
 		name string
 		mod  protocol.Module
@@ -509,18 +511,36 @@ func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
 	}
 	for _, p := range protos {
 		if err := a.RegisterProtocol(ctx, p.mod, sdkplugin.TrustCore); err != nil {
+			if errors.Is(err, pluginhost.ErrPlatformUnsupported) {
+				logger.Warn("protocol unsupported on this platform; skipping",
+					slog.String("protocol", p.name),
+					slog.String("err", err.Error()))
+				continue
+			}
 			return fmt.Errorf("register %s: %w", p.name, err)
 		}
 	}
 
 	vaultPath := filepath.Join(dir, "credentials.vault")
 	if err := a.RegisterCredential(ctx, credfile.New(vaultPath), sdkplugin.TrustCore); err != nil {
-		return fmt.Errorf("register credential-file: %w", err)
+		if errors.Is(err, pluginhost.ErrPlatformUnsupported) {
+			logger.Warn("credential provider unsupported on this platform; skipping",
+				slog.String("provider", "credential-file"),
+				slog.String("err", err.Error()))
+		} else {
+			return fmt.Errorf("register credential-file: %w", err)
+		}
 	}
 
 	kc := platform.NewKeychain()
 	paths := platform.NewPaths()
 	if err := a.RegisterCredential(ctx, credkeychain.New(kc, paths), sdkplugin.TrustCore); err != nil {
+		if errors.Is(err, pluginhost.ErrPlatformUnsupported) {
+			logger.Warn("credential provider unsupported on this platform; skipping",
+				slog.String("provider", "credential-keychain"),
+				slog.String("err", err.Error()))
+			return nil
+		}
 		return fmt.Errorf("register credential-keychain: %w", err)
 	}
 	return nil

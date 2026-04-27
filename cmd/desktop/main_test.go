@@ -8,7 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	credhost "github.com/goremote/goremote/host/credential"
+	pluginhost "github.com/goremote/goremote/host/plugin"
+	protohost "github.com/goremote/goremote/host/protocol"
 	iapp "github.com/goremote/goremote/internal/app"
+	"github.com/goremote/goremote/internal/eventbus"
 	"github.com/goremote/goremote/internal/logging"
 	"github.com/goremote/goremote/internal/persistence"
 )
@@ -49,5 +53,33 @@ func TestNewAppWithRecovery_DoesNotMaskNonLoadErrors(t *testing.T) {
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("unexpected unrelated filesystem error: %v", err)
+	}
+}
+
+func TestRegisterBuiltins_SkipsUnsupportedPlatformModules(t *testing.T) {
+	dir := t.TempDir()
+	logger := logging.New(logging.Options{Writer: io.Discard})
+	ph := pluginhost.New(eventbus.New[pluginhost.Event](), pluginhost.WithGOOS("windows"))
+
+	a, err := iapp.New(iapp.Config{
+		Dir:            dir,
+		Logger:         logger,
+		PluginHost:     ph,
+		ProtocolHost:   protohost.New(ph),
+		CredentialHost: credhost.New(ph),
+	})
+	if err != nil {
+		t.Fatalf("app.New: %v", err)
+	}
+	defer func() { _ = a.Shutdown(context.Background()) }()
+
+	if err := registerBuiltins(context.Background(), a, dir); err != nil {
+		t.Fatalf("registerBuiltins: %v", err)
+	}
+	if _, ok := a.ProtocolHost().Module("io.goremote.protocol.mosh"); ok {
+		t.Fatalf("mosh should be skipped on windows host")
+	}
+	if _, ok := a.ProtocolHost().Module("io.goremote.protocol.ssh"); !ok {
+		t.Fatalf("ssh should be registered")
 	}
 }
