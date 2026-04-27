@@ -383,9 +383,10 @@ func (p FolderPatchInput) toAppPatch() app.FolderPatch {
 // --- main ---------------------------------------------------------------
 
 func main() {
+	logLevel := resolveLogLevel(os.Getenv("GOREMOTE_LOG_LEVEL"))
 	logger := logging.New(logging.Options{
 		Writer: chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout),
-		Level:  slog.LevelInfo,
+		Level:  logLevel,
 	})
 
 	dir, err := resolveStateDir()
@@ -452,9 +453,26 @@ func main() {
 
 func chooseLogWriter(goos string, stderr io.Writer, stdout io.Writer) io.Writer {
 	if goos == "windows" {
-		return io.MultiWriter(stderr, stdout)
+		return stdout
 	}
 	return stderr
+}
+
+func resolveLogLevel(v string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "trace":
+		return slog.Level(-8)
+	case "debug":
+		return slog.LevelDebug
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	case "info":
+		return slog.LevelInfo
+	default:
+		return slog.LevelInfo
+	}
 }
 
 // shutdown tears down the application with a bounded timeout.

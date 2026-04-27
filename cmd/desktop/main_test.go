@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,8 +93,8 @@ func TestChooseLogWriter_WindowsMirrorsToStdoutAndStderr(t *testing.T) {
 	if _, err := w.Write([]byte("logline")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	if got := stderr.String(); got != "logline" {
-		t.Fatalf("stderr = %q, want %q", got, "logline")
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
 	}
 	if got := stdout.String(); got != "logline" {
 		t.Fatalf("stdout = %q, want %q", got, "logline")
@@ -112,5 +113,26 @@ func TestChooseLogWriter_NonWindowsUsesStderrOnly(t *testing.T) {
 	}
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout = %q, want empty", got)
+	}
+}
+
+func TestResolveLogLevel(t *testing.T) {
+	cases := []struct {
+		in   string
+		want slog.Level
+	}{
+		{"trace", slog.Level(-8)},
+		{"debug", slog.LevelDebug},
+		{"info", slog.LevelInfo},
+		{"warn", slog.LevelWarn},
+		{"error", slog.LevelError},
+		{"", slog.LevelInfo},
+		{"nonsense", slog.LevelInfo},
+	}
+	for _, tc := range cases {
+		got := resolveLogLevel(tc.in)
+		if got.Level() != tc.want {
+			t.Fatalf("resolveLogLevel(%q) = %v, want %v", tc.in, got.Level(), tc.want)
+		}
 	}
 }
