@@ -79,6 +79,20 @@ func newSessionManager(a *App) *sessionManager {
 
 // OpenSession resolves inheritance + credentials and opens a protocol session.
 func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle, error) {
+	return a.openSessionInternal(ctx, connID, nil)
+}
+
+// OpenSessionWithSecret behaves like OpenSession but uses the supplied
+// credential material verbatim instead of resolving the connection's
+// configured credential reference. This enables one-shot prompts (e.g. an
+// interactive password dialog) without persisting the secret to a vault.
+//
+// The supplied material is taken over by the session and zeroized on close.
+func (a *App) OpenSessionWithSecret(ctx context.Context, connID domain.ID, secret *credential.Material) (SessionHandle, error) {
+	return a.openSessionInternal(ctx, connID, secret)
+}
+
+func (a *App) openSessionInternal(ctx context.Context, connID domain.ID, inline *credential.Material) (SessionHandle, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.NilID, err
 	}
@@ -102,10 +116,14 @@ func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle,
 		return domain.NilID, errors.New("app: connection has no protocol")
 	}
 
-	// 2. Resolve credential (if any).
+	// 2. Resolve credential (if any). Inline material takes precedence.
 	var material *credential.Material
 	var mat protocol.CredentialMaterial
-	if !isRefZero(resolved.CredentialRef) {
+	switch {
+	case inline != nil:
+		material = inline
+		mat = adaptMaterial(inline)
+	case !isRefZero(resolved.CredentialRef):
 		rctx, cancel := context.WithTimeout(ctx, CredentialResolveTimeout)
 		m, rerr := a.credH.Resolve(rctx, resolved.CredentialRef, CredentialResolveTimeout)
 		cancel()
@@ -122,11 +140,15 @@ func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle,
 	}
 
 	// 3. Ask the protocol host to open the session.
+	authMethod := resolved.AuthMethod
+	if authMethod == "" {
+		authMethod = defaultAuthMethod(resolved.ProtocolID, mat)
+	}
 	req := protocol.OpenRequest{
 		Host:       resolved.Host,
 		Port:       resolved.Port,
 		Username:   resolved.Username,
-		AuthMethod: resolved.AuthMethod,
+		AuthMethod: authMethod,
 		Secret:     mat,
 		Settings:   cloneSettings(resolved.Settings),
 	}
@@ -407,6 +429,37 @@ func (s *subscriber) close() {
 
 func isRefZero(r credential.Reference) bool {
 	return r.ProviderID == "" && r.EntryID == "" && len(r.Hints) == 0
+}
+
+// defaultAuthMethod returns a reasonable default auth method for a protocol
+// when the user/connection has not picked one. This avoids the
+// "auth method not specified" error for the common SSH "just connect" case.
+//
+// The defaults are intentionally conservative:
+//   - SSH: prefer "password" when a password is available, else "publickey"
+//     when a private key is present, else "agent" (the SSH agent will be
+//     consulted when SSH_AUTH_SOCK is set; the protocol layer surfaces an
+//     actionable error otherwise).
+//   - Other protocols: "password" when a password exists, else "none".
+func defaultAuthMethod(protocolID string, mat protocol.CredentialMaterial) protocol.AuthMethod {
+	short := protocolID
+	if i := strings.LastIndex(short, "."); i >= 0 {
+		short = short[i+1:]
+	}
+	if short == "ssh" {
+		switch {
+		case mat.Password != "":
+			return protocol.AuthPassword
+		case len(mat.PrivateKey) > 0:
+			return protocol.AuthPublicKey
+		default:
+			return protocol.AuthAgent
+		}
+	}
+	if mat.Password != "" {
+		return protocol.AuthPassword
+	}
+	return protocol.AuthNone
 }
 
 func adaptMaterial(m *credential.Material) protocol.CredentialMaterial {

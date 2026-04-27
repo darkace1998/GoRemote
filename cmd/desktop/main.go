@@ -192,6 +192,21 @@ func (b *Bindings) OpenSession(ctx context.Context, connectionID string) (string
 	return h.String(), nil
 }
 
+// OpenSessionWithPassword starts a session using a one-shot inline password
+// (and optional username override). The password is not persisted.
+func (b *Bindings) OpenSessionWithPassword(ctx context.Context, connectionID, username, password string) (string, error) {
+	nid, err := parseID(connectionID)
+	if err != nil {
+		return "", err
+	}
+	mat := &sdkcred.Material{Username: username, Password: password}
+	h, err := b.app.OpenSessionWithSecret(ctx, nid, mat)
+	if err != nil {
+		return "", err
+	}
+	return h.String(), nil
+}
+
 // SendInput writes bytes to a session.
 func (b *Bindings) SendInput(ctx context.Context, handle string, data []byte) error {
 	h, err := parseID(handle)
@@ -304,6 +319,7 @@ type ConnectionInput struct {
 	Host          string             `json:"host"`
 	Port          int                `json:"port"`
 	Username      string             `json:"username"`
+	AuthMethod    string             `json:"authMethod"`
 	CredentialRef CredentialRefInput `json:"credentialRef"`
 	Description   string             `json:"description"`
 	Tags          []string           `json:"tags"`
@@ -324,6 +340,7 @@ func (in ConnectionInput) toAppOpts() app.ConnectionOpts {
 		Host:          in.Host,
 		Port:          in.Port,
 		Username:      in.Username,
+		AuthMethod:    protocol.AuthMethod(in.AuthMethod),
 		CredentialRef: credRefFromInput(in.CredentialRef),
 		Description:   in.Description,
 		Tags:          in.Tags,
@@ -339,6 +356,7 @@ type ConnectionPatchInput struct {
 	Host          *string             `json:"host,omitempty"`
 	Port          *int                `json:"port,omitempty"`
 	Username      *string             `json:"username,omitempty"`
+	AuthMethod    *string             `json:"authMethod,omitempty"`
 	CredentialRef *CredentialRefInput `json:"credentialRef,omitempty"`
 	Description   *string             `json:"description,omitempty"`
 	Tags          *[]string           `json:"tags,omitempty"`
@@ -357,6 +375,10 @@ func (p ConnectionPatchInput) toAppPatch() app.ConnectionPatch {
 		Tags:        p.Tags,
 		Settings:    p.Settings,
 		Environment: p.Environment,
+	}
+	if p.AuthMethod != nil {
+		am := protocol.AuthMethod(*p.AuthMethod)
+		out.AuthMethod = &am
 	}
 	if p.CredentialRef != nil {
 		ref := credRefFromInput(*p.CredentialRef)

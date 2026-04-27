@@ -531,6 +531,12 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 
 	sessions.setStatus(fmt.Sprintf("Connecting to %s…", cv.Name))
 
+	needPassword := needsInteractivePassword(cv)
+	if needPassword {
+		promptPasswordAndOpen(w, b, sessions, cv, connID)
+		return
+	}
+
 	go func() {
 		handle, err := b.OpenSession(context.Background(), connID)
 		if err != nil {
@@ -538,37 +544,91 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 			fyne.Do(func() { dialog.ShowError(err, w) })
 			return
 		}
+		attachSession(w, b, sessions, cv, connID, handle)
+	}()
+}
 
-		hid, err := domain.ParseID(handle)
-		if err != nil {
+// needsInteractivePassword reports true when the connection is configured to
+// authenticate with a password / keyboard-interactive method but has no
+// credential reference, so the GUI must prompt for a password before opening
+// the session. SSH connections without any auth method configured also
+// trigger this prompt to match typical user expectations.
+func needsInteractivePassword(cv iapp.ConnectionView) bool {
+	if cv.CredentialRef.ProviderID != "" {
+		return false
+	}
+	switch cv.AuthMethod {
+	case "password", "keyboard-interactive":
+		return true
+	case "":
+		return strings.Contains(cv.Protocol, "ssh")
+	}
+	return false
+}
+
+func promptPasswordAndOpen(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string) {
+	userEntry := widget.NewEntry()
+	userEntry.SetText(cv.Username)
+	userEntry.SetPlaceHolder("username")
+	pwEntry := widget.NewPasswordEntry()
+	pwEntry.SetPlaceHolder("password")
+	items := []*widget.FormItem{
+		widget.NewFormItem("Username", userEntry),
+		widget.NewFormItem("Password", pwEntry),
+	}
+	title := fmt.Sprintf("Sign in to %s", cv.Name)
+	d := dialog.NewForm(title, "Connect", "Cancel", items, func(ok bool) {
+		if !ok {
 			sessions.releaseConn(connID)
-			fyne.Do(func() { dialog.ShowError(err, w) })
+			sessions.setStatus("")
 			return
 		}
+		username := strings.TrimSpace(userEntry.Text)
+		password := pwEntry.Text
+		go func() {
+			handle, err := b.OpenSessionWithPassword(context.Background(), connID, username, password)
+			if err != nil {
+				sessions.releaseConn(connID)
+				fyne.Do(func() { dialog.ShowError(err, w) })
+				return
+			}
+			attachSession(w, b, sessions, cv, connID, handle)
+		}()
+	}, w)
+	d.Resize(fyne.NewSize(360, 180))
+	d.Show()
+}
 
-		label := cv.Name
-		if label == "" {
-			label = cv.EffectiveHost
-		}
-		tabItem := container.NewTabItem(label, widget.NewLabel("Connecting…"))
+func attachSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID, handle string) {
+	hid, err := domain.ParseID(handle)
+	if err != nil {
+		sessions.releaseConn(connID)
+		fyne.Do(func() { dialog.ShowError(err, w) })
+		return
+	}
 
-		st := &sessionTab{
-			b:       b,
-			cv:      cv,
-			handle:  handle,
-			hid:     hid,
-			connID:  connID,
-			tabItem: tabItem,
-		}
-		st.ctx, st.cancel = context.WithCancel(context.Background())
-		tabItem.Content = st.content()
+	label := cv.Name
+	if label == "" {
+		label = cv.EffectiveHost
+	}
+	tabItem := container.NewTabItem(label, widget.NewLabel("Connecting…"))
 
-		fyne.Do(func() { sessions.add(st) })
+	st := &sessionTab{
+		b:       b,
+		cv:      cv,
+		handle:  handle,
+		hid:     hid,
+		connID:  connID,
+		tabItem: tabItem,
+	}
+	st.ctx, st.cancel = context.WithCancel(context.Background())
+	tabItem.Content = st.content()
 
-		st.run(func() {
-			fyne.Do(func() { sessions.remove(hid) })
-		})
-	}()
+	fyne.Do(func() { sessions.add(st) })
+
+	st.run(func() {
+		fyne.Do(func() { sessions.remove(hid) })
+	})
 }
 
 func closeCurrentSession(sessions *sessionRegistry) {
@@ -673,6 +733,7 @@ func duplicateSelectedNode(w fyne.Window, b *Bindings, tree *connTree) {
 		Host:        cv.Host,
 		Port:        cv.Port,
 		Username:    cv.Username,
+		AuthMethod:  cv.AuthMethod,
 		Description: cv.Description,
 		Tags:        append([]string(nil), cv.Tags...),
 		Environment: cv.Environment,
@@ -799,6 +860,7 @@ func showEditConnectionDialog(w fyne.Window, b *Bindings, tree *connTree, n *iap
 		Host:        cv.Host,
 		Port:        cv.Port,
 		Username:    cv.Username,
+		AuthMethod:  cv.AuthMethod,
 		Description: cv.Description,
 		Tags:        append([]string(nil), cv.Tags...),
 		Environment: cv.Environment,
@@ -848,6 +910,7 @@ type connectionForm struct {
 	hostEntry        *widget.Entry
 	portEntry        *widget.Entry
 	userEntry        *widget.Entry
+	authSelect       *widget.Select
 	descEntry        *widget.Entry
 	tagsEntry        *widget.Entry
 	envEntry         *widget.Entry
@@ -879,6 +942,12 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 	cf.userEntry = widget.NewEntry()
 	cf.userEntry.SetText(in.Username)
 
+	authOptions := []string{"", "password", "publickey", "agent", "keyboard-interactive", "none"}
+	cf.authSelect = widget.NewSelect(authOptions, nil)
+	if in.AuthMethod != "" {
+		cf.authSelect.SetSelected(in.AuthMethod)
+	}
+
 	cf.descEntry = widget.NewMultiLineEntry()
 	cf.descEntry.SetText(in.Description)
 	cf.descEntry.Wrapping = fyne.TextWrapWord
@@ -905,6 +974,7 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 		widget.NewFormItem("Host", cf.hostEntry),
 		widget.NewFormItem("Port", cf.portEntry),
 		widget.NewFormItem("Username", cf.userEntry),
+		widget.NewFormItem("Auth method", cf.authSelect),
 		widget.NewFormItem("Description", cf.descEntry),
 		widget.NewFormItem("Tags", cf.tagsEntry),
 		widget.NewFormItem("Environment", cf.envEntry),
@@ -940,6 +1010,7 @@ func (cf *connectionForm) collect() (ConnectionInput, error) {
 		Host:        host,
 		Port:        port,
 		Username:    strings.TrimSpace(cf.userEntry.Text),
+		AuthMethod:  cf.authSelect.Selected,
 		Description: cf.descEntry.Text,
 		Tags:        splitTags(cf.tagsEntry.Text),
 		Environment: strings.TrimSpace(cf.envEntry.Text),
