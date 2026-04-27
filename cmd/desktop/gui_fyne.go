@@ -27,6 +27,7 @@ import (
 	iapp "github.com/goremote/goremote/internal/app"
 	"github.com/goremote/goremote/internal/domain"
 	"github.com/goremote/goremote/internal/logging"
+	"github.com/goremote/goremote/sdk/protocol"
 )
 
 // Build-time variables.
@@ -1125,7 +1126,7 @@ func showEditFolderDialog(w fyne.Window, b *Bindings, tree *connTree, n *iapp.No
 
 func showNewConnectionDialog(w fyne.Window, b *Bindings, tree *connTree) {
 	form := newConnectionForm(b, ConnectionInput{ProtocolID: "ssh"})
-	d := dialog.NewForm("New Connection", "Create", "Cancel", form.items, func(ok bool) {
+	d := dialog.NewCustomConfirm("New Connection", "Create", "Cancel", form.content, func(ok bool) {
 		if !ok {
 			return
 		}
@@ -1141,7 +1142,7 @@ func showNewConnectionDialog(w fyne.Window, b *Bindings, tree *connTree) {
 		}
 		tree.refresh()
 	}, w)
-	d.Resize(fyne.NewSize(540, 480))
+	d.Resize(fyne.NewSize(560, 600))
 	d.Show()
 }
 
@@ -1161,13 +1162,14 @@ func showEditConnectionDialog(w fyne.Window, b *Bindings, tree *connTree, n *iap
 		Description: cv.Description,
 		Tags:        append([]string(nil), cv.Tags...),
 		Environment: cv.Environment,
+		Settings:    cloneSettingsMap(cv.Settings),
 		CredentialRef: CredentialRefInput{
 			ProviderID: cv.CredentialRef.ProviderID,
 			Key:        cv.CredentialRef.EntryID,
 		},
 	}
 	form := newConnectionForm(b, in)
-	d := dialog.NewForm("Edit Connection", "Save", "Cancel", form.items, func(ok bool) {
+	d := dialog.NewCustomConfirm("Edit Connection", "Save", "Cancel", form.content, func(ok bool) {
 		if !ok {
 			return
 		}
@@ -1182,9 +1184,11 @@ func showEditConnectionDialog(w fyne.Window, b *Bindings, tree *connTree, n *iap
 			Host:        ptr(updated.Host),
 			Port:        ptr(updated.Port),
 			Username:    ptr(updated.Username),
+			AuthMethod:  ptr(updated.AuthMethod),
 			Description: ptr(updated.Description),
 			Tags:        &updated.Tags,
 			Environment: ptr(updated.Environment),
+			Settings:    &updated.Settings,
 		}
 		ref := updated.CredentialRef
 		patch.CredentialRef = &ref
@@ -1194,37 +1198,60 @@ func showEditConnectionDialog(w fyne.Window, b *Bindings, tree *connTree, n *iap
 		}
 		tree.refresh()
 	}, w)
-	d.Resize(fyne.NewSize(540, 480))
+	d.Resize(fyne.NewSize(560, 600))
 	d.Show()
 }
 
-// connectionForm is the shared edit/new connection form.
-type connectionForm struct {
-	items []*widget.FormItem
+// settingBinding records a SettingDef plus a getter that returns the current
+// value entered in the form (or false if the user left it blank, in which
+// case the key is omitted from the saved settings map).
+type settingBinding struct {
+	def    protocol.SettingDef
+	getter func() (any, bool)
+}
 
-	nameEntry        *widget.Entry
-	protoSelect      *widget.Select
-	hostEntry        *widget.Entry
-	portEntry        *widget.Entry
-	userEntry        *widget.Entry
-	authSelect       *widget.Select
-	descEntry        *widget.Entry
-	tagsEntry        *widget.Entry
-	envEntry         *widget.Entry
-	credProviderEnt  *widget.Entry
-	credKeyEntry     *widget.Entry
+// connectionForm is the shared edit/new connection form. Top-level fields
+// (name, protocol, host, port, username, auth, description, tags,
+// environment, credential ref) are static; the "Protocol settings" section
+// is rebuilt every time the protocol selector changes so that protocol-
+// specific options like RDP's RD Gateway, domain, width/height, fullscreen,
+// or VNC's view-only flag are surfaced exactly when they apply.
+type connectionForm struct {
+	b *Bindings
+
+	nameEntry       *widget.Entry
+	protoSelect     *widget.Select
+	hostEntry       *widget.Entry
+	portEntry       *widget.Entry
+	userEntry       *widget.Entry
+	authSelect      *widget.Select
+	descEntry       *widget.Entry
+	tagsEntry       *widget.Entry
+	envEntry        *widget.Entry
+	credProviderEnt *widget.Entry
+	credKeyEntry    *widget.Entry
+
+	protoForm    *widget.Form
+	settingBinds []settingBinding
+
+	// initialSettings is the connection's stored settings map; values are
+	// used to seed the dynamic widgets when their key matches a SettingDef.
+	// As the user edits, we merge widget values back into this map so
+	// switching protocols and switching back doesn't silently lose values.
+	initialSettings map[string]any
+
+	content fyne.CanvasObject
 }
 
 func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
-	cf := &connectionForm{}
+	cf := &connectionForm{
+		b:               b,
+		initialSettings: cloneSettingsMap(in.Settings),
+	}
+
 	cf.nameEntry = widget.NewEntry()
 	cf.nameEntry.SetText(in.Name)
 	cf.nameEntry.SetPlaceHolder("Connection name")
-
-	cf.protoSelect = widget.NewSelect(availableProtocols(b), nil)
-	if in.ProtocolID != "" {
-		cf.protoSelect.SetSelected(in.ProtocolID)
-	}
 
 	cf.hostEntry = widget.NewEntry()
 	cf.hostEntry.SetText(in.Host)
@@ -1239,11 +1266,7 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 	cf.userEntry = widget.NewEntry()
 	cf.userEntry.SetText(in.Username)
 
-	authOptions := []string{"", "password", "publickey", "agent", "keyboard-interactive", "none"}
-	cf.authSelect = widget.NewSelect(authOptions, nil)
-	if in.AuthMethod != "" {
-		cf.authSelect.SetSelected(in.AuthMethod)
-	}
+	cf.authSelect = widget.NewSelect([]string{""}, nil)
 
 	cf.descEntry = widget.NewMultiLineEntry()
 	cf.descEntry.SetText(in.Description)
@@ -1265,7 +1288,12 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 	cf.credKeyEntry.SetText(in.CredentialRef.Key)
 	cf.credKeyEntry.SetPlaceHolder("entry id in vault (optional)")
 
-	cf.items = []*widget.FormItem{
+	cf.protoSelect = widget.NewSelect(availableProtocols(b), func(_ string) {
+		cf.snapshotSettings()
+		cf.rebuildProtocolSection(in.AuthMethod)
+	})
+
+	topForm := widget.NewForm(
 		widget.NewFormItem("Name", cf.nameEntry),
 		widget.NewFormItem("Protocol", cf.protoSelect),
 		widget.NewFormItem("Host", cf.hostEntry),
@@ -1277,8 +1305,191 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 		widget.NewFormItem("Environment", cf.envEntry),
 		widget.NewFormItem("Credential provider", cf.credProviderEnt),
 		widget.NewFormItem("Credential key", cf.credKeyEntry),
+	)
+
+	cf.protoForm = widget.NewForm()
+	settingsCard := widget.NewCard("", "Protocol settings", cf.protoForm)
+	connCard := widget.NewCard("", "Connection", topForm)
+
+	if in.ProtocolID != "" {
+		cf.protoSelect.SetSelected(in.ProtocolID)
+	} else {
+		cf.rebuildProtocolSection(in.AuthMethod)
 	}
+
+	cf.content = container.NewVScroll(container.NewVBox(connCard, settingsCard))
 	return cf
+}
+
+// snapshotSettings copies the current widget values into initialSettings so
+// switching protocols and switching back preserves what the user typed.
+func (cf *connectionForm) snapshotSettings() {
+	if cf.initialSettings == nil {
+		cf.initialSettings = map[string]any{}
+	}
+	for _, b := range cf.settingBinds {
+		if v, ok := b.getter(); ok {
+			cf.initialSettings[b.def.Key] = v
+		} else {
+			delete(cf.initialSettings, b.def.Key)
+		}
+	}
+}
+
+// rebuildProtocolSection rebuilds the auth method dropdown and the
+// protocol-specific settings form for the currently selected protocol.
+//
+// preferAuth is the auth method we'd like to keep selected if the new
+// protocol still supports it (used when editing an existing connection so
+// the saved auth method is restored on first render).
+func (cf *connectionForm) rebuildProtocolSection(preferAuth string) {
+	mod, _ := lookupProtocolModule(cf.b, cf.protoSelect.Selected)
+
+	authOpts := []string{""}
+	if mod != nil {
+		caps := mod.Capabilities()
+		for _, am := range caps.AuthMethods {
+			authOpts = append(authOpts, string(am))
+		}
+	} else {
+		// Fallback to a generic set when the protocol module is not
+		// available (headless mode or unregistered plugin).
+		authOpts = []string{"", "password", "publickey", "agent", "keyboard-interactive", "none"}
+	}
+	cur := cf.authSelect.Selected
+	cf.authSelect.Options = authOpts
+	want := cur
+	if want == "" || !containsString(authOpts, want) {
+		want = preferAuth
+	}
+	if !containsString(authOpts, want) {
+		want = ""
+	}
+	cf.authSelect.SetSelected(want)
+	cf.authSelect.Refresh()
+
+	cf.protoForm.Items = nil
+	cf.settingBinds = nil
+	if mod == nil {
+		cf.protoForm.Refresh()
+		return
+	}
+	for _, def := range mod.Settings() {
+		// Skip settings already controlled by the top-level fields.
+		switch def.Key {
+		case "host", "port", "username":
+			continue
+		}
+		cf.addSettingItem(def)
+	}
+	cf.protoForm.Refresh()
+}
+
+func (cf *connectionForm) addSettingItem(def protocol.SettingDef) {
+	initial, hasInitial := cf.initialSettings[def.Key]
+	binding := settingBinding{def: def}
+
+	var fi *widget.FormItem
+	switch def.Type {
+	case protocol.SettingBool:
+		ck := widget.NewCheck("", nil)
+		switch {
+		case hasInitial:
+			if v, ok := initial.(bool); ok {
+				ck.SetChecked(v)
+			}
+		default:
+			if d, ok := def.Default.(bool); ok {
+				ck.SetChecked(d)
+			}
+		}
+		binding.getter = func() (any, bool) { return ck.Checked, true }
+		fi = widget.NewFormItem(def.Label, ck)
+
+	case protocol.SettingInt:
+		e := widget.NewEntry()
+		switch {
+		case hasInitial:
+			e.SetText(stringifyAny(initial))
+		case def.Default != nil:
+			e.SetText(stringifyAny(def.Default))
+		}
+		minPtr, maxPtr := def.Min, def.Max
+		binding.getter = func() (any, bool) {
+			t := strings.TrimSpace(e.Text)
+			if t == "" {
+				return nil, false
+			}
+			n, err := strconv.Atoi(t)
+			if err != nil {
+				return nil, false
+			}
+			if minPtr != nil && n < *minPtr {
+				return nil, false
+			}
+			if maxPtr != nil && n > *maxPtr {
+				return nil, false
+			}
+			return n, true
+		}
+		fi = widget.NewFormItem(def.Label, e)
+
+	case protocol.SettingEnum:
+		opts := append([]string{""}, def.EnumValues...)
+		sel := widget.NewSelect(opts, nil)
+		switch {
+		case hasInitial:
+			if s, ok := initial.(string); ok {
+				sel.SetSelected(s)
+			}
+		default:
+			if d, ok := def.Default.(string); ok {
+				sel.SetSelected(d)
+			}
+		}
+		binding.getter = func() (any, bool) {
+			if sel.Selected == "" {
+				return nil, false
+			}
+			return sel.Selected, true
+		}
+		fi = widget.NewFormItem(def.Label, sel)
+
+	case protocol.SettingSecret:
+		e := widget.NewPasswordEntry()
+		if hasInitial {
+			e.SetText(stringifyAny(initial))
+		}
+		binding.getter = func() (any, bool) {
+			if e.Text == "" {
+				return nil, false
+			}
+			return e.Text, true
+		}
+		fi = widget.NewFormItem(def.Label, e)
+
+	default: // SettingString and unknown types fall back to a text entry.
+		e := widget.NewEntry()
+		switch {
+		case hasInitial:
+			e.SetText(stringifyAny(initial))
+		case def.Default != nil:
+			e.SetText(stringifyAny(def.Default))
+		}
+		binding.getter = func() (any, bool) {
+			t := strings.TrimSpace(e.Text)
+			if t == "" {
+				return nil, false
+			}
+			return e.Text, true
+		}
+		fi = widget.NewFormItem(def.Label, e)
+	}
+	if def.Description != "" {
+		fi.HintText = def.Description
+	}
+	cf.protoForm.AppendItem(fi)
+	cf.settingBinds = append(cf.settingBinds, binding)
 }
 
 func (cf *connectionForm) collect() (ConnectionInput, error) {
@@ -1301,6 +1512,34 @@ func (cf *connectionForm) collect() (ConnectionInput, error) {
 		}
 		port = p
 	}
+
+	// Validate protocol settings against their declared min/max bounds and
+	// produce nice error messages — bad values are silently dropped by
+	// the binding getter, so re-check explicitly here.
+	settings := map[string]any{}
+	for _, b := range cf.settingBinds {
+		if b.def.Type == protocol.SettingInt {
+			if t := getEntryText(cf.protoForm, b.def.Label); t != "" {
+				n, err := strconv.Atoi(strings.TrimSpace(t))
+				if err != nil {
+					return ConnectionInput{}, fmt.Errorf("%s must be a whole number", b.def.Label)
+				}
+				if b.def.Min != nil && n < *b.def.Min {
+					return ConnectionInput{}, fmt.Errorf("%s must be ≥ %d", b.def.Label, *b.def.Min)
+				}
+				if b.def.Max != nil && n > *b.def.Max {
+					return ConnectionInput{}, fmt.Errorf("%s must be ≤ %d", b.def.Label, *b.def.Max)
+				}
+			}
+		}
+		if v, ok := b.getter(); ok {
+			settings[b.def.Key] = v
+		}
+	}
+	if len(settings) == 0 {
+		settings = nil
+	}
+
 	return ConnectionInput{
 		Name:        name,
 		ProtocolID:  cf.protoSelect.Selected,
@@ -1311,11 +1550,95 @@ func (cf *connectionForm) collect() (ConnectionInput, error) {
 		Description: cf.descEntry.Text,
 		Tags:        splitTags(cf.tagsEntry.Text),
 		Environment: strings.TrimSpace(cf.envEntry.Text),
+		Settings:    settings,
 		CredentialRef: CredentialRefInput{
 			ProviderID: strings.TrimSpace(cf.credProviderEnt.Text),
 			Key:        strings.TrimSpace(cf.credKeyEntry.Text),
 		},
 	}, nil
+}
+
+// getEntryText reads the current text of the entry for the FormItem with the
+// given label, or "" if no such item exists. Used by collect() purely for
+// re-validation; the canonical value is still produced by the binding
+// getter.
+func getEntryText(f *widget.Form, label string) string {
+	for _, it := range f.Items {
+		if it.Text != label {
+			continue
+		}
+		if e, ok := it.Widget.(*widget.Entry); ok {
+			return e.Text
+		}
+	}
+	return ""
+}
+
+// lookupProtocolModule returns the protocol module registered under either
+// the short id ("rdp") or the canonical id ("io.goremote.protocol.rdp").
+func lookupProtocolModule(b *Bindings, id string) (protocol.Module, bool) {
+	if b == nil || b.app == nil || b.app.ProtocolHost() == nil || id == "" {
+		return nil, false
+	}
+	ph := b.app.ProtocolHost()
+	if m, ok := ph.Module(id); ok {
+		return m, true
+	}
+	if !strings.Contains(id, ".") {
+		if m, ok := ph.Module("io.goremote.protocol." + strings.ToLower(strings.TrimSpace(id))); ok {
+			return m, true
+		}
+	}
+	return nil, false
+}
+
+// stringifyAny renders a setting value for display in a text entry. It is
+// intentionally tolerant: numbers, bools, strings, and slices all render as
+// something the user can edit and re-submit.
+func stringifyAny(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	case int:
+		return strconv.Itoa(x)
+	case int32:
+		return strconv.FormatInt(int64(x), 10)
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
+
+// cloneSettingsMap returns a shallow copy so the form can mutate
+// initialSettings without affecting the original input.
+func cloneSettingsMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+func containsString(opts []string, v string) bool {
+	for _, o := range opts {
+		if o == v {
+			return true
+		}
+	}
+	return false
 }
 
 // availableProtocols returns the protocols actually registered with the host,
