@@ -148,3 +148,28 @@ func TestSelectLogLevel(t *testing.T) {
 		t.Fatalf("default level failed: got %v want %v", got.Level(), slog.LevelInfo)
 	}
 }
+
+func TestBindingsSetLogLevel(t *testing.T) {
+v := new(slog.LevelVar)
+v.Set(slog.LevelInfo)
+b := &Bindings{logLevel: v}
+
+cases := map[string]slog.Level{
+"trace": slog.Level(-8),
+"debug": slog.LevelDebug,
+"info":  slog.LevelInfo,
+"warn":  slog.LevelWarn,
+"error": slog.LevelError,
+"":      slog.LevelInfo,
+"junk":  slog.LevelInfo,
+}
+for in, want := range cases {
+b.SetLogLevel(in)
+if got := v.Level(); got != want {
+t.Errorf("SetLogLevel(%q) -> %v, want %v", in, got, want)
+}
+}
+
+// Nil LevelVar must not panic.
+(&Bindings{}).SetLogLevel("debug")
+}

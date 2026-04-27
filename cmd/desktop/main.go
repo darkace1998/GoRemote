@@ -67,6 +67,7 @@ type Bindings struct {
 	logger    *slog.Logger
 	settings  settings.Store
 	workspace workspace.Store
+	logLevel  *slog.LevelVar
 }
 
 // NewBindings constructs a Bindings value wrapping a started App.
@@ -90,6 +91,23 @@ func (b *Bindings) WithSettingsStore(s settings.Store) *Bindings {
 func (b *Bindings) WithWorkspaceStore(s workspace.Store) *Bindings {
 	b.workspace = s
 	return b
+}
+
+// WithLogLevelVar attaches a runtime-mutable log level to the bindings so the
+// settings UI can change verbosity without restarting the application.
+func (b *Bindings) WithLogLevelVar(v *slog.LevelVar) *Bindings {
+	b.logLevel = v
+	return b
+}
+
+// SetLogLevel updates the active runtime log level. Recognised names are
+// "trace", "debug", "info", "warn", "error" (case-insensitive). An unknown
+// value falls back to "info".
+func (b *Bindings) SetLogLevel(level string) {
+	if b.logLevel == nil {
+		return
+	}
+	b.logLevel.Set(resolveLogLevel(level))
 }
 
 // --- Tree commands ------------------------------------------------------
@@ -405,11 +423,13 @@ func (p FolderPatchInput) toAppPatch() app.FolderPatch {
 // --- main ---------------------------------------------------------------
 
 func main() {
-	logLevel := selectLogLevel(os.Getenv("GOREMOTE_LOG_LEVEL"), loadConfiguredLogLevel())
+	levelVar := new(slog.LevelVar)
+	levelVar.Set(selectLogLevel(os.Getenv("GOREMOTE_LOG_LEVEL"), loadConfiguredLogLevel()))
 	logger := logging.New(logging.Options{
 		Writer: chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout),
-		Level:  logLevel,
+		Level:  levelVar,
 	})
+	slog.SetDefault(logger)
 
 	dir, err := resolveStateDir()
 	if err != nil {
@@ -440,7 +460,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	bindings := NewBindings(a)
+	bindings := NewBindings(a).WithLogLevelVar(levelVar)
 
 	// Settings store. Keep failures non-fatal: the UI falls back to defaults.
 	if sp, err := settings.DefaultPath(); err != nil {

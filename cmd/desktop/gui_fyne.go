@@ -1353,6 +1353,10 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 	themeSelect := widget.NewSelect(themes, nil)
 	themeSelect.SetSelected(s.Theme)
 
+	fontFamilyEntry := widget.NewEntry()
+	fontFamilyEntry.SetText(s.FontFamily)
+	fontFamilyEntry.SetPlaceHolder("blank = system default")
+
 	fontEntry := widget.NewEntry()
 	fontEntry.SetText(strconv.Itoa(s.FontSizePx))
 
@@ -1361,6 +1365,17 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 
 	autoReconnect := widget.NewCheck("", nil)
 	autoReconnect.SetChecked(s.AutoReconnect)
+
+	reconMaxEntry := widget.NewEntry()
+	reconMaxEntry.SetText(strconv.Itoa(s.ReconnectMaxN))
+	reconMaxEntry.SetPlaceHolder(fmt.Sprintf("%d-%d", appsettings.MinReconnectMaxN, appsettings.MaxReconnectMaxN))
+
+	reconDelayEntry := widget.NewEntry()
+	reconDelayEntry.SetText(strconv.Itoa(s.ReconnectDelayMs))
+	reconDelayEntry.SetPlaceHolder(fmt.Sprintf("%d-%d ms", appsettings.MinReconnectDelayMs, appsettings.MaxReconnectDelayMs))
+
+	telemetryCheck := widget.NewCheck("", nil)
+	telemetryCheck.SetChecked(s.TelemetryEnabled)
 
 	logLevels := []string{
 		appsettings.LogLevelTrace,
@@ -1377,33 +1392,59 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 
 	items := []*widget.FormItem{
 		widget.NewFormItem("Theme", themeSelect),
+		widget.NewFormItem("Font family", fontFamilyEntry),
 		widget.NewFormItem("Font size (px)", fontEntry),
 		widget.NewFormItem("Log level", logLevelSelect),
 		widget.NewFormItem("Confirm on close", confirmCheck),
 		widget.NewFormItem("Auto-reconnect", autoReconnect),
+		widget.NewFormItem("Reconnect max attempts", reconMaxEntry),
+		widget.NewFormItem("Reconnect delay (ms)", reconDelayEntry),
+		widget.NewFormItem("Anonymous telemetry", telemetryCheck),
 	}
 	d := dialog.NewForm("Settings", "Save", "Cancel", items, func(ok bool) {
 		if !ok {
 			return
 		}
-		px, err := strconv.Atoi(fontEntry.Text)
+		px, err := strconv.Atoi(strings.TrimSpace(fontEntry.Text))
 		if err != nil {
 			dialog.ShowError(fmt.Errorf("invalid font size: %w", err), w)
 			return
 		}
+		rmax, err := strconv.Atoi(strings.TrimSpace(reconMaxEntry.Text))
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("invalid reconnect max: %w", err), w)
+			return
+		}
+		rdelay, err := strconv.Atoi(strings.TrimSpace(reconDelayEntry.Text))
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("invalid reconnect delay: %w", err), w)
+			return
+		}
 		s.Theme = themeSelect.Selected
+		s.FontFamily = strings.TrimSpace(fontFamilyEntry.Text)
 		s.FontSizePx = px
 		s.LogLevel = logLevelSelect.Selected
 		s.ConfirmOnClose = confirmCheck.Checked
 		s.AutoReconnect = autoReconnect.Checked
+		s.ReconnectMaxN = rmax
+		s.ReconnectDelayMs = rdelay
+		s.TelemetryEnabled = telemetryCheck.Checked
 		updated, err := b.UpdateSettings(ctx, s)
 		if err != nil {
 			dialog.ShowError(err, w)
 			return
 		}
 		applyTheme(a, updated.Theme)
+		b.SetLogLevel(updated.LogLevel)
+		slog.Info("settings updated",
+			slog.String("theme", updated.Theme),
+			slog.String("logLevel", updated.LogLevel),
+			slog.Bool("autoReconnect", updated.AutoReconnect),
+			slog.Int("reconnectMaxN", updated.ReconnectMaxN),
+			slog.Int("reconnectDelayMs", updated.ReconnectDelayMs),
+		)
 	}, w)
-	d.Resize(fyne.NewSize(420, 320))
+	d.Resize(fyne.NewSize(480, 460))
 	d.Show()
 }
 
