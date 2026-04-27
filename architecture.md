@@ -31,31 +31,25 @@ Use a **Go monorepo with a shared `go.work`** and a thin desktop shell backed by
    - Keychain access, notifications, file dialogs, tray, system integration.
 
 ## 3. Suggested Repository Layout
-- `cmd/desktop`
-- `cmd/desktop/gui_fyne.go`
-- `cmd/desktop/fyne_session.go`
-- `internal/appcore`
-- `internal/domain`
-- `internal/persistence`
-- `internal/import/mremoteng`
-- `internal/platform`
-- `internal/session`
-- `internal/eventbus`
-- `sdk/plugin`
-- `sdk/protocol`
-- `sdk/credential`
-- `host/plugin`
-- `host/protocol`
-- `host/credential`
-- `plugins/protocol-ssh`
-- `plugins/protocol-telnet`
-- `plugins/protocol-tn5250`
-- `plugins/protocol-rdp`
-- `plugins/protocol-vnc`
-- `plugins/credential-file`
-- `plugins/credential-1password`
-- `plugins/credential-bitwarden`
-- `webui/` (archived; React/TypeScript UI superseded by Fyne)
+- `cmd/desktop` — Fyne desktop entry point (main, bindings, GUI, session bridge)
+- `internal/app` — application core (commands, events, sessions, views)
+- `internal/appcore` — boot/lifecycle helpers shared by `cmd/desktop`
+- `internal/domain` — connection / folder / template / inheritance types
+- `internal/persistence` — versioned config, secret blob, migrations, backups
+- `internal/import/mremoteng` — XML/CSV importer with per-row warnings
+- `internal/extlaunch` — generic external-process launcher (RDP/VNC/HTTP/PowerShell/MOSH)
+- `internal/eventbus` — typed pub/sub used by hosts and app core
+- `internal/logging` — structured-logger wrapper with secret redaction
+- `internal/platform` — paths, keychain abstraction, clipboard, notifications
+- `internal/session` — session-descriptor helpers used by the app core
+- `app/settings`, `app/workspace` — persisted UI documents (settings, open tabs)
+- `sdk/plugin`, `sdk/protocol`, `sdk/credential` — versioned plugin contracts
+- `host/plugin`, `host/protocol`, `host/credential` — in-process plugin hosts
+- `host/plugin/ipc/` + `proto/plugin/v1/` — out-of-process IPC contract
+- `plugins/protocol-{ssh,telnet,rlogin,rawsocket,tn5250,rdp,vnc,http,powershell,mosh}` — built-in protocols
+- `plugins/credential-{file,keychain,1password,bitwarden}` — built-in providers
+- `plugins/external-example` — reference out-of-process plugin
+- `test/integration` — fake-plugin integration harness
 
 ## 4. UI Architecture
 ### Recommended approach

@@ -126,7 +126,7 @@ func New(cfg Config) (*App, error) {
 	}
 	cred := cfg.CredentialHost
 	if cred == nil {
-		cred = credhost.New(ph)
+		cred = credhost.New(ph, credhost.WithAuditLogger(logger))
 	}
 
 	rootCtx, rootCancel := context.WithCancel(context.Background())

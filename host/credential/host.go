@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -75,6 +77,20 @@ func WithQuarantineDuration(d time.Duration) Option {
 	}
 }
 
+// WithAuditLogger directs structured credential-access audit events
+// (resolve / unlock / lock attempts and outcomes) to the supplied logger.
+// A nil logger silences audit output. If never set, audit goes to a
+// discard sink so library use in tests stays quiet.
+func WithAuditLogger(l *slog.Logger) Option {
+	return func(h *Host) {
+		if l == nil {
+			h.audit = slog.New(slog.NewTextHandler(io.Discard, nil))
+			return
+		}
+		h.audit = l
+	}
+}
+
 // Host is the credential-provider host.
 type Host struct {
 	ph *pluginhost.Host
@@ -89,6 +105,8 @@ type Host struct {
 	failureThreshold int
 	failureWindow    time.Duration
 	quarantineFor    time.Duration
+
+	audit *slog.Logger
 }
 
 // New constructs a credential Host backed by the given plugin host.
@@ -103,6 +121,7 @@ func New(ph *pluginhost.Host, opts ...Option) *Host {
 		failureThreshold: DefaultFailureThreshold,
 		failureWindow:    DefaultFailureWindow,
 		quarantineFor:    DefaultQuarantineFor,
+		audit:            slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -199,16 +218,33 @@ func (h *Host) isQuarantinedLocked(id string) bool {
 // window.
 func (h *Host) Resolve(ctx context.Context, ref credential.Reference, timeout time.Duration) (*credential.Material, error) {
 	id := ref.ProviderID
+	start := h.now()
+	h.audit.LogAttrs(ctx, slog.LevelInfo, "credential.resolve attempt",
+		slog.String("component", "credential.audit"),
+		slog.String("provider", id),
+		slog.String("entry", ref.EntryID))
 	h.mu.Lock()
 	p, ok := h.providers[id]
 	if !ok {
 		h.mu.Unlock()
-		return nil, fmt.Errorf("%w: %s", ErrProviderNotFound, id)
+		err := fmt.Errorf("%w: %s", ErrProviderNotFound, id)
+		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.resolve denied",
+			slog.String("component", "credential.audit"),
+			slog.String("provider", id),
+			slog.String("entry", ref.EntryID),
+			slog.String("err", err.Error()))
+		return nil, err
 	}
 	if h.isQuarantinedLocked(id) {
 		until := h.quarantined[id]
 		h.mu.Unlock()
-		return nil, fmt.Errorf("%w: provider=%s until=%s", ErrQuarantined, id, until.Format(time.RFC3339))
+		err := fmt.Errorf("%w: provider=%s until=%s", ErrQuarantined, id, until.Format(time.RFC3339))
+		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.resolve quarantined",
+			slog.String("component", "credential.audit"),
+			slog.String("provider", id),
+			slog.String("entry", ref.EntryID),
+			slog.Time("until", until))
+		return nil, err
 	}
 	h.mu.Unlock()
 
@@ -227,11 +263,23 @@ func (h *Host) Resolve(ctx context.Context, ref credential.Reference, timeout ti
 		mat = m
 		return nil
 	})
+	dur := h.now().Sub(start)
 	if err != nil {
 		h.recordFailure(ctx, id, err)
+		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.resolve failed",
+			slog.String("component", "credential.audit"),
+			slog.String("provider", id),
+			slog.String("entry", ref.EntryID),
+			slog.Duration("dur", dur),
+			slog.String("err", err.Error()))
 		return nil, err
 	}
 	h.recordSuccess(id)
+	h.audit.LogAttrs(ctx, slog.LevelInfo, "credential.resolve ok",
+		slog.String("component", "credential.audit"),
+		slog.String("provider", id),
+		slog.String("entry", ref.EntryID),
+		slog.Duration("dur", dur))
 	return mat, nil
 }
 
@@ -239,28 +287,64 @@ func (h *Host) Resolve(ctx context.Context, ref credential.Reference, timeout ti
 func (h *Host) Unlock(ctx context.Context, providerID, passphrase string, timeout time.Duration) error {
 	p, ok := h.Provider(providerID)
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrProviderNotFound, providerID)
+		err := fmt.Errorf("%w: %s", ErrProviderNotFound, providerID)
+		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.unlock denied",
+			slog.String("component", "credential.audit"),
+			slog.String("provider", providerID),
+			slog.String("err", err.Error()))
+		return err
 	}
 	if timeout <= 0 {
 		timeout = DefaultCallTimeout
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return safeCall(func() error { return p.Unlock(cctx, passphrase) })
+	err := safeCall(func() error { return p.Unlock(cctx, passphrase) })
+	level := slog.LevelInfo
+	msg := "credential.unlock ok"
+	attrs := []slog.Attr{
+		slog.String("component", "credential.audit"),
+		slog.String("provider", providerID),
+	}
+	if err != nil {
+		level = slog.LevelWarn
+		msg = "credential.unlock failed"
+		attrs = append(attrs, slog.String("err", err.Error()))
+	}
+	h.audit.LogAttrs(ctx, level, msg, attrs...)
+	return err
 }
 
 // Lock forwards to the provider under id with a timeout.
 func (h *Host) Lock(ctx context.Context, providerID string, timeout time.Duration) error {
 	p, ok := h.Provider(providerID)
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrProviderNotFound, providerID)
+		err := fmt.Errorf("%w: %s", ErrProviderNotFound, providerID)
+		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.lock denied",
+			slog.String("component", "credential.audit"),
+			slog.String("provider", providerID),
+			slog.String("err", err.Error()))
+		return err
 	}
 	if timeout <= 0 {
 		timeout = DefaultCallTimeout
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return safeCall(func() error { return p.Lock(cctx) })
+	err := safeCall(func() error { return p.Lock(cctx) })
+	level := slog.LevelInfo
+	msg := "credential.lock ok"
+	attrs := []slog.Attr{
+		slog.String("component", "credential.audit"),
+		slog.String("provider", providerID),
+	}
+	if err != nil {
+		level = slog.LevelWarn
+		msg = "credential.lock failed"
+		attrs = append(attrs, slog.String("err", err.Error()))
+	}
+	h.audit.LogAttrs(ctx, level, msg, attrs...)
+	return err
 }
 
 // State forwards to the provider under id. Returns StateNotConfigured when
