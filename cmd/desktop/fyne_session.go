@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -21,6 +22,7 @@ type sessionTab struct {
 	cv      iapp.ConnectionView
 	handle  string
 	hid     domain.ID
+	connID  string // connection ID that spawned this session
 	tabItem *container.TabItem
 	term    *terminal.Terminal
 	ctx     context.Context
@@ -74,7 +76,9 @@ func (st *sessionTab) run(onClose func()) {
 	}
 	defer br.Close()
 
-	_ = st.term.RunWithConnection(br, br)
+	if err := st.term.RunWithConnection(br, br); err != nil {
+		slog.Warn("terminal session ended with error", "handle", st.handle, "err", err)
+	}
 	_, _ = st.term.Write([]byte("\r\n[Session closed]\r\n"))
 }
 

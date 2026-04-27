@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"sync"
 
@@ -32,9 +33,10 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	status := widget.NewLabel("Ready")
 
 	sessions := &sessionRegistry{
-		tabs:   tabs,
-		items:  make(map[domain.ID]*sessionTab),
-		status: status,
+		tabs:      tabs,
+		items:     make(map[domain.ID]*sessionTab),
+		openConns: make(map[string]struct{}),
+		status:    status,
 	}
 
 	tree := newConnTree(b, func(connID string) {
@@ -58,10 +60,31 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 
 // sessionRegistry owns the live sessionTab map and the AppTabs widget.
 type sessionRegistry struct {
-	mu     sync.Mutex
-	items  map[domain.ID]*sessionTab
-	tabs   *container.AppTabs
-	status *widget.Label
+	mu        sync.Mutex
+	items     map[domain.ID]*sessionTab
+	openConns map[string]struct{} // guards one active session per connection ID
+	tabs      *container.AppTabs
+	status    *widget.Label
+}
+
+// reserveConn atomically claims a connection ID for a new session.
+// Returns false if a session for that connection is already active.
+func (r *sessionRegistry) reserveConn(connID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.openConns[connID]; ok {
+		return false
+	}
+	r.openConns[connID] = struct{}{}
+	return true
+}
+
+// releaseConn removes the open-connection guard without removing the session.
+// Used on error paths before a session tab is ever created.
+func (r *sessionRegistry) releaseConn(connID string) {
+	r.mu.Lock()
+	delete(r.openConns, connID)
+	r.mu.Unlock()
 }
 
 func (r *sessionRegistry) add(st *sessionTab) {
@@ -77,6 +100,7 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	st, ok := r.items[hid]
 	if ok {
 		delete(r.items, hid)
+		delete(r.openConns, st.connID)
 	}
 	r.mu.Unlock()
 	if ok {
@@ -178,9 +202,18 @@ func (ct *connTree) updateItem(uid widget.TreeNodeID, _ bool, obj fyne.CanvasObj
 	if n == nil {
 		return
 	}
-	hbox := obj.(*fyne.Container)
-	icon := hbox.Objects[0].(*widget.Icon)
-	label := hbox.Objects[1].(*widget.Label)
+	hbox, ok := obj.(*fyne.Container)
+	if !ok || len(hbox.Objects) < 2 {
+		return
+	}
+	icon, ok := hbox.Objects[0].(*widget.Icon)
+	if !ok {
+		return
+	}
+	label, ok := hbox.Objects[1].(*widget.Label)
+	if !ok {
+		return
+	}
 	if n.Kind == "folder" {
 		icon.SetResource(theme.FolderIcon())
 		label.SetText(n.Name)
@@ -277,9 +310,15 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 // --- Session management ----------------------------------------------------
 
 func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID string) {
+	if !sessions.reserveConn(connID) {
+		dialog.ShowInformation("Already Open", "A session for this connection is already active.", w)
+		return
+	}
+
 	ctx := context.Background()
 	cv, err := b.GetConnection(ctx, connID)
 	if err != nil {
+		sessions.releaseConn(connID)
 		dialog.ShowError(err, w)
 		return
 	}
@@ -287,12 +326,14 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 	go func() {
 		handle, err := b.OpenSession(context.Background(), connID)
 		if err != nil {
+			sessions.releaseConn(connID)
 			dialog.ShowError(err, w)
 			return
 		}
 
 		hid, err := domain.ParseID(handle)
 		if err != nil {
+			sessions.releaseConn(connID)
 			dialog.ShowError(err, w)
 			return
 		}
@@ -308,6 +349,7 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 			cv:      cv,
 			handle:  handle,
 			hid:     hid,
+			connID:  connID,
 			tabItem: tabItem,
 		}
 		st.ctx, st.cancel = context.WithCancel(context.Background())
@@ -337,7 +379,9 @@ func closeCurrentSession(sessions *sessionRegistry) {
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		_ = st.b.CloseSession(ctx, st.handle)
+		if err := st.b.CloseSession(ctx, st.handle); err != nil {
+			slog.Warn("close session", "handle", st.handle, "err", err)
+		}
 	}()
 }
 
@@ -406,8 +450,8 @@ func showNewConnectionDialog(w fyne.Window, b *Bindings, tree *connTree) {
 		port := 0
 		if portEntry.Text != "" {
 			p, err := strconv.Atoi(portEntry.Text)
-			if err != nil {
-				dialog.ShowError(fmt.Errorf("invalid port: %w", err), w)
+			if err != nil || p < 0 || p > 65535 {
+				dialog.ShowError(fmt.Errorf("port must be a number between 0 and 65535"), w)
 				return
 			}
 			port = p

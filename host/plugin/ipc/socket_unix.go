@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -15,6 +16,10 @@ import (
 // The cleanup callback removes the on-disk file on Close so a subsequent
 // run does not see the stale socket.
 func socketListen(_ context.Context, socketPath string) (net.Listener, func() error, error) {
+	if !filepath.IsAbs(socketPath) {
+		return nil, nil, fmt.Errorf("ipc: socket path must be absolute: %q", socketPath)
+	}
+	socketPath = filepath.Clean(socketPath)
 	if err := removeIfStale(socketPath); err != nil {
 		return nil, nil, err
 	}
@@ -38,6 +43,10 @@ func socketListen(_ context.Context, socketPath string) (net.Listener, func() er
 }
 
 func socketDial(ctx context.Context, socketPath string) (net.Conn, error) {
+	if !filepath.IsAbs(socketPath) {
+		return nil, fmt.Errorf("ipc: socket path must be absolute: %q", socketPath)
+	}
+	socketPath = filepath.Clean(socketPath)
 	d := net.Dialer{Timeout: 5 * time.Second}
 	return d.DialContext(ctx, "unix", socketPath)
 }

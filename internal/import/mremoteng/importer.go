@@ -65,7 +65,7 @@ type Result struct {
 // passwords). Those are surfaced on Result.Warnings. An error is returned
 // only if the document is malformed or empty.
 func ImportXML(r io.Reader) (*Result, error) {
-	roots, err := parseXML(r)
+	roots, err := parseXML(io.LimitReader(r, 100<<20)) // 100 MB cap
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func ImportXML(r io.Reader) (*Result, error) {
 // ImportCSV parses a mRemoteNG CSV export. Every row becomes a
 // ConnectionNode attached to the tree root; CSV has no folder hierarchy.
 func ImportCSV(r io.Reader) (*Result, error) {
-	rows, err := parseCSV(r)
+	rows, err := parseCSV(io.LimitReader(r, 100<<20)) // 100 MB cap
 	if err != nil {
 		return nil, err
 	}

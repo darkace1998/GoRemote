@@ -127,17 +127,15 @@ func openSession(ctx context.Context, cfg openConfig, disc discoverer) (*Session
 // writePasswordFile writes password to a 0600 temp file and returns its
 // path. The file is intentionally not removed here; the caller is
 // responsible for deleting it once the viewer has read it.
+//
+// os.CreateTemp creates the file with mode 0600 (O_CREATE|O_EXCL, 0600)
+// so no subsequent chmod is needed.
 func writePasswordFile(password string) (string, error) {
 	f, err := os.CreateTemp("", "goremote-vnc-pw-*")
 	if err != nil {
 		return "", fmt.Errorf("vnc: create password file: %w", err)
 	}
 	path := f.Name()
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return "", fmt.Errorf("vnc: chmod password file: %w", err)
-	}
 	if _, err := f.WriteString(password); err != nil {
 		_ = f.Close()
 		_ = os.Remove(path)

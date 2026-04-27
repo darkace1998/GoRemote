@@ -117,8 +117,16 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 		sc := bufio.NewScanner(errR)
 		// Allow long lines (some clients dump verbose status messages).
 		sc.Buffer(make([]byte, 0, 4096), 1<<20)
+		const maxStderrBytes = 10 << 20 // 10 MB total cap
+		var total int
 		for sc.Scan() {
-			safeWrite([]byte("stderr: " + sc.Text() + "\n"))
+			line := sc.Text()
+			total += len(line) + 9 // len("stderr: ") + "\n"
+			if total > maxStderrBytes {
+				safeWrite([]byte("stderr: [output limit reached; truncated]\n"))
+				return
+			}
+			safeWrite([]byte("stderr: " + line + "\n"))
 		}
 	}()
 
