@@ -121,10 +121,25 @@ func (b *Bindings) CreateFolder(ctx context.Context, parent string, name string,
 	if err != nil {
 		return "", err
 	}
+	logging.Trace(b.logger, "tree.CreateFolder",
+		slog.String("parent", parent),
+		slog.String("name", name),
+		slog.Int("tags", len(tags)),
+	)
 	id, err := b.app.CreateFolder(ctx, pid, name, app.FolderOpts{Description: description, Tags: tags})
 	if err != nil {
+		b.logger.Debug("tree.CreateFolder failed",
+			slog.String("parent", parent),
+			slog.String("name", name),
+			slog.String("err", err.Error()),
+		)
 		return "", err
 	}
+	b.logger.Debug("tree.CreateFolder ok",
+		slog.String("parent", parent),
+		slog.String("name", name),
+		slog.String("id", id.String()),
+	)
 	return id.String(), nil
 }
 
@@ -134,10 +149,27 @@ func (b *Bindings) CreateConnection(ctx context.Context, parent string, opts Con
 	if err != nil {
 		return "", err
 	}
+	logging.Trace(b.logger, "tree.CreateConnection",
+		slog.String("parent", parent),
+		slog.String("name", opts.Name),
+		slog.String("protocol", opts.ProtocolID),
+		slog.String("host", opts.Host),
+		slog.Int("port", opts.Port),
+	)
 	id, err := b.app.CreateConnection(ctx, pid, opts.toAppOpts())
 	if err != nil {
+		b.logger.Debug("tree.CreateConnection failed",
+			slog.String("parent", parent),
+			slog.String("name", opts.Name),
+			slog.String("err", err.Error()),
+		)
 		return "", err
 	}
+	b.logger.Debug("tree.CreateConnection ok",
+		slog.String("parent", parent),
+		slog.String("id", id.String()),
+		slog.String("name", opts.Name),
+	)
 	return id.String(), nil
 }
 
@@ -147,7 +179,18 @@ func (b *Bindings) UpdateConnection(ctx context.Context, id string, patch Connec
 	if err != nil {
 		return err
 	}
-	return b.app.UpdateConnection(ctx, nid, patch.toAppPatch())
+	logging.Trace(b.logger, "tree.UpdateConnection",
+		slog.String("id", id),
+		slog.Bool("name_set", patch.Name != nil),
+		slog.Bool("host_set", patch.Host != nil),
+		slog.Bool("protocol_set", patch.ProtocolID != nil),
+	)
+	if err := b.app.UpdateConnection(ctx, nid, patch.toAppPatch()); err != nil {
+		b.logger.Debug("tree.UpdateConnection failed", slog.String("id", id), slog.String("err", err.Error()))
+		return err
+	}
+	b.logger.Debug("tree.UpdateConnection ok", slog.String("id", id))
+	return nil
 }
 
 // UpdateFolder applies a patch to an existing folder.
@@ -156,7 +199,16 @@ func (b *Bindings) UpdateFolder(ctx context.Context, id string, patch FolderPatc
 	if err != nil {
 		return err
 	}
-	return b.app.UpdateFolder(ctx, nid, patch.toAppPatch())
+	logging.Trace(b.logger, "tree.UpdateFolder",
+		slog.String("id", id),
+		slog.Bool("name_set", patch.Name != nil),
+	)
+	if err := b.app.UpdateFolder(ctx, nid, patch.toAppPatch()); err != nil {
+		b.logger.Debug("tree.UpdateFolder failed", slog.String("id", id), slog.String("err", err.Error()))
+		return err
+	}
+	b.logger.Debug("tree.UpdateFolder ok", slog.String("id", id))
+	return nil
 }
 
 // MoveNode reparents a node.
@@ -169,7 +221,23 @@ func (b *Bindings) MoveNode(ctx context.Context, id, newParent string) error {
 	if err != nil {
 		return err
 	}
-	return b.app.MoveNode(ctx, nid, pid)
+	logging.Trace(b.logger, "tree.MoveNode",
+		slog.String("id", id),
+		slog.String("new_parent", newParent),
+	)
+	if err := b.app.MoveNode(ctx, nid, pid); err != nil {
+		b.logger.Debug("tree.MoveNode failed",
+			slog.String("id", id),
+			slog.String("new_parent", newParent),
+			slog.String("err", err.Error()),
+		)
+		return err
+	}
+	b.logger.Debug("tree.MoveNode ok",
+		slog.String("id", id),
+		slog.String("new_parent", newParent),
+	)
+	return nil
 }
 
 // DeleteNode removes a folder or connection.
@@ -178,7 +246,13 @@ func (b *Bindings) DeleteNode(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	return b.app.DeleteNode(ctx, nid)
+	logging.Trace(b.logger, "tree.DeleteNode", slog.String("id", id))
+	if err := b.app.DeleteNode(ctx, nid); err != nil {
+		b.logger.Debug("tree.DeleteNode failed", slog.String("id", id), slog.String("err", err.Error()))
+		return err
+	}
+	b.logger.Debug("tree.DeleteNode ok", slog.String("id", id))
+	return nil
 }
 
 // GetConnection returns a resolved view of a single connection.
@@ -509,7 +583,7 @@ func chooseLogWriter(goos string, stderr io.Writer, stdout io.Writer) io.Writer 
 func resolveLogLevel(v string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "trace":
-		return slog.Level(-8)
+		return logging.LevelTrace
 	case "debug":
 		return slog.LevelDebug
 	case "warn", "warning":

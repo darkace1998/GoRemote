@@ -6,6 +6,7 @@
 package logging
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -15,6 +16,21 @@ import (
 // Redacted is the string substituted in place of any attribute value that
 // matches a sensitive key or pattern.
 const Redacted = "[REDACTED]"
+
+// LevelTrace is the slog level used for very high-volume tracing logs (e.g.
+// per-keystroke or per-tree-mutation diagnostics). It sits below
+// slog.LevelDebug so that "debug" callers do not drown in trace output.
+const LevelTrace = slog.Level(-8)
+
+// Trace emits a message at [LevelTrace]. It is a small convenience because
+// slog has no built-in Trace method and callers would otherwise need to call
+// logger.Log(ctx, LevelTrace, ...) at every site.
+func Trace(logger *slog.Logger, msg string, args ...any) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Log(context.Background(), LevelTrace, msg, args...)
+}
 
 // DefaultSensitiveKeys lists attribute keys whose values are always redacted,
 // regardless of type. Matching is case-insensitive.

@@ -26,6 +26,7 @@ import (
 	appworkspace "github.com/goremote/goremote/app/workspace"
 	iapp "github.com/goremote/goremote/internal/app"
 	"github.com/goremote/goremote/internal/domain"
+	"github.com/goremote/goremote/internal/logging"
 )
 
 // Build-time variables.
@@ -505,8 +506,20 @@ func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
 		}
 	}
 	if target != nil {
-		ct.dragTarget = target.uid
+		newTgt := target.uid
+		if ct.dragTarget != newTgt {
+			logging.Trace(ct.b.logger, "tree.dnd target changed",
+				slog.String("src", srcUID),
+				slog.String("target", newTgt),
+			)
+		}
+		ct.dragTarget = newTgt
 	} else {
+		if ct.dragTarget != "" {
+			logging.Trace(ct.b.logger, "tree.dnd target cleared",
+				slog.String("src", srcUID),
+			)
+		}
 		ct.dragTarget = ""
 	}
 }
@@ -516,6 +529,11 @@ func (ct *connTree) handleDragEnd() {
 	tgt := ct.dragTarget
 	ct.dragSrc = ""
 	ct.dragTarget = ""
+
+	logging.Trace(ct.b.logger, "tree.dnd drop",
+		slog.String("src", src),
+		slog.String("target", tgt),
+	)
 
 	ct.rowsMu.RLock()
 	rows := make([]*treeRow, 0, len(ct.rows))
@@ -555,18 +573,36 @@ func (ct *connTree) handleDragEnd() {
 	}
 
 	if srcNode.ParentID == targetParent {
+		logging.Trace(ct.b.logger, "tree.dnd no-op (same parent)",
+			slog.String("src", src),
+			slog.String("parent", targetParent),
+		)
 		return
 	}
 	if src == targetParent {
+		logging.Trace(ct.b.logger, "tree.dnd refused (drop on self)",
+			slog.String("src", src),
+		)
 		return // can't drop a node onto itself
 	}
 	if srcNode.Kind == "folder" && isDescendantOf(srcNode, targetParent) {
+		ct.b.logger.Debug("tree.dnd refused (cycle)",
+			slog.String("src", src),
+			slog.String("target_parent", targetParent),
+		)
 		if ct.onError != nil {
 			ct.onError(errors.New("cannot move a folder into one of its own descendants"))
 		}
 		return
 	}
 
+	ct.b.logger.Debug("tree.dnd commit",
+		slog.String("src", src),
+		slog.String("src_kind", srcNode.Kind),
+		slog.String("src_name", srcNode.Name),
+		slog.String("old_parent", srcNode.ParentID),
+		slog.String("new_parent", targetParent),
+	)
 	if err := ct.b.MoveNode(context.Background(), src, targetParent); err != nil {
 		if ct.onError != nil {
 			ct.onError(err)

@@ -197,3 +197,25 @@ func TestNonSecretKeysPreserved(t *testing.T) {
 		t.Errorf("non-secret attrs mutated: %#v", m)
 	}
 }
+
+func TestTraceEmitsBelowDebug(t *testing.T) {
+var buf bytes.Buffer
+lv := new(slog.LevelVar)
+lv.Set(LevelTrace)
+logger := New(Options{Writer: &buf, Level: lv})
+
+Trace(logger, "hello", slog.String("k", "v"))
+if !strings.Contains(buf.String(), `"msg":"hello"`) {
+t.Fatalf("trace not emitted at LevelTrace: %q", buf.String())
+}
+
+buf.Reset()
+lv.Set(slog.LevelDebug)
+Trace(logger, "hello", slog.String("k", "v"))
+if buf.Len() != 0 {
+t.Fatalf("trace should be suppressed at debug: %q", buf.String())
+}
+
+// Nil logger must not panic and must use default.
+Trace(nil, "noop")
+}
