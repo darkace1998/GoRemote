@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	protohost "github.com/goremote/goremote/host/protocol"
 	"github.com/goremote/goremote/internal/domain"
 	"github.com/goremote/goremote/sdk/credential"
 	"github.com/goremote/goremote/sdk/protocol"
@@ -128,7 +130,16 @@ func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle,
 		Secret:     mat,
 		Settings:   cloneSettings(resolved.Settings),
 	}
-	sess, err := a.protoH.Open(ctx, resolved.ProtocolID, req)
+	protocolID := resolved.ProtocolID
+	sess, err := a.protoH.Open(ctx, protocolID, req)
+	if err != nil && errors.Is(err, protohost.ErrProtocolNotFound) {
+		if canonical, ok := canonicalBuiltInProtocolID(protocolID); ok {
+			sess, err = a.protoH.Open(ctx, canonical, req)
+			if err == nil {
+				protocolID = canonical
+			}
+		}
+	}
 	if err != nil {
 		if material != nil {
 			material.Zeroize()
@@ -146,7 +157,7 @@ func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle,
 	entry := &sessionEntry{
 		handle:       handle,
 		connectionID: connID,
-		protocolID:   resolved.ProtocolID,
+		protocolID:   protocolID,
 		host:         resolved.Host,
 		openedAt:     a.now(),
 		sess:         sess,
@@ -177,7 +188,7 @@ func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle,
 		if err != nil && !errors.Is(err, context.Canceled) {
 			a.logger.Warn("session ended with error",
 				slog.String("session", handle.String()),
-				slog.String("protocol", resolved.ProtocolID),
+				slog.String("protocol", protocolID),
 				slog.String("err", err.Error()))
 		}
 		// Ensure Close is called so plugin resources are freed even if
@@ -192,6 +203,15 @@ func (a *App) OpenSession(ctx context.Context, connID domain.ID) (SessionHandle,
 		NodeID:    connID,
 	})
 	return handle, nil
+}
+
+func canonicalBuiltInProtocolID(id string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(id)) {
+	case "ssh", "telnet", "rlogin", "rawsocket", "rdp", "vnc", "tn5250", "powershell", "http", "mosh":
+		return "io.goremote.protocol." + strings.ToLower(strings.TrimSpace(id)), true
+	default:
+		return "", false
+	}
 }
 
 // SendInput sends data to the session. Per spec, this calls

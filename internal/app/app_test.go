@@ -302,6 +302,27 @@ func TestSessionOpenSendClose(t *testing.T) {
 	}
 }
 
+func TestOpenSession_NormalizesShortProtocolID(t *testing.T) {
+	a, _ := newTestApp(t)
+	ctx := context.Background()
+	_ = a.Start(ctx)
+	defer a.Shutdown(ctx)
+
+	mod := &fakeModule{id: "io.goremote.protocol.ssh"}
+	if err := a.RegisterProtocol(ctx, mod, sdkplugin.TrustCore); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	cid, _ := a.CreateConnection(ctx, domain.NilID, ConnectionOpts{
+		Name: "short", ProtocolID: "ssh", Host: "h", Port: 22,
+	})
+
+	h, err := a.OpenSession(ctx, cid)
+	if err != nil {
+		t.Fatalf("open session with short protocol id: %v", err)
+	}
+	defer a.CloseSession(ctx, h)
+}
+
 func TestCredentialResolution(t *testing.T) {
 	a, _ := newTestApp(t)
 	ctx := context.Background()
