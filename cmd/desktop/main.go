@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -392,7 +393,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	a, err := app.New(app.Config{Dir: dir, Logger: logger})
+	a, err := newAppWithRecovery(app.Config{Dir: dir, Logger: logger}, logger)
 	if err != nil {
 		logger.Error("app.New", slog.String("err", err.Error()))
 		os.Exit(1)
@@ -451,6 +452,42 @@ func shutdown(a *app.App, logger *slog.Logger) {
 	if err := a.Shutdown(sctx); err != nil {
 		logger.Error("app.Shutdown", slog.String("err", err.Error()))
 	}
+}
+
+// newAppWithRecovery constructs the app and recovers once from corrupted
+// on-disk state by quarantining the state directory and retrying with a
+// fresh store.
+func newAppWithRecovery(cfg app.Config, logger *slog.Logger) (*app.App, error) {
+	a, err := app.New(cfg)
+	if err == nil {
+		return a, nil
+	}
+	if !strings.Contains(err.Error(), "app: load snapshot:") {
+		return nil, err
+	}
+	quarantineDir, qerr := quarantineStateDir(cfg.Dir)
+	if qerr != nil {
+		return nil, fmt.Errorf("%w (quarantine failed: %v)", err, qerr)
+	}
+	logger.Error("state load failed; quarantined state and retrying",
+		slog.String("dir", cfg.Dir),
+		slog.String("quarantineDir", quarantineDir),
+		slog.String("err", err.Error()))
+	return app.New(cfg)
+}
+
+func quarantineStateDir(dir string) (string, error) {
+	if dir == "" {
+		return "", errors.New("empty state dir")
+	}
+	dst := filepath.Join(
+		filepath.Dir(dir),
+		fmt.Sprintf("%s.corrupt-%d", filepath.Base(dir), time.Now().UnixNano()),
+	)
+	if err := os.Rename(dir, dst); err != nil {
+		return "", err
+	}
+	return dst, nil
 }
 
 // registerBuiltins registers the in-process protocol and credential plugins.
