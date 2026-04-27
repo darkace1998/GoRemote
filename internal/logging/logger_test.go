@@ -171,6 +171,26 @@ func TestWithComponent(t *testing.T) {
 	}
 }
 
+// TestWithComponentDedup verifies that nesting WithComponent calls collapses
+// to a single component attribute (the deepest wins) instead of emitting two
+// "component" keys on every record. Regression test for goremote logs
+// showing both `"component":"app"` and `"component":"bindings"` per line.
+func TestWithComponentDedup(t *testing.T) {
+	lg, buf := newTestLogger(t, slog.LevelDebug)
+	root := WithComponent(lg, "app")
+	child := WithComponent(root, "bindings")
+	child.Info("hi")
+
+	line := strings.TrimSpace(buf.String())
+	if got := strings.Count(line, `"component"`); got != 1 {
+		t.Fatalf("expected exactly one component key, got %d in %s", got, line)
+	}
+	m := decodeLast(t, buf)
+	if m["component"] != "bindings" {
+		t.Errorf("expected component=bindings (child wins), got %v", m["component"])
+	}
+}
+
 func TestWithAttrsRedactsPreboundSecrets(t *testing.T) {
 	lg, buf := newTestLogger(t, slog.LevelDebug)
 	child := lg.With(slog.String("token", "s3cret"), slog.String("user", "eve"))

@@ -14,6 +14,20 @@ type redactingHandler struct {
 	level    slog.Leveler
 	keys     map[string]struct{}
 	patterns []*regexp.Regexp
+	// pending holds attrs accumulated via WithAttrs since the last WithGroup
+	// boundary. Tracking them here (instead of baking into inner via
+	// inner.WithAttrs) lets us dedupe well-known hierarchical keys like
+	// "component" so that child loggers replace rather than append a second
+	// value. On Handle we prepend these to the record's attrs.
+	pending []slog.Attr
+}
+
+// dedupKeys lists attribute keys for which a child logger's value should
+// REPLACE a parent logger's value rather than appending a second copy. These
+// represent hierarchical context (e.g. component=app → component=bindings)
+// where one value is desired per record.
+var dedupKeys = map[string]bool{
+	"component": true,
 }
 
 func (h *redactingHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
@@ -27,6 +41,9 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Rebuild the record with redacted attributes. slog.Record exposes Attrs
 	// via an iterator, so we collect them, redact, and emit a new record.
 	out := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	for _, a := range h.pending {
+		out.AddAttrs(a)
+	}
 	r.Attrs(func(a slog.Attr) bool {
 		out.AddAttrs(h.redactAttr(a))
 		return true
@@ -35,21 +52,47 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func (h *redactingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	redacted := make([]slog.Attr, len(attrs))
-	for i, a := range attrs {
-		redacted[i] = h.redactAttr(a)
+	// Start from a copy of the parent's pending attrs, then append the new
+	// ones — replacing any prior entry whose key is in dedupKeys. This way
+	// `WithComponent("app")` + `WithComponent("bindings")` yields a single
+	// component=bindings instead of two component fields per record.
+	merged := make([]slog.Attr, len(h.pending))
+	copy(merged, h.pending)
+	for _, a := range attrs {
+		ra := h.redactAttr(a)
+		if dedupKeys[ra.Key] {
+			replaced := false
+			for i := range merged {
+				if merged[i].Key == ra.Key {
+					merged[i] = ra
+					replaced = true
+					break
+				}
+			}
+			if replaced {
+				continue
+			}
+		}
+		merged = append(merged, ra)
 	}
 	return &redactingHandler{
-		inner:    h.inner.WithAttrs(redacted),
+		inner:    h.inner,
 		level:    h.level,
 		keys:     h.keys,
 		patterns: h.patterns,
+		pending:  merged,
 	}
 }
 
 func (h *redactingHandler) WithGroup(name string) slog.Handler {
+	// Crossing a group boundary: bake any pending attrs into inner first
+	// (they belong outside the new group), then start fresh.
+	inner := h.inner
+	if len(h.pending) > 0 {
+		inner = inner.WithAttrs(h.pending)
+	}
 	return &redactingHandler{
-		inner:    h.inner.WithGroup(name),
+		inner:    inner.WithGroup(name),
 		level:    h.level,
 		keys:     h.keys,
 		patterns: h.patterns,
