@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
@@ -77,6 +79,9 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	tree := newConnTree(b, func(connID string) {
 		openSession(w, b, sessions, connID)
 	})
+	tree.onError = func(err error) {
+		fyne.Do(func() { dialog.ShowError(err, w) })
+	}
 	sessions.tree = tree
 
 	// Search bar above tree.
@@ -267,10 +272,19 @@ type connTree struct {
 	tree   *widget.Tree
 	selID  string
 	filter string
+
+	// Drag-and-drop state
+	rowsMu     sync.RWMutex
+	rows       map[*treeRow]struct{}
+	dragSrc    string
+	dragTarget string
+
+	// onError is invoked when a drag-and-drop reparent fails.
+	onError func(error)
 }
 
 func newConnTree(b *Bindings, onOpen func(string)) *connTree {
-	ct := &connTree{b: b, onOpen: onOpen}
+	ct := &connTree{b: b, onOpen: onOpen, rows: map[*treeRow]struct{}{}}
 
 	ct.tree = widget.NewTree(
 		func(uid widget.TreeNodeID) []widget.TreeNodeID { return ct.childUIDs(uid) },
@@ -373,45 +387,218 @@ func (ct *connTree) isBranch(uid widget.TreeNodeID) bool {
 }
 
 func (ct *connTree) createItem() fyne.CanvasObject {
-	icon := widget.NewIcon(theme.FolderIcon())
-	label := widget.NewLabel("")
-	return container.NewHBox(icon, label)
+	return newTreeRow(ct)
 }
 
 func (ct *connTree) updateItem(uid widget.TreeNodeID, obj fyne.CanvasObject) {
 	ct.mu.RLock()
 	n := ct.findNode(ct.view.Root, uid)
 	ct.mu.RUnlock()
+	row, ok := obj.(*treeRow)
+	if !ok {
+		return
+	}
+	row.uid = uid
 	if n == nil {
-		return
-	}
-	hbox, ok := obj.(*fyne.Container)
-	if !ok || len(hbox.Objects) < 2 {
-		return
-	}
-	icon, ok := hbox.Objects[0].(*widget.Icon)
-	if !ok {
-		return
-	}
-	label, ok := hbox.Objects[1].(*widget.Label)
-	if !ok {
+		row.icon.SetResource(theme.QuestionIcon())
+		row.label.SetText("")
 		return
 	}
 	if n.Kind == "folder" {
-		icon.SetResource(theme.FolderIcon())
-		label.SetText(n.Name)
+		row.icon.SetResource(theme.FolderIcon())
+		row.label.SetText(n.Name)
 	} else {
-		icon.SetResource(protocolIcon(n.Protocol))
+		row.icon.SetResource(protocolIcon(n.Protocol))
 		port := n.Port
 		switch {
 		case n.Host == "":
-			label.SetText(n.Name)
+			row.label.SetText(n.Name)
 		case port == 0:
-			label.SetText(fmt.Sprintf("%s (%s)", n.Name, n.Host))
+			row.label.SetText(fmt.Sprintf("%s (%s)", n.Name, n.Host))
 		default:
-			label.SetText(fmt.Sprintf("%s (%s:%d)", n.Name, n.Host, port))
+			row.label.SetText(fmt.Sprintf("%s (%s:%d)", n.Name, n.Host, port))
 		}
 	}
+}
+
+// treeRow is the per-row widget rendered inside the connection tree. It owns
+// drag-and-drop and supports the "drop a connection on a folder to reparent
+// it" UX described in the user-facing docs.
+type treeRow struct {
+	widget.BaseWidget
+	ct     *connTree
+	uid    widget.TreeNodeID
+	icon   *widget.Icon
+	label  *widget.Label
+	hilite *canvas.Rectangle
+}
+
+func newTreeRow(ct *connTree) *treeRow {
+	r := &treeRow{
+		ct:     ct,
+		icon:   widget.NewIcon(theme.FolderIcon()),
+		label:  widget.NewLabel(""),
+		hilite: canvas.NewRectangle(color.Transparent),
+	}
+	r.ExtendBaseWidget(r)
+	ct.rowsMu.Lock()
+	ct.rows[r] = struct{}{}
+	ct.rowsMu.Unlock()
+	return r
+}
+
+func (r *treeRow) CreateRenderer() fyne.WidgetRenderer {
+	content := container.NewHBox(r.icon, r.label)
+	stack := container.NewStack(r.hilite, content)
+	return widget.NewSimpleRenderer(stack)
+}
+
+// Dragged is called repeatedly while the user drags this row. We track the
+// source uid (this row), then locate the row currently under the cursor by
+// scanning all visible row widgets and comparing absolute positions.
+func (r *treeRow) Dragged(e *fyne.DragEvent) {
+	if r.uid == "" {
+		return
+	}
+	r.ct.handleDragMove(r.uid, e.AbsolutePosition)
+}
+
+// DragEnd commits the drop: if a target folder was identified, the dragged
+// node is reparented under it; otherwise the operation is a no-op.
+func (r *treeRow) DragEnd() {
+	r.ct.handleDragEnd()
+}
+
+func (ct *connTree) handleDragMove(srcUID string, abs fyne.Position) {
+	ct.dragSrc = srcUID
+	drv := fyne.CurrentApp().Driver()
+	var target *treeRow
+	ct.rowsMu.RLock()
+	for row := range ct.rows {
+		if row.uid == "" || row.uid == srcUID {
+			continue
+		}
+		pos := drv.AbsolutePositionForObject(row)
+		sz := row.Size()
+		if sz.Width <= 0 || sz.Height <= 0 {
+			continue
+		}
+		if abs.X >= pos.X && abs.X <= pos.X+sz.Width && abs.Y >= pos.Y && abs.Y <= pos.Y+sz.Height {
+			target = row
+			break
+		}
+	}
+	rows := make([]*treeRow, 0, len(ct.rows))
+	for row := range ct.rows {
+		rows = append(rows, row)
+	}
+	ct.rowsMu.RUnlock()
+
+	for _, row := range rows {
+		want := color.Color(color.Transparent)
+		if row == target {
+			want = theme.Color(theme.ColorNameHover)
+		}
+		if !sameColor(row.hilite.FillColor, want) {
+			row.hilite.FillColor = want
+			row.hilite.Refresh()
+		}
+	}
+	if target != nil {
+		ct.dragTarget = target.uid
+	} else {
+		ct.dragTarget = ""
+	}
+}
+
+func (ct *connTree) handleDragEnd() {
+	src := ct.dragSrc
+	tgt := ct.dragTarget
+	ct.dragSrc = ""
+	ct.dragTarget = ""
+
+	ct.rowsMu.RLock()
+	rows := make([]*treeRow, 0, len(ct.rows))
+	for row := range ct.rows {
+		rows = append(rows, row)
+	}
+	ct.rowsMu.RUnlock()
+	for _, row := range rows {
+		if !sameColor(row.hilite.FillColor, color.Transparent) {
+			row.hilite.FillColor = color.Transparent
+			row.hilite.Refresh()
+		}
+	}
+
+	if src == "" {
+		return
+	}
+
+	ct.mu.RLock()
+	srcNode := ct.findNode(ct.view.Root, src)
+	var tgtNode *iapp.NodeView
+	if tgt != "" {
+		tgtNode = ct.findNode(ct.view.Root, tgt)
+	}
+	ct.mu.RUnlock()
+	if srcNode == nil {
+		return
+	}
+
+	var targetParent string
+	if tgtNode == nil {
+		targetParent = "" // root
+	} else if tgtNode.Kind == "folder" {
+		targetParent = tgtNode.ID
+	} else {
+		targetParent = tgtNode.ParentID
+	}
+
+	if srcNode.ParentID == targetParent {
+		return
+	}
+	if src == targetParent {
+		return // can't drop a node onto itself
+	}
+	if srcNode.Kind == "folder" && isDescendantOf(srcNode, targetParent) {
+		if ct.onError != nil {
+			ct.onError(errors.New("cannot move a folder into one of its own descendants"))
+		}
+		return
+	}
+
+	if err := ct.b.MoveNode(context.Background(), src, targetParent); err != nil {
+		if ct.onError != nil {
+			ct.onError(err)
+		}
+		return
+	}
+	ct.refresh()
+}
+
+// isDescendantOf reports whether targetID is in the subtree rooted at n.
+func isDescendantOf(n *iapp.NodeView, targetID string) bool {
+	if n == nil || targetID == "" {
+		return false
+	}
+	for _, c := range n.Children {
+		if c.ID == targetID {
+			return true
+		}
+		if isDescendantOf(c, targetID) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameColor(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
 func (ct *connTree) findNode(root *iapp.NodeView, uid string) *iapp.NodeView {
