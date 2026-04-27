@@ -60,6 +60,28 @@ type subscriber struct {
 	ctx       context.Context
 	done      chan struct{}
 	closeOnce sync.Once
+
+	// mu serialises sends against close so the channel is never written
+	// after it has been closed (which would panic). fanOut takes RLock
+	// during a send; close() takes the write lock.
+	mu     sync.RWMutex
+	closed bool
+}
+
+// trySend delivers chunk to s.ch on a best-effort basis without blocking.
+// It is safe to call concurrently with close().
+func (s *subscriber) trySend(chunk []byte) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return
+	}
+	select {
+	case <-s.ctx.Done():
+	case s.ch <- chunk:
+	default:
+		// Slow subscriber: drop the chunk.
+	}
 }
 
 // sessionManager owns the live-session map.
@@ -367,13 +389,7 @@ func (m *sessionManager) fanOut(e *sessionEntry) {
 			copy(subs, e.subs)
 			e.subsMu.Unlock()
 			for _, s := range subs {
-				select {
-				case <-s.ctx.Done():
-					continue
-				case s.ch <- chunk:
-				default:
-					// Drop on slow subscriber.
-				}
+				s.trySend(chunk)
 			}
 		}
 		if err != nil {
@@ -422,8 +438,11 @@ func (e *sessionEntry) removeSub(sub *subscriber) {
 
 func (s *subscriber) close() {
 	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		s.closed = true
 		close(s.done)
 		close(s.ch)
+		s.mu.Unlock()
 	})
 }
 

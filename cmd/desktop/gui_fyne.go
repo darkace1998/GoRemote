@@ -18,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -124,10 +125,27 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	content := container.NewBorder(toolbar, statusBar, nil, nil, split)
 	w.SetContent(content)
 
+	// Keyboard shortcuts.
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyW, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
+		closeCurrentSession(sessions)
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyN, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
+		showNewConnectionDialog(w, b, tree)
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyF, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
+		w.Canvas().Focus(searchEntry)
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyR, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
+		reconnectCurrentSession(w, b, sessions)
+	})
+
 	// Confirm-on-close: ask the user when there are open sessions or when
 	// the user has explicitly opted into confirmation.
 	w.SetCloseIntercept(func() {
-		s, _ := b.GetSettings(context.Background())
+		s, err := b.GetSettings(context.Background())
+		if err != nil {
+			slog.Warn("close-intercept: load settings", "err", err)
+		}
 		live := sessions.count()
 		if !s.ConfirmOnClose && live == 0 {
 			persistWorkspace(b, sessions)
@@ -390,6 +408,12 @@ func nodeMatches(n *iapp.NodeView, q string) bool {
 		return true
 	}
 	if strings.Contains(strings.ToLower(n.Protocol), q) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(n.Username), q) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(n.Description), q) {
 		return true
 	}
 	for _, t := range n.Tags {
@@ -932,6 +956,13 @@ func promptPasswordAndOpen(w fyne.Window, b *Bindings, sessions *sessionRegistry
 func attachSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID, handle string) {
 	hid, err := domain.ParseID(handle)
 	if err != nil {
+		// Backend session was opened but we can't track it; close it so
+		// it doesn't leak, then release the connection reservation.
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = b.CloseSession(ctx, handle)
+		}()
 		sessions.releaseConn(connID)
 		fyne.Do(func() { dialog.ShowError(err, w) })
 		return
@@ -978,13 +1009,7 @@ func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *
 		return
 	}
 	if needsInteractivePassword(cv) {
-		// Reuse the standard prompt path; it will release the conn on
-		// cancel, and on success it calls attachSession which uses tabs.
-		// For "open in window" we keep things simple and do not yet
-		// support interactive-password sessions in detached windows.
-		sessions.releaseConn(connID)
-		dialog.ShowInformation("Password required",
-			"This connection requires an interactive password and is not yet supported in a separate window. Open it as a tab instead.", parent)
+		promptPasswordAndOpenInWindow(parent, a, b, sessions, cv, connID)
 		return
 	}
 	go func() {
@@ -998,9 +1023,45 @@ func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *
 	}()
 }
 
+func promptPasswordAndOpenInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string) {
+	userEntry := widget.NewEntry()
+	userEntry.SetText(cv.Username)
+	userEntry.SetPlaceHolder("username")
+	pwEntry := widget.NewPasswordEntry()
+	pwEntry.SetPlaceHolder("password")
+	items := []*widget.FormItem{
+		widget.NewFormItem("Username", userEntry),
+		widget.NewFormItem("Password", pwEntry),
+	}
+	d := dialog.NewForm(fmt.Sprintf("Sign in to %s", cv.Name), "Connect", "Cancel", items, func(ok bool) {
+		if !ok {
+			sessions.releaseConn(connID)
+			return
+		}
+		username := strings.TrimSpace(userEntry.Text)
+		password := pwEntry.Text
+		go func() {
+			handle, err := b.OpenSessionWithPassword(context.Background(), connID, username, password)
+			if err != nil {
+				sessions.releaseConn(connID)
+				fyne.Do(func() { dialog.ShowError(err, parent) })
+				return
+			}
+			fyne.Do(func() { attachSessionInWindow(a, b, sessions, cv, connID, handle) })
+		}()
+	}, parent)
+	d.Resize(fyne.NewSize(360, 180))
+	d.Show()
+}
+
 func attachSessionInWindow(a fyne.App, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID, handle string) {
 	hid, err := domain.ParseID(handle)
 	if err != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = b.CloseSession(ctx, handle)
+		}()
 		sessions.releaseConn(connID)
 		return
 	}
@@ -1057,6 +1118,35 @@ func closeCurrentSession(sessions *sessionRegistry) {
 		if err := st.b.CloseSession(ctx, st.handle); err != nil {
 			slog.Warn("close session", "handle", st.handle, "err", err)
 		}
+	}()
+}
+
+// reconnectCurrentSession closes the current tab's session and immediately
+// re-opens its connection. Useful when a remote drops or after sleep/wake.
+func reconnectCurrentSession(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
+	selected := sessions.tabs.Selected()
+	if selected == nil {
+		return
+	}
+	st := sessions.findByTab(selected)
+	if st == nil {
+		return
+	}
+	connID := st.connID
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = st.b.CloseSession(ctx, st.handle)
+		// Wait briefly for the run goroutine to remove the tab so
+		// reserveConn becomes available.
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if sessions.findByConnection(connID) == nil {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		fyne.Do(func() { openSession(w, b, sessions, connID) })
 	}()
 }
 
@@ -2221,33 +2311,27 @@ if n.Kind == "connection" {
 connID := n.ID
 host := n.Host
 port := n.Port
+connectItem := fyne.NewMenuItem("Connect", func() { openSession(w, b, sessions, connID) })
+newWinItem := fyne.NewMenuItem("Open in new window…", func() { openSessionInWindow(w, a, b, sessions, connID) })
+copyHost := fyne.NewMenuItem("Copy host", func() { a.Clipboard().SetContent(host) })
+copyHost.Disabled = host == ""
+copyHostPort := fyne.NewMenuItem("Copy host:port", func() {
+if port > 0 {
+a.Clipboard().SetContent(fmt.Sprintf("%s:%d", host, port))
+} else {
+a.Clipboard().SetContent(host)
+}
+})
+copyHostPort.Disabled = host == ""
 items = append(items,
-fyne.NewMenuItem("Connect", func() {
-openSession(w, b, sessions, connID)
-}),
-fyne.NewMenuItem("Open in new window…", func() {
-openSessionInWindow(w, a, b, sessions, connID)
-}),
+connectItem,
+newWinItem,
 fyne.NewMenuItemSeparator(),
 fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
 fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }),
 fyne.NewMenuItemSeparator(),
-fyne.NewMenuItem("Copy host", func() {
-if host == "" {
-return
-}
-w.Clipboard().SetContent(host)
-}),
-fyne.NewMenuItem("Copy host:port", func() {
-if host == "" {
-return
-}
-if port > 0 {
-w.Clipboard().SetContent(fmt.Sprintf("%s:%d", host, port))
-} else {
-w.Clipboard().SetContent(host)
-}
-}),
+copyHost,
+copyHostPort,
 fyne.NewMenuItemSeparator(),
 fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
 )
