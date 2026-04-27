@@ -13,5 +13,5 @@ webui/.vite/
 *.swp
 .idea/
 .vscode/
-desktop
+/desktop
 plan.md
