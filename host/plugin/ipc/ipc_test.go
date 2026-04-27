@@ -186,3 +186,47 @@ func TestListenUnixRefusesActiveSocket(t *testing.T) {
 		t.Fatalf("ListenUnix on active socket: got err=%v, want ErrSocketInUse", err)
 	}
 }
+
+func TestListenUnixRefusesRegularFilePath(t *testing.T) {
+	dir := t.TempDir()
+	sock := filepath.Join(dir, "ipc.sock")
+	if err := os.WriteFile(sock, []byte("not-a-socket"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := ipc.ListenUnix(ctx, sock); err == nil {
+		t.Fatalf("ListenUnix should fail when path is a regular file")
+	}
+
+	data, err := os.ReadFile(sock)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != "not-a-socket" {
+		t.Fatalf("regular file at socket path was modified")
+	}
+}
+
+func TestListenUnixRefusesSymlinkPath(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("target"), 0o600); err != nil {
+		t.Fatalf("WriteFile target: %v", err)
+	}
+	sock := filepath.Join(dir, "ipc.sock")
+	if err := os.Symlink(target, sock); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := ipc.ListenUnix(ctx, sock); err == nil {
+		t.Fatalf("ListenUnix should fail when path is a symlink")
+	}
+
+	if _, err := os.Lstat(sock); err != nil {
+		t.Fatalf("symlink path should remain untouched: %v", err)
+	}
+}

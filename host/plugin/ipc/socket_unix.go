@@ -55,16 +55,34 @@ func socketDial(ctx context.Context, socketPath string) (net.Conn, error) {
 // bound to it. If something is actively accepting on it, ErrSocketInUse is
 // returned.
 func removeIfStale(socketPath string) error {
-	if _, err := os.Stat(socketPath); err != nil {
+	info, err := os.Lstat(socketPath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("ipc: refusing symlink socket path %q", socketPath)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("ipc: refusing to remove non-socket path %q", socketPath)
+	}
 	c, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
 	if err == nil {
 		_ = c.Close()
 		return ErrSocketInUse
+	}
+	// Re-check right before remove to avoid deleting a path that changed type.
+	info, err = os.Lstat(socketPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("ipc: refusing to remove changed socket path %q", socketPath)
 	}
 	return os.Remove(socketPath)
 }
