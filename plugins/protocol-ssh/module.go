@@ -224,6 +224,10 @@ func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.S
 
 	authMethods, agentCloser, err := buildAuthMethods(req.AuthMethod, req.Secret)
 	if err != nil {
+		logger.Error("ssh build auth failed",
+			slog.String("auth_method", string(req.AuthMethod)),
+			slog.String("err", err.Error()),
+		)
 		return nil, fmt.Errorf("ssh: build auth: %w", err)
 	}
 
@@ -232,6 +236,10 @@ func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.S
 		if agentCloser != nil {
 			_ = agentCloser.Close()
 		}
+		logger.Error("ssh host-key callback failed",
+			slog.String("strict", strict),
+			slog.String("err", err.Error()),
+		)
 		return nil, fmt.Errorf("ssh: host-key callback: %w", err)
 	}
 
@@ -253,8 +261,14 @@ func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.S
 		if hkCloser != nil {
 			_ = hkCloser.Close()
 		}
+		logger.Error("ssh dial/auth failed",
+			slog.String("addr", addr),
+			slog.String("auth_method", string(req.AuthMethod)),
+			slog.String("err", err.Error()),
+		)
 		return nil, fmt.Errorf("ssh: dial %s: %w", addr, err)
 	}
+	logger.Info("ssh authenticated", slog.String("auth_method", string(req.AuthMethod)))
 
 	// From here, failures must close the client too.
 	cleanup := func() {

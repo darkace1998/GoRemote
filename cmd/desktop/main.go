@@ -462,6 +462,12 @@ func main() {
 
 	bindings := NewBindings(a).WithLogLevelVar(levelVar)
 
+	// Subscribe to the app event bus and log lifecycle events. Without
+	// this, errors published as Event{Kind: EventError} (e.g. SSH auth
+	// failures returned from protoH.Open) never reach the log file or
+	// console — they are only visible in the GUI's error dialog.
+	startEventLogger(a, logger)
+
 	// Settings store. Keep failures non-fatal: the UI falls back to defaults.
 	if sp, err := settings.DefaultPath(); err != nil {
 		logger.Error("settings: resolve path", slog.String("err", err.Error()))
@@ -722,4 +728,47 @@ func dispatch(ctx context.Context, b *Bindings, call rpcCall) rpcReply {
 	default:
 		return rpcReply{ID: call.ID, Error: "unknown method: " + call.Method}
 	}
+}
+
+// startEventLogger spawns a goroutine that subscribes to the app event bus
+// and emits a structured slog line for each lifecycle event. It runs for the
+// process lifetime; the subscriber is detached when context.Background() is
+// cancelled (i.e. never), so app shutdown closes it via Bus.Close().
+func startEventLogger(a *app.App, logger *slog.Logger) {
+	if a == nil || logger == nil {
+		return
+	}
+	ch := a.Events().Subscribe(context.Background(), 64)
+	elog := logger.With(slog.String("component", "events"))
+	go func() {
+		for ev := range ch {
+			attrs := []any{
+				slog.String("kind", string(ev.Kind)),
+			}
+			if ev.NodeID != domain.NilID {
+				attrs = append(attrs, slog.String("node_id", ev.NodeID.String()))
+			}
+			if ev.NodeKind != "" {
+				attrs = append(attrs, slog.String("node_kind", ev.NodeKind))
+			}
+			if ev.Name != "" {
+				attrs = append(attrs, slog.String("name", ev.Name))
+			}
+			if ev.SessionID != domain.NilID {
+				attrs = append(attrs, slog.String("session_id", ev.SessionID.String()))
+			}
+			if ev.ProviderID != "" {
+				attrs = append(attrs, slog.String("provider_id", ev.ProviderID))
+			}
+			if ev.Where != "" {
+				attrs = append(attrs, slog.String("where", ev.Where))
+			}
+			if ev.Err != nil {
+				attrs = append(attrs, slog.String("err", ev.Err.Error()))
+				elog.Error("app event", attrs...)
+				continue
+			}
+			elog.Info("app event", attrs...)
+		}
+	}()
 }
