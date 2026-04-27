@@ -86,18 +86,18 @@ func TestRegisterBuiltins_SkipsUnsupportedPlatformModules(t *testing.T) {
 	}
 }
 
-func TestChooseLogWriter_WindowsMirrorsToStdoutAndStderr(t *testing.T) {
+func TestChooseLogWriter_WindowsUsesStderrOnly(t *testing.T) {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
 	w := chooseLogWriter("windows", &stderr, &stdout)
 	if _, err := w.Write([]byte("logline")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("stderr = %q, want empty", got)
+	if got := stderr.String(); got != "logline" {
+		t.Fatalf("stderr = %q, want %q", got, "logline")
 	}
-	if got := stdout.String(); got != "logline" {
-		t.Fatalf("stdout = %q, want %q", got, "logline")
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
 	}
 }
 

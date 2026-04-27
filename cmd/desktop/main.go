@@ -453,7 +453,7 @@ func main() {
 
 func chooseLogWriter(goos string, stderr io.Writer, stdout io.Writer) io.Writer {
 	if goos == "windows" {
-		return stdout
+		return stderr
 	}
 	return stderr
 }
