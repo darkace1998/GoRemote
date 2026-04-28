@@ -75,6 +75,7 @@ type Bindings struct {
 	workspace workspace.Store
 	logLevel  *slog.LevelVar
 	stateDir  string
+	logPath   string
 	pluginReg *extplugin.Registry
 }
 
@@ -125,6 +126,19 @@ func (b *Bindings) WithPluginRegistry(r *extplugin.Registry) *Bindings {
 
 // PluginRegistry returns the attached external-plugin registry or nil.
 func (b *Bindings) PluginRegistry() *extplugin.Registry { return b.pluginReg }
+
+// WithLogPath records the active log file path so the in-app log viewer
+// and diagnostic bundle can read it.
+func (b *Bindings) WithLogPath(p string) *Bindings {
+	b.logPath = p
+	return b
+}
+
+// LogPath returns the active log file path or "" when not configured.
+func (b *Bindings) LogPath() string { return b.logPath }
+
+// StateDir returns the application state directory or "".
+func (b *Bindings) StateDir() string { return b.stateDir }
 
 // SetLogLevel updates the active runtime log level. Recognised names are
 // "trace", "debug", "info", "warn", "error" (case-insensitive). An unknown
@@ -839,23 +853,52 @@ func (p FolderPatchInput) toAppPatch() app.FolderPatch {
 
 // --- main ---------------------------------------------------------------
 
+// crashState holds the directory used by the global crash dumper so the
+// top-level recover() can write a crash file even when the panic happens
+// long after main() set up the rest of the world.
+var crashState struct {
+	dir     string
+	enabled bool
+}
+
 func main() {
+	defer dumpCrashIfPanicking()
+
 	levelVar := new(slog.LevelVar)
 	levelVar.Set(selectLogLevel(os.Getenv("GOREMOTE_LOG_LEVEL"), loadConfiguredLogLevel()))
-	logger := logging.New(logging.Options{
-		Writer: chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout),
-		Level:  levelVar,
-	})
-	slog.SetDefault(logger)
 
 	dir, err := resolveStateDir()
 	if err != nil {
-		logger.Error("resolve state dir", slog.String("err", err.Error()))
+		// We don't have a logger yet; fall back to stderr.
+		fmt.Fprintf(os.Stderr, "resolve state dir: %v\n", err)
 		os.Exit(1)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		logger.Error("create state dir", slog.String("err", err.Error()))
+		fmt.Fprintf(os.Stderr, "create state dir: %v\n", err)
 		os.Exit(1)
+	}
+	crashState.dir = dir
+	crashState.enabled = true // default on; flipped after Settings load
+
+	// Build the logger writer: stderr (always) plus a rotating file
+	// under <state>/logs/goremote.log. Failures to open the file sink
+	// degrade to stderr-only logging.
+	logWriter := io.Writer(chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout))
+	logFilePath := filepath.Join(dir, "logs", "goremote.log")
+	var fileSink *logging.FileSink
+	if fs, ferr := logging.OpenFileSink(logFilePath, 0); ferr != nil {
+		fmt.Fprintf(os.Stderr, "log file sink: %v\n", ferr)
+	} else {
+		fileSink = fs
+		logWriter = logging.MultiWriter(logWriter, fs)
+	}
+	logger := logging.New(logging.Options{
+		Writer: logWriter,
+		Level:  levelVar,
+	})
+	slog.SetDefault(logger)
+	if fileSink != nil {
+		defer fileSink.Close()
 	}
 
 	a, err := newAppWithRecovery(app.Config{Dir: dir, Logger: logger}, logger)
@@ -877,7 +920,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	bindings := NewBindings(a).WithLogLevelVar(levelVar).WithStateDir(dir)
+	bindings := NewBindings(a).WithLogLevelVar(levelVar).WithStateDir(dir).WithLogPath(logFilePath)
 
 	// External plugin registry — best-effort. Failures degrade the
 	// Plugins dialog to a read-only warning state.
@@ -902,6 +945,13 @@ func main() {
 		logger.Error("settings: resolve path", slog.String("err", err.Error()))
 	} else {
 		bindings.WithSettingsStore(settings.NewFileStoreWithLogger(sp, settings.NewSlogLogger(logger)))
+	}
+
+	// Honour the user's crash-report opt-out, if any. Default is on.
+	if bindings.settings != nil {
+		if s, err := bindings.settings.Get(context.Background()); err == nil {
+			crashState.enabled = !s.CrashReportsDisabled
+		}
 	}
 
 	// Workspace store. Failures are non-fatal: the UI starts with an

@@ -1565,6 +1565,8 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		widget.NewToolbarAction(theme.LoginIcon(), func() { showCredentialsDialog(w, b) }),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { showSettingsDialog(w, b, a) }),
 		widget.NewToolbarAction(theme.ListIcon(), func() { showPluginsDialog(w, b) }),
+		widget.NewToolbarAction(theme.DocumentPrintIcon(), func() { showLogViewerDialog(w, b) }),
+		widget.NewToolbarAction(theme.HelpIcon(), func() { showDiagnosticsDialog(w, b) }),
 		widget.NewToolbarAction(theme.StorageIcon(), func() { runSyncNow(w, b) }),
 		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() { runUpdateCheck(w, b) }),
 		widget.NewToolbarAction(theme.InfoIcon(), func() { showAboutDialog(w) }),

@@ -173,15 +173,21 @@ to close.
 
 ## 5. Observability & diagnostics (P2)
 
-- [ ] **In-app log viewer** (tail of `internal/logging` output, with the
-  redaction rules applied). Useful for users who can't get to `%APPDATA%`
-  on Windows.
-- [ ] **Diagnostic bundle** command: zip up `workspace.json` (with secrets
-  redacted), `settings.json`, last N MB of logs, plugin manifests, OS info.
-  Drop in user-chosen location for support.
-- [ ] **Crash-report opt-in** (`requirements.md §5.4`). Currently we don't
-  ship one. Either wire `sentry-go` behind an explicit opt-in toggle, or
-  just dump panic traces to a stable file path.
+- [x] **In-app log viewer** — shipped. Logs are now teed to
+  `<state>/logs/goremote.log` via `internal/logging.FileSink` (10 MiB
+  size-based rotation, single archive generation). Toolbar entry opens a
+  scrollable tail view (last 256 KiB) with Refresh / Copy / Open folder.
+- [x] **Diagnostic bundle** — shipped as `app/diagnostics`. Toolbar entry
+  prompts for a save location and emits a zip containing `manifest.json`,
+  `settings.json`, redacted `workspace.json`, log tails (current +
+  `.1`), per-plugin `manifest.json`, and `os-info.json` (env allowlist
+  prevents arbitrary env leakage). Stdlib-only.
+- [x] **Crash-report opt-in** — shipped. `cmd/desktop/crash.go` installs
+  a top-of-`main` recover that writes `<state>/crashes/crash-<RFC3339>.log`
+  with version + panic value + `runtime/debug.Stack()` and re-panics so
+  the process still exits non-zero. Gated on the new
+  `Settings.CrashReportsDisabled` (default off → reports enabled). Local
+  only; nothing is uploaded.
 
 ## 6. Stretch goals (P3 — `requirements.md §8`)
 

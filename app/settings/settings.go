@@ -70,6 +70,11 @@ type Settings struct {
 	// Plugins dialog.
 	PluginMarketplaceURL string `json:"pluginMarketplaceUrl,omitempty"`
 
+	// CrashReportsDisabled opts the user out of writing crash dumps to
+	// <state>/crashes on panic. Default is on (false). The dumps are
+	// local only; nothing is uploaded.
+	CrashReportsDisabled bool `json:"crashReportsDisabled,omitempty"`
+
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
