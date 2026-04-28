@@ -364,6 +364,7 @@ func (b *Bindings) OpenSession(ctx context.Context, connectionID string) (string
 	if err != nil {
 		return "", err
 	}
+	b.TouchRecent(ctx, connectionID)
 	return h.String(), nil
 }
 
@@ -379,6 +380,7 @@ func (b *Bindings) OpenSessionWithPassword(ctx context.Context, connectionID, us
 	if err != nil {
 		return "", err
 	}
+	b.TouchRecent(ctx, connectionID)
 	return h.String(), nil
 }
 

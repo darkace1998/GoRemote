@@ -185,9 +185,59 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	tree.refresh()
 	restoreWorkspace(w, b, sessions)
 	startSessionWatcher(b, sessions)
+	installSystemTray(w, a, b, sessions)
 
 	w.ShowAndRun()
 	return true
+}
+
+// installSystemTray attaches a minimal system-tray icon and menu when
+// the runtime supports it (Windows, macOS, most Linux desktops). The
+// menu offers Show/Hide, Recent connections, and Quit. On platforms
+// without tray support this is a no-op.
+func installSystemTray(w fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry) {
+	deskApp, ok := a.(desktop.App)
+	if !ok {
+		return
+	}
+	rebuild := func() *fyne.Menu {
+		showItem := fyne.NewMenuItem("Show", func() { fyne.Do(func() { w.Show(); w.RequestFocus() }) })
+		quitItem := fyne.NewMenuItem("Quit", func() { fyne.Do(func() { persistWorkspace(b, sessions); a.Quit() }) })
+		recents := b.ListRecents(context.Background())
+		var recentItem *fyne.MenuItem
+		if len(recents) == 0 {
+			recentItem = fyne.NewMenuItem("Recent connections (none)", func() {})
+			recentItem.Disabled = true
+		} else {
+			subs := make([]*fyne.MenuItem, 0, len(recents))
+			for _, r := range recents {
+				r := r
+				label := r.Name
+				if r.Host != "" {
+					label = fmt.Sprintf("%s — %s", r.Name, r.Host)
+				}
+				subs = append(subs, fyne.NewMenuItem(label, func() {
+					fyne.Do(func() {
+						w.Show()
+						w.RequestFocus()
+						openSession(w, b, sessions, r.ID)
+					})
+				}))
+			}
+			recentItem = fyne.NewMenuItem("Recent connections", nil)
+			recentItem.ChildMenu = fyne.NewMenu("", subs...)
+		}
+		return fyne.NewMenu("goremote",
+			showItem,
+			recentItem,
+			fyne.NewMenuItemSeparator(),
+			quitItem,
+		)
+	}
+	deskApp.SetSystemTrayMenu(rebuild())
+	if icon := a.Icon(); icon != nil {
+		deskApp.SetSystemTrayIcon(icon)
+	}
 }
 
 // --- Session registry -----------------------------------------------------
@@ -859,6 +909,7 @@ func (ct *connTree) updateItem(uid widget.TreeNodeID, obj fyne.CanvasObject) {
 	if n.Kind == "folder" {
 		row.icon.SetResource(theme.FolderIcon())
 		row.label.SetText(n.Name)
+		row.star.Hide()
 	} else {
 		row.icon.SetResource(protocolIcon(n.Protocol))
 		port := n.Port
@@ -869,6 +920,12 @@ func (ct *connTree) updateItem(uid widget.TreeNodeID, obj fyne.CanvasObject) {
 			row.label.SetText(fmt.Sprintf("%s (%s)", n.Name, n.Host))
 		default:
 			row.label.SetText(fmt.Sprintf("%s (%s:%d)", n.Name, n.Host, port))
+		}
+		if n.Favorite {
+			row.star.Show()
+			row.star.Refresh()
+		} else {
+			row.star.Hide()
 		}
 	}
 }
@@ -881,14 +938,19 @@ type treeRow struct {
 	ct     *connTree
 	uid    widget.TreeNodeID
 	icon   *widget.Icon
+	star   *canvas.Text
 	label  *widget.Label
 	hilite *canvas.Rectangle
 }
 
 func newTreeRow(ct *connTree) *treeRow {
+	star := canvas.NewText("★", color.RGBA{R: 0xff, G: 0xc1, B: 0x07, A: 0xff})
+	star.TextStyle.Bold = true
+	star.Hide()
 	r := &treeRow{
 		ct:     ct,
 		icon:   widget.NewIcon(theme.FolderIcon()),
+		star:   star,
 		label:  widget.NewLabel(""),
 		hilite: canvas.NewRectangle(color.Transparent),
 	}
@@ -900,7 +962,7 @@ func newTreeRow(ct *connTree) *treeRow {
 }
 
 func (r *treeRow) CreateRenderer() fyne.WidgetRenderer {
-	content := container.NewHBox(r.icon, r.label)
+	content := container.NewHBox(r.icon, r.label, r.star)
 	stack := container.NewStack(r.hilite, content)
 	return widget.NewSimpleRenderer(stack)
 }
@@ -1256,6 +1318,8 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		}),
 		widget.NewToolbarAction(theme.MediaStopIcon(), func() { closeCurrentSession(sessions) }),
 		widget.NewToolbarAction(theme.WindowMaximizeIcon(), func() { detachCurrentTab(a, sessions) }),
+		widget.NewToolbarAction(theme.HistoryIcon(), func() { showRecentsMenu(w, b, sessions) }),
+		widget.NewToolbarAction(theme.SearchIcon(), func() { showFavoritesPicker(w, b, sessions) }),
 		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.DocumentIcon(), func() { showImportDialog(w, b, tree) }),
 		widget.NewToolbarAction(theme.DownloadIcon(), func() { showBackupDialog(w, b) }),
@@ -1265,6 +1329,84 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { showSettingsDialog(w, b, a) }),
 		widget.NewToolbarAction(theme.InfoIcon(), func() { showAboutDialog(w) }),
 	)
+}
+
+// showRecentsMenu pops a list of recently-opened connections, most-recent
+// first, and opens the chosen one.
+func showRecentsMenu(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
+	items := b.ListRecents(context.Background())
+	if len(items) == 0 {
+		dialog.ShowInformation("Recents", "No recent connections yet.", w)
+		return
+	}
+	var d *dialog.CustomDialog
+	list := widget.NewList(
+		func() int { return len(items) },
+		func() fyne.CanvasObject {
+			return container.NewHBox(widget.NewIcon(theme.ComputerIcon()), widget.NewLabel(""))
+		},
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			row := o.(*fyne.Container)
+			row.Objects[0].(*widget.Icon).SetResource(protocolIcon(items[i].Protocol))
+			lbl := row.Objects[1].(*widget.Label)
+			n := items[i]
+			if n.Host != "" {
+				lbl.SetText(fmt.Sprintf("%s — %s", n.Name, n.Host))
+			} else {
+				lbl.SetText(n.Name)
+			}
+		},
+	)
+	list.OnSelected = func(i widget.ListItemID) {
+		id := items[i].ID
+		if d != nil {
+			d.Hide()
+		}
+		openSession(w, b, sessions, id)
+	}
+	scroll := container.NewVScroll(list)
+	scroll.SetMinSize(fyne.NewSize(360, 320))
+	d = dialog.NewCustom("Recent Connections", "Close", scroll, w)
+	d.Show()
+}
+
+// showFavoritesPicker pops a list of favorited connections and opens the
+// chosen one.
+func showFavoritesPicker(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
+	favs := b.ListFavorites(context.Background())
+	if len(favs) == 0 {
+		dialog.ShowInformation("Favorites", "No favorite connections yet. Right-click a connection in the tree and choose \"Add to favorites\".", w)
+		return
+	}
+	var d *dialog.CustomDialog
+	list := widget.NewList(
+		func() int { return len(favs) },
+		func() fyne.CanvasObject {
+			return container.NewHBox(widget.NewIcon(theme.ComputerIcon()), widget.NewLabel(""))
+		},
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			row := o.(*fyne.Container)
+			row.Objects[0].(*widget.Icon).SetResource(protocolIcon(favs[i].Protocol))
+			lbl := row.Objects[1].(*widget.Label)
+			n := favs[i]
+			if n.Host != "" {
+				lbl.SetText(fmt.Sprintf("★ %s — %s", n.Name, n.Host))
+			} else {
+				lbl.SetText("★ " + n.Name)
+			}
+		},
+	)
+	list.OnSelected = func(i widget.ListItemID) {
+		id := favs[i].ID
+		if d != nil {
+			d.Hide()
+		}
+		openSession(w, b, sessions, id)
+	}
+	scroll := container.NewVScroll(list)
+	scroll.SetMinSize(fyne.NewSize(360, 320))
+	d = dialog.NewCustom("Favorite Connections", "Close", scroll, w)
+	d.Show()
 }
 
 // --- Session management ---------------------------------------------------
@@ -1996,6 +2138,9 @@ func showEditConnectionDialog(w fyne.Window, b *Bindings, tree *connTree, n *iap
 		Description: cv.Description,
 		Tags:        append([]string(nil), cv.Tags...),
 		Environment: cv.Environment,
+		Icon:        cv.Icon,
+		Color:       cv.Color,
+		Favorite:    cv.Favorite,
 		Settings:    cloneSettingsMap(cv.Settings),
 		CredentialRef: CredentialRefInput{
 			ProviderID: cv.CredentialRef.ProviderID,
@@ -2022,6 +2167,9 @@ func showEditConnectionDialog(w fyne.Window, b *Bindings, tree *connTree, n *iap
 			Description: ptr(updated.Description),
 			Tags:        &updated.Tags,
 			Environment: ptr(updated.Environment),
+			Icon:        ptr(updated.Icon),
+			Color:       ptr(updated.Color),
+			Favorite:    ptr(updated.Favorite),
 			Settings:    &updated.Settings,
 		}
 		ref := updated.CredentialRef
@@ -2062,6 +2210,9 @@ type connectionForm struct {
 	descEntry       *widget.Entry
 	tagsEntry       *widget.Entry
 	envEntry        *widget.Entry
+	colorEntry      *widget.Entry
+	iconSelect      *widget.Select
+	favoriteCheck   *widget.Check
 	credProviderEnt *widget.Entry
 	credKeyEntry    *widget.Entry
 
@@ -2114,6 +2265,20 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 	cf.envEntry.SetText(in.Environment)
 	cf.envEntry.SetPlaceHolder("e.g. prod, staging")
 
+	cf.colorEntry = widget.NewEntry()
+	cf.colorEntry.SetText(in.Color)
+	cf.colorEntry.SetPlaceHolder("#RRGGBB or named color (optional)")
+
+	cf.iconSelect = widget.NewSelect(connectionIconChoices(), nil)
+	if in.Icon != "" {
+		cf.iconSelect.SetSelected(in.Icon)
+	} else {
+		cf.iconSelect.PlaceHolder = "Default (protocol icon)"
+	}
+
+	cf.favoriteCheck = widget.NewCheck("", nil)
+	cf.favoriteCheck.SetChecked(in.Favorite)
+
 	cf.credProviderEnt = widget.NewEntry()
 	cf.credProviderEnt.SetText(in.CredentialRef.ProviderID)
 	cf.credProviderEnt.SetPlaceHolder("e.g. io.goremote.credential.file")
@@ -2137,6 +2302,9 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 		widget.NewFormItem("Description", cf.descEntry),
 		widget.NewFormItem("Tags", cf.tagsEntry),
 		widget.NewFormItem("Environment", cf.envEntry),
+		widget.NewFormItem("Icon", cf.iconSelect),
+		widget.NewFormItem("Color", cf.colorEntry),
+		widget.NewFormItem("Favorite", cf.favoriteCheck),
 		widget.NewFormItem("Credential provider", cf.credProviderEnt),
 		widget.NewFormItem("Credential key", cf.credKeyEntry),
 	)
@@ -2384,12 +2552,34 @@ func (cf *connectionForm) collect() (ConnectionInput, error) {
 		Description: cf.descEntry.Text,
 		Tags:        splitTags(cf.tagsEntry.Text),
 		Environment: strings.TrimSpace(cf.envEntry.Text),
+		Icon:        strings.TrimSpace(cf.iconSelect.Selected),
+		Color:       strings.TrimSpace(cf.colorEntry.Text),
+		Favorite:    cf.favoriteCheck.Checked,
 		Settings:    settings,
 		CredentialRef: CredentialRefInput{
 			ProviderID: strings.TrimSpace(cf.credProviderEnt.Text),
 			Key:        strings.TrimSpace(cf.credKeyEntry.Text),
 		},
 	}, nil
+}
+
+// connectionIconChoices returns the bundled set of icon names the user
+// can pick from in the connection editor. The empty string is implied
+// (handled by the iconSelect placeholder) and means "use the protocol
+// icon".
+func connectionIconChoices() []string {
+	return []string{
+		"server",
+		"database",
+		"terminal",
+		"cloud",
+		"router",
+		"firewall",
+		"docker",
+		"kubernetes",
+		"laptop",
+		"desktop",
+	}
 }
 
 // getEntryText reads the current text of the entry for the FormItem with the
@@ -3189,6 +3379,17 @@ a.Clipboard().SetContent(host)
 }
 })
 copyHostPort.Disabled = host == ""
+favLabel := "Add to favorites"
+if n.Favorite {
+favLabel = "Remove from favorites"
+}
+favItem := fyne.NewMenuItem(favLabel, func() {
+if _, err := b.ToggleFavorite(context.Background(), connID); err != nil {
+dialog.ShowError(err, w)
+return
+}
+tree.refresh()
+})
 items = append(items,
 connectItem,
 newWinItem,
@@ -3197,6 +3398,7 @@ splitBelowItem,
 fyne.NewMenuItemSeparator(),
 fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
 fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }),
+favItem,
 fyne.NewMenuItemSeparator(),
 copyHost,
 copyHostPort,
