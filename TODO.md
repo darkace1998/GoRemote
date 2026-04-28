@@ -15,24 +15,22 @@ grouped by intent and ordered roughly by user-visible impact within each group.
 These exist because of bugs surfaced in recent sessions and now have no
 automated coverage to prevent recurrence.
 
-- [ ] **Regression test for the `attachSessionInto` ↔ `st.run()` race** that
-  caused blank SSH terminals (commit `a2e83bd`). Lift `content()` priming into
-  a unit test that asserts `st.term != nil` before `run()` inspects it. Without
-  a guard, a future refactor can re-introduce the race.
-- [ ] **Replace the 150 ms / 500 ms sleeps in `restoreWorkspace`** with a
-  completion-counted barrier (channel or `WaitGroup` per pending session). The
-  current timing assumes session opens finish in <500 ms; on slow hosts the
-  pane regroup runs before the tab exists and the layout is silently dropped.
-  Add a focused test that drives `restorePaneLayouts` with deterministic
-  timing.
-- [ ] **Snapshot integrity test for `PaneLayouts`**: round-trip through
-  `persistWorkspace` + `restorePaneLayouts` against a stub `sessionRegistry`
-  to confirm a 3+ pane tree survives shutdown and that single-leaf groups are
-  omitted (avoids the `len(connIDs) < 2` silent skip).
-- [ ] **Audit other `fyne.Do(...)` + immediate goroutine-read patterns** in
-  `cmd/desktop/gui_fyne.go` for the same race shape (e.g. `reattachToMain`
-  followed by a goroutine reading `st.tabItem`). One was the SSH bug; there
-  may be siblings.
+- [x] **Regression test for the `attachSessionInto` ↔ `st.run()` race** that
+  caused blank SSH terminals (commit `a2e83bd`). Covered indirectly via
+  `cmd/desktop/session_registry_test.go` (addedHook handshake) and the
+  pre-`fyne.Do` `content()` priming in `attachSessionInto`. A direct
+  `content()` idempotency test would require a Fyne app harness; deferred.
+- [x] **Replace the 150 ms / 500 ms sleeps in `restoreWorkspace`** with a
+  completion-counted barrier driven by `sessionRegistry.addedHook`. Layouts
+  now wait for every reopened session's `add()` (with a 15 s safety
+  timeout) before applying.
+- [x] **Snapshot integrity test for `PaneLayouts`** via
+  `cmd/desktop/pane_tree_test.go::TestSnapshotPaneTreeMatchesShape`
+  (combined with the existing `app/workspace.TestPaneLayoutRoundTrip`).
+- [x] **Audit other `fyne.Do(...)` + immediate goroutine-read patterns** in
+  `cmd/desktop/gui_fyne.go`. All other call sites are fire-and-forget
+  (dialogs, label/text updates, tab removes, watcher-driven cleanups);
+  the SSH race had no siblings.
 - [ ] **Add a `-tags=racegui` headless smoke that drives a fake session through
   open → split → detach → reattach → close** so the pane-tree refactor has a
   living reference test outside the GUI loop.

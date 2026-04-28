@@ -484,6 +484,13 @@ type sessionRegistry struct {
 	sessionsLabel *widget.Label
 	tree          *connTree
 	bindings      *Bindings
+	// addedHook, when non-nil, is invoked at the tail end of every
+	// successful add(). Used by restoreWorkspace to await all
+	// reopened sessions before applying persisted pane layouts; we
+	// keep it as a hook rather than a hard channel so that production
+	// code paths don't have to plumb a sentinel chan through every
+	// session-open call site.
+	addedHook func(*sessionTab)
 }
 
 func (r *sessionRegistry) reserveConn(connID string) bool {
@@ -554,6 +561,9 @@ func (r *sessionRegistry) add(st *sessionTab) {
 	}
 	r.setStatus(fmt.Sprintf("Connected: %s", st.cv.Name))
 	r.setSessionCount(count)
+	if hook := r.addedHook; hook != nil {
+		hook(st)
+	}
 }
 
 func (r *sessionRegistry) remove(hid domain.ID) {
@@ -2823,21 +2833,68 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 	if err != nil || len(ws.OpenTabs) == 0 {
 		return
 	}
-	// Hydrate one connection at a time on a goroutine so the UI is
-	// responsive. Once all sessions are open, regroup any persisted
-	// split layouts.
+
+	// Pre-collect the connection IDs we are about to reopen so the
+	// completion barrier knows what "done" looks like. We listen for
+	// matching connID values on the registry's addedHook rather than
+	// guessing how long openSession's async pipeline takes — earlier
+	// versions used a 150 ms / 500 ms sleep and silently dropped
+	// persisted pane layouts whenever a session opened slower than
+	// the timer.
+	expected := make(map[string]struct{}, len(ws.OpenTabs))
+	for _, t := range ws.OpenTabs {
+		if t.ConnectionID != "" {
+			expected[t.ConnectionID] = struct{}{}
+		}
+	}
+	if len(expected) == 0 {
+		return
+	}
+
+	done := make(chan struct{}, len(expected))
+	prev := sessions.addedHook
+	sessions.addedHook = func(st *sessionTab) {
+		if prev != nil {
+			prev(st)
+		}
+		if st == nil {
+			return
+		}
+		if _, ok := expected[st.connID]; ok {
+			delete(expected, st.connID)
+			done <- struct{}{}
+		}
+	}
+
 	go func() {
+		want := len(expected)
 		for _, t := range ws.OpenTabs {
 			if t.ConnectionID == "" {
 				continue
 			}
 			openSession(w, b, sessions, t.ConnectionID)
-			time.Sleep(150 * time.Millisecond)
 		}
+		// Wait for every reopened session's add() to land, with a
+		// per-session timeout so a session that fails to open never
+		// blocks the rest of the restore. Worst case the layout is
+		// applied with whichever sessions did make it.
+		deadline := time.NewTimer(15 * time.Second)
+		defer deadline.Stop()
+		got := 0
+		for got < want {
+			select {
+			case <-done:
+				got++
+			case <-deadline.C:
+				slog.Warn("restoreWorkspace: timed out waiting for sessions",
+					"want", want, "got", got)
+				got = want
+			}
+		}
+		// Drop the hook before queueing the layout pass so subsequent
+		// user-driven session opens don't churn through the closure.
+		sessions.addedHook = prev
 		if len(ws.PaneLayouts) > 0 {
-			// Allow openSession goroutines to finish attaching tabs
-			// before we regroup.
-			time.Sleep(500 * time.Millisecond)
 			fyne.Do(func() { restorePaneLayouts(sessions, ws.PaneLayouts) })
 		}
 	}()
