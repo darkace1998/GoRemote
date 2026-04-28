@@ -19,18 +19,25 @@ import (
 
 // sessionTab represents a single open session displayed in the AppTabs
 // (when tabItem is non-nil) or in a standalone window (when window is
-// non-nil). Exactly one of tabItem / window is set per session.
+// non-nil). Exactly one of tabItem / window is set per session at a time;
+// detach/reattach atomically swap the parent container without tearing
+// down the session.
 type sessionTab struct {
-	b       *Bindings
-	cv      iapp.ConnectionView
-	handle  string
-	hid     domain.ID
-	connID  string // connection ID that spawned this session
-	tabItem *container.TabItem
-	window  fyne.Window
-	term    *terminal.Terminal
-	ctx     context.Context
-	cancel  context.CancelFunc
+	b          *Bindings
+	cv         iapp.ConnectionView
+	handle     string
+	hid        domain.ID
+	connID     string // connection ID that spawned this session
+	tabItem    *container.TabItem
+	window     fyne.Window
+	term       *terminal.Terminal
+	contentObj fyne.CanvasObject // cached so detach/reattach can move it
+	// transferring is set while a detach or reattach operation is in
+	// progress so the tab's OnClosed handler and the window's
+	// CloseIntercept know to skip the session-termination path.
+	transferring bool
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 // terminalProtocols lists the protocol IDs rendered with an in-process
@@ -43,21 +50,28 @@ var terminalProtocols = map[string]bool{
 	"powershell": true,
 }
 
-// content builds the Fyne canvas object for this session tab.
+// content builds the Fyne canvas object for this session tab on first call
+// and caches it; subsequent calls return the same object so detach/reattach
+// can move the running terminal between containers without recreating it.
 // For terminal-capable protocols it creates a terminal.Terminal widget;
 // for external protocols it returns a descriptive label.
 func (st *sessionTab) content() fyne.CanvasObject {
+	if st.contentObj != nil {
+		return st.contentObj
+	}
 	proto := st.cv.EffectiveProtocol
 	if proto == "" {
 		proto = st.cv.Protocol
 	}
 	if terminalProtocols[proto] {
 		st.term = terminal.New()
-		return st.term
+		st.contentObj = st.term
+		return st.contentObj
 	}
 	msg := fmt.Sprintf("External session launched\nProtocol: %s\nHost: %s",
 		proto, st.cv.EffectiveHost)
-	return container.NewCenter(widget.NewLabel(msg))
+	st.contentObj = container.NewCenter(widget.NewLabel(msg))
+	return st.contentObj
 }
 
 // run drives the session lifecycle in a goroutine. onClose is called deferred

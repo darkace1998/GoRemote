@@ -70,6 +70,10 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		if st == nil {
 			return
 		}
+		if st.transferring {
+			// Detach in progress: do not terminate the session.
+			return
+		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -137,6 +141,9 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	})
 	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyR, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
 		reconnectCurrentSession(w, b, sessions)
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
+		detachCurrentTab(a, sessions)
 	})
 
 	// Confirm-on-close: ask the user when there are open sessions or when
@@ -851,6 +858,7 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 			openSession(w, b, sessions, id)
 		}),
 		widget.NewToolbarAction(theme.MediaStopIcon(), func() { closeCurrentSession(sessions) }),
+		widget.NewToolbarAction(theme.WindowMaximizeIcon(), func() { detachCurrentTab(a, sessions) }),
 		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.DocumentIcon(), func() { showImportDialog(w, b, tree) }),
 		widget.NewToolbarAction(theme.DownloadIcon(), func() { showBackupDialog(w, b) }),
@@ -1081,12 +1089,22 @@ func attachSessionInWindow(a fyne.App, b *Bindings, sessions *sessionRegistry, c
 		window: win,
 	}
 	st.ctx, st.cancel = context.WithCancel(context.Background())
-	win.SetContent(st.content())
 
-	// Window close → terminate the session on a worker; the run goroutine
-	// will exit and trigger sessions.remove which is a no-op on the window
-	// (it's already closing).
+	reattachBtn := widget.NewButtonWithIcon("Reattach to main", theme.NavigateBackIcon(), func() {
+		reattachToMain(sessions, st)
+	})
+	reattachBar := container.NewHBox(reattachBtn)
+	winRoot := container.NewBorder(reattachBar, nil, nil, nil, st.content())
+	win.SetContent(winRoot)
+
+	// Window close → terminate the session on a worker (unless we are
+	// reattaching the session into the main tab strip, in which case the
+	// transfer flag tells us to skip the termination).
 	win.SetCloseIntercept(func() {
+		if st.transferring {
+			win.Close()
+			return
+		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -1101,6 +1119,84 @@ func attachSessionInWindow(a fyne.App, b *Bindings, sessions *sessionRegistry, c
 	go st.run(func() {
 		fyne.Do(func() { sessions.remove(hid) })
 	})
+}
+
+// detachCurrentTab moves the currently-selected tab into a standalone
+// floating window without disturbing the running session. The session
+// keeps its terminal widget, scrollback, and PTY connection; only the
+// parent container changes. No-op when no tab is selected.
+func detachCurrentTab(a fyne.App, sessions *sessionRegistry) {
+	selected := sessions.tabs.Selected()
+	if selected == nil {
+		return
+	}
+	st := sessions.findByTab(selected)
+	if st == nil || st.tabItem == nil || st.window != nil {
+		return
+	}
+	// Snapshot what we need before mutating st.
+	contentObj := st.content()
+	label := st.cv.Name
+	if label == "" {
+		label = st.cv.EffectiveHost
+	}
+
+	st.transferring = true
+	sessions.tabs.Remove(st.tabItem)
+	st.tabItem = nil
+
+	win := a.NewWindow("goremote — " + label)
+	win.Resize(fyne.NewSize(900, 600))
+
+	// Build a small toolbar with a Reattach button so the user can move
+	// the session back into the main tab strip later.
+	reattachBtn := widget.NewButtonWithIcon("Reattach to main", theme.NavigateBackIcon(), func() {
+		reattachToMain(sessions, st)
+	})
+	reattachBar := container.NewHBox(reattachBtn)
+	winRoot := container.NewBorder(reattachBar, nil, nil, nil, contentObj)
+	win.SetContent(winRoot)
+
+	win.SetCloseIntercept(func() {
+		if st.transferring {
+			win.Close()
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = st.b.CloseSession(ctx, st.handle)
+		}()
+		win.Close()
+	})
+
+	st.window = win
+	st.transferring = false
+	win.Show()
+}
+
+// reattachToMain moves a windowed session back into the main tab strip.
+// The window is closed without terminating the session; the cached
+// content widget is moved to a new TabItem and selected.
+func reattachToMain(sessions *sessionRegistry, st *sessionTab) {
+	if st == nil || st.window == nil || st.tabItem != nil {
+		return
+	}
+	contentObj := st.content()
+	label := st.cv.Name
+	if label == "" {
+		label = st.cv.EffectiveHost
+	}
+
+	st.transferring = true
+	st.window.Close()
+	st.window = nil
+
+	tabItem := container.NewTabItem(label, contentObj)
+	st.tabItem = tabItem
+	sessions.tabs.Append(tabItem)
+	sessions.tabs.Select(tabItem)
+	st.transferring = false
 }
 
 func closeCurrentSession(sessions *sessionRegistry) {
