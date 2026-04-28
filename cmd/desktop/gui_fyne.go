@@ -144,6 +144,18 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	tree.onAfterRefresh = refreshEnvChoices
 
 	// Tree action toolbar.
+	multiCount := widget.NewLabel("")
+	multiCount.Hide()
+	tree.onMultiChange = func(n int) {
+		fyne.Do(func() {
+			if n == 0 {
+				multiCount.Hide()
+				return
+			}
+			multiCount.SetText(fmt.Sprintf("✓ %d", n))
+			multiCount.Show()
+		})
+	}
 	treeActions := widget.NewToolbar(
 		widget.NewToolbarAction(theme.DocumentCreateIcon(), func() {
 			editSelectedNode(w, b, tree)
@@ -155,12 +167,18 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 			deleteSelectedNode(w, b, tree, sessions)
 		}),
 		widget.NewToolbarSeparator(),
+		widget.NewToolbarAction(theme.ConfirmIcon(), func() { tree.multiAddSelected() }),
+		widget.NewToolbarAction(theme.CancelIcon(), func() { tree.multiClear() }),
+		widget.NewToolbarAction(theme.MoveDownIcon(), func() { bulkMoveSelected(w, b, tree) }),
+		widget.NewToolbarAction(theme.ContentClearIcon(), func() { bulkDeleteSelected(w, b, tree, sessions) }),
+		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
 			tree.refresh()
 		}),
 	)
+	treeActionRow := container.NewBorder(nil, nil, nil, multiCount, treeActions)
 
-	leftHeader := container.NewBorder(envSelect, treeActions, nil, nil, searchEntry)
+	leftHeader := container.NewBorder(envSelect, treeActionRow, nil, nil, searchEntry)
 	left := container.NewBorder(leftHeader, nil, nil, nil, tree.tree)
 
 	toolbar := buildToolbar(w, b, tree, sessions, a)
@@ -852,10 +870,21 @@ type connTree struct {
 	// Used by the env-filter Select to update its options when the
 	// tree contents change.
 	onAfterRefresh func()
+
+	// multi is the set of node UIDs the user has explicitly added to
+	// the bulk-edit selection. It is independent of the tree's normal
+	// single-row selection (selID); the latter still drives the
+	// "Edit", "Open", etc. actions while bulk-delete / bulk-move
+	// operate on multi. Mutated only on the UI goroutine.
+	multi map[string]struct{}
+
+	// onMultiChange fires whenever multi is mutated so the toolbar /
+	// status bar can reflect the new count.
+	onMultiChange func(count int)
 }
 
 func newConnTree(b *Bindings, onOpen func(string)) *connTree {
-	ct := &connTree{b: b, onOpen: onOpen, rows: map[*treeRow]struct{}{}}
+	ct := &connTree{b: b, onOpen: onOpen, rows: map[*treeRow]struct{}{}, multi: map[string]struct{}{}}
 
 	ct.tree = widget.NewTree(
 		func(uid widget.TreeNodeID) []widget.TreeNodeID { return ct.childUIDs(uid) },
@@ -1039,6 +1068,11 @@ func (ct *connTree) updateItem(uid widget.TreeNodeID, obj fyne.CanvasObject) {
 		return
 	}
 	row.uid = uid
+	if ct.multiHas(uid) {
+		row.check.Show()
+	} else {
+		row.check.Hide()
+	}
 	if n == nil {
 		row.icon.SetResource(theme.QuestionIcon())
 		row.label.SetText("")
@@ -1077,6 +1111,7 @@ type treeRow struct {
 	uid    widget.TreeNodeID
 	icon   *widget.Icon
 	star   *canvas.Text
+	check  *widget.Icon
 	label  *widget.Label
 	hilite *canvas.Rectangle
 }
@@ -1085,10 +1120,13 @@ func newTreeRow(ct *connTree) *treeRow {
 	star := canvas.NewText("★", color.RGBA{R: 0xff, G: 0xc1, B: 0x07, A: 0xff})
 	star.TextStyle.Bold = true
 	star.Hide()
+	check := widget.NewIcon(theme.ConfirmIcon())
+	check.Hide()
 	r := &treeRow{
 		ct:     ct,
 		icon:   widget.NewIcon(theme.FolderIcon()),
 		star:   star,
+		check:  check,
 		label:  widget.NewLabel(""),
 		hilite: canvas.NewRectangle(color.Transparent),
 	}
@@ -1100,7 +1138,7 @@ func newTreeRow(ct *connTree) *treeRow {
 }
 
 func (r *treeRow) CreateRenderer() fyne.WidgetRenderer {
-	content := container.NewHBox(r.icon, r.label, r.star)
+	content := container.NewHBox(r.check, r.icon, r.label, r.star)
 	stack := container.NewStack(r.hilite, content)
 	return widget.NewSimpleRenderer(stack)
 }
@@ -1424,6 +1462,60 @@ func (ct *connTree) selectedFolder() string {
 		return n.ID
 	}
 	return n.ParentID
+}
+
+// multiAddSelected adds the currently single-selected node UID to the
+// bulk-edit set. No-op if nothing is selected or the UID is already in
+// the set. Returns the new count for caller convenience.
+func (ct *connTree) multiAddSelected() int {
+	id := ct.selected()
+	if id == "" {
+		return len(ct.multi)
+	}
+	ct.mu.Lock()
+	if ct.multi == nil {
+		ct.multi = map[string]struct{}{}
+	}
+	ct.multi[id] = struct{}{}
+	n := len(ct.multi)
+	ct.mu.Unlock()
+	ct.tree.Refresh()
+	if ct.onMultiChange != nil {
+		ct.onMultiChange(n)
+	}
+	return n
+}
+
+// multiClear empties the bulk-edit set.
+func (ct *connTree) multiClear() {
+	ct.mu.Lock()
+	ct.multi = map[string]struct{}{}
+	ct.mu.Unlock()
+	ct.tree.Refresh()
+	if ct.onMultiChange != nil {
+		ct.onMultiChange(0)
+	}
+}
+
+// multiList returns a snapshot of the bulk-edit set.
+func (ct *connTree) multiList() []string {
+	ct.mu.RLock()
+	out := make([]string, 0, len(ct.multi))
+	for id := range ct.multi {
+		out = append(out, id)
+	}
+	ct.mu.RUnlock()
+	sort.Strings(out)
+	return out
+}
+
+// multiHas reports whether uid is currently in the bulk-edit set.
+// Cheap enough to call from the row updater.
+func (ct *connTree) multiHas(uid string) bool {
+	ct.mu.RLock()
+	defer ct.mu.RUnlock()
+	_, ok := ct.multi[uid]
+	return ok
 }
 
 // protocolIcon returns a recognizable theme icon per protocol.
@@ -2308,7 +2400,117 @@ func duplicateSelectedNode(w fyne.Window, b *Bindings, tree *connTree) {
 	tree.refresh()
 }
 
-// --- Dialogs --------------------------------------------------------------
+// bulkDeleteSelected removes every node currently in the bulk-edit set
+// after a single confirmation. Sessions actively connected to a node
+// being deleted are first force-closed so the user isn't left holding
+// orphaned tabs. Any backend error aborts the rest of the batch and is
+// reported; nodes processed before the error stay deleted (this is the
+// same semantic as repeated single-node delete).
+func bulkDeleteSelected(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionRegistry) {
+	ids := tree.multiList()
+	if len(ids) == 0 {
+		dialog.ShowInformation("Bulk delete", "No items in selection. Use the ✓ button to add the highlighted node first.", w)
+		return
+	}
+	msg := fmt.Sprintf("Delete %d items?\n\nFolders will be removed with all their contents.", len(ids))
+	dialog.ShowConfirm("Confirm bulk delete", msg, func(ok bool) {
+		if !ok {
+			return
+		}
+		ctx := context.Background()
+		for _, id := range ids {
+			if st := sessions.findByConnection(id); st != nil {
+				closeSession(sessions, st)
+			}
+			if err := b.DeleteNode(ctx, id); err != nil {
+				dialog.ShowError(fmt.Errorf("delete %s: %w", id, err), w)
+				break
+			}
+		}
+		tree.multiClear()
+		tree.refresh()
+	}, w)
+}
+
+// bulkMoveSelected reparents every node in the bulk-edit set under a
+// folder picked by the user. The picker reuses collectFolderChoices so
+// the UX matches the single-node "Move to…" action.
+func bulkMoveSelected(w fyne.Window, b *Bindings, tree *connTree) {
+	ids := tree.multiList()
+	if len(ids) == 0 {
+		dialog.ShowInformation("Bulk move", "No items in selection. Use the ✓ button to add the highlighted node first.", w)
+		return
+	}
+	choices, idByLabel := collectFolderChoices(tree)
+	choices = append([]string{"(root)"}, choices...)
+	pick := widget.NewSelect(choices, nil)
+	pick.SetSelectedIndex(0)
+	form := dialog.NewForm("Bulk move", "Move", "Cancel",
+		[]*widget.FormItem{widget.NewFormItem("Target folder", pick)},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			target := ""
+			if pick.Selected != "(root)" {
+				target = idByLabel[pick.Selected]
+			}
+			ctx := context.Background()
+			for _, id := range ids {
+				if id == target {
+					continue
+				}
+				if err := b.MoveNode(ctx, id, target); err != nil {
+					dialog.ShowError(fmt.Errorf("move %s: %w", id, err), w)
+					break
+				}
+			}
+			tree.multiClear()
+			tree.refresh()
+		}, w)
+	form.Resize(fyne.NewSize(420, 200))
+	form.Show()
+}
+
+// collectFolderChoices walks the tree view and returns a slice of
+// human-readable folder labels (path-style) along with a map from
+// label back to folder UID. Used by bulk-move's target picker.
+func collectFolderChoices(tree *connTree) ([]string, map[string]string) {
+	tree.mu.RLock()
+	root := tree.view.Root
+	tree.mu.RUnlock()
+	labels := []string{}
+	byLabel := map[string]string{}
+	var walk func(n *iapp.NodeView, prefix string)
+	walk = func(n *iapp.NodeView, prefix string) {
+		if n == nil {
+			return
+		}
+		for _, c := range n.Children {
+			if c.Kind != "folder" {
+				continue
+			}
+			label := prefix + c.Name
+			labels = append(labels, label)
+			byLabel[label] = c.ID
+			walk(c, label+" / ")
+		}
+	}
+	walk(root, "")
+	sort.Strings(labels)
+	return labels, byLabel
+}
+
+// closeSession terminates the runtime session associated with the given
+// session tab. Mirrors the close path used by the per-tab close button
+// so bulk delete doesn't leave dangling sessions when a connection is
+// deleted out from under them.
+func closeSession(sessions *sessionRegistry, st *sessionTab) {
+	if sessions == nil || st == nil {
+		return
+	}
+	sessions.remove(st.hid)
+}
 
 func showNewFolderDialog(w fyne.Window, b *Bindings, tree *connTree) {
 	nameEntry := widget.NewEntry()

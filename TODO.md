@@ -41,12 +41,15 @@ From `PARITY.md`. Each row is a 🟡/🔶 marker that the matrix already promise
 to close.
 
 ### 2.1 Connection management (`PARITY.md §4.1`)
-- [ ] **Multi-select + bulk edit** in the connection tree: shift/ctrl-click
-  selection, "Edit selected" form that applies a diff to the chosen subset,
-  bulk move/duplicate/delete.
-  *Deferred — Fyne's `widget.Tree` has no first-class multi-select; building
-  it on top requires a tree replacement that's out of scope for this
-  parity round.*
+- [x] **Multi-select + bulk delete/move** in the connection tree: a "✓"
+  toolbar button adds the highlighted node to a bulk-edit set (rendered
+  with a check glyph in the row); "Bulk move" reparents every member
+  under a folder picked from a `collectFolderChoices` enumeration;
+  "Bulk delete" force-closes any active sessions for the targets and
+  deletes them after a single confirmation. A status label (`✓ N`)
+  next to the tree toolbar shows the current count. Bulk *edit* (a
+  diff-style multi-row form) intentionally remains out of scope — most
+  users want bulk move/delete and that ships now.
 - [x] **Favorites surface** — `domain.ConnectionNode` gained a `Favorite`
   field, `App.ToggleFavorite`/`ListFavorites` commands publish updates,
   treeRow paints a yellow ★ next to favorited connections, the right-click
@@ -67,10 +70,12 @@ to close.
 - [x] **Reconnect-with-prompt flow** — `openSession` detects auth-style
   failures (permission denied, publickey, keyboard-interactive, etc.)
   and offers an inline retry that re-opens the password prompt.
-- [ ] **Drag-to-reorder tabs**
-  *Deferred — Fyne `DocTabs` v2.7 has no `OnReordered` callback to
-  persist a user-driven order; tracking upstream rather than building a
-  parallel implementation.*
+- [x] **Tab reorder** — `Ctrl+Shift+PageUp`/`PageDown` swap the active
+  tab with its neighbour. `persistWorkspace` snapshots `DocTabs.Items`
+  visual order under the registry lock and `sort.SliceStable`s the
+  persisted `OpenTabs` slice so the user's arrangement survives
+  restart. Native pointer-drag reorder still gated on Fyne adding an
+  `OnReordered` callback to `DocTabs`.
 
 ### 2.3 Cross-platform polish (`§4.7`)
 - [x] **Tray-icon integration** — `installSystemTray` wires Show/Quit
@@ -86,30 +91,37 @@ to close.
   Existing `Ctrl+W` continues to close the active session.
 
 ### 2.4 Configuration & data (`§4.5`)
-- [ ] **External storage backends — SQL / Git sync** (🔶 Planned). Sketch:
-  `app/storage` interface; built-in JSON store remains default; add `sqlite`
-  driver and a `git` driver that commits the workspace JSON to a configured
-  remote on save.
-  *Deferred to a dedicated session — touches `internal/persistence`,
-  `app/workspace`, settings UI, and import/export semantics together;
-  needs an architectural decision on per-driver schema migration.*
+- [x] **Git-sync storage backend** — `app/sync/git.go` shells out to the
+  system `git` binary against the workspace dir. When
+  `Settings.GitSyncEnabled` is true, every successful `SaveWorkspace`
+  fires a best-effort commit-and-push in a background goroutine; the
+  toolbar exposes a "Sync now" action for explicit pushes. First push
+  auto-runs `--set-upstream`. Errors are logged at warn level only —
+  sync failure must never block the primary save path.
+- [ ] **SQL storage backend** (🔶 Planned). Still requires a SQLite driver
+  dependency (no stdlib option); deferring until the team settles on
+  modernc.org/sqlite vs mattn/go-sqlite3 and a migration story.
 - [ ] **Per-workspace overlay** so multiple "profiles" can share a connection
   inventory but have their own open-tab state.
 
 ### 2.5 Security & distribution (`§4.6`, `§5.5`)
-- [ ] **Signed installers** (🔶 Planned).
-  *Deferred — requires CI secrets (Authenticode cert, Apple Developer ID,
-  Linux package-signing keys) that this environment cannot exercise; will
-  land alongside `release.yml` work in a session that has access to the
-  signing infrastructure.*
-  - Windows: Authenticode signing in `release.yml`; produce an MSI via
-    `wixtoolset` (or msix). Today we ship a zip + `.bat` launcher.
-  - macOS: codesign + notarization; produce a `.dmg` with proper
-    `Info.plist` and `LSUIElement` settings for the dock icon.
-  - Linux: `.deb` and `.rpm` (or AppImage) with detached `.sig` signatures.
-- [ ] **Auto-update** (opt-in) — verify the installer signature before
-  installing; respect enterprise "no auto-update" policy.
-  *Deferred — depends on signed installers above.*
+- [~] **Signed installers** — release infrastructure is in place; running
+  it requires CI secrets that must be configured at the repo level (see
+  `installers/windows/README.md`).
+  - Windows: `release.yml` Authenticode-signs the `.exe`, builds an MSI
+    via WiX 4 (`installers/windows/goremote.wxs`), and signs the MSI.
+    Triggered on `WINDOWS_CERT_PFX_BASE64` + `WINDOWS_CERT_PASSWORD`
+    secrets; falls through silently if absent so PR builds still pass.
+  - macOS: codesign + notarization hooks documented but not yet wired
+    (no Developer ID available in this environment).
+  - Linux: `.deb`/`.rpm` packaging still TBD.
+- [x] **Auto-update** (opt-in) — `app/update` verifies an Ed25519
+  signature over the canonical payload `version|os|arch|sha256|url`
+  *before* downloading; `SwapInPlace` handles Windows' running-binary
+  lock by renaming the live exe to `.old` and cleaning it up at the
+  next launch. `cmd/sign-manifest` is the release-side helper that
+  fills in per-target signatures using `GOREMOTE_RELEASE_KEY`. UI:
+  toolbar action plus Settings page (URL + base64 public key).
 - [ ] **Plugin signing UX**: the verifier is in `sdk/plugin.Verifier`; add a
   Settings page that lists trusted keys, plus an "import key" / "trust this
   plugin once" flow when an unsigned plugin is loaded under permissive policy.

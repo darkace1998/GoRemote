@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX 4.x source for the goremote MSI. Variables (-d switches) supplied
+  by the release workflow:
+    Version    - product version, e.g. 1.13.0
+    SourceExe  - path to the signed goremote.exe (already authenticode-signed)
+    LicenseRtf - path to license RTF (defaults to bundled BSD-3 RTF)
+    UpgradeCode- stable GUID identifying the product across versions
+
+  Build:
+    wix build goremote.wxs -d Version=1.13.0 -d SourceExe=goremote.exe \
+        -d UpgradeCode=PUT-A-STABLE-GUID-HERE -o goremote-1.13.0.msi
+  Sign:
+    signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 \
+        /a goremote-1.13.0.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="goremote"
+      Manufacturer="goremote"
+      Version="$(Version)"
+      UpgradeCode="$(UpgradeCode)"
+      Compressed="yes"
+      Scope="perUserOrMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of goremote is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="$(SourceExe)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/goremote/goremote" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/goremote/goremote" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLDIR" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />
+
+    <Feature Id="Main" Title="goremote" Level="1">
+      <ComponentGroupRef Id="MainComponents" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="goremote" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="goremote" />
+    </StandardDirectory>
+
+    <ComponentGroup Id="MainComponents" Directory="INSTALLDIR">
+      <Component Id="GoremoteExe" Guid="*">
+        <File Id="GoremoteExeFile" Source="$(SourceExe)" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="*">
+      <Shortcut Id="ApplicationStartMenuShortcut"
+                Name="goremote"
+                Target="[INSTALLDIR]goremote.exe"
+                WorkingDirectory="INSTALLDIR" />
+      <RemoveFolder Id="CleanUpShortcut" Directory="ApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\goremote\goremote" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>

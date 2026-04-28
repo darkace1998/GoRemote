@@ -53,8 +53,8 @@ Source of truth for the feature list: `requirements.md`, `architecture.md`, `sta
 | Inheritance of connection properties             | ✅ **Ready**    | `InheritanceProfile.Resolve` (with provenance) |
 | Connection templates / quick-connect             | ✅ **Ready**    | App command + UI modal |
 | Search / filter / tagging                        | ✅ **Ready**    | `internal/domain/search.go` |
-| Bulk edit / duplicate / move / copy              | 🟡 **Partial**  | Single-item edit + duplicate; multi-select bulk-edit deferred |
-| Favorites / recents / environment grouping       | 🟡 **Partial**  | Recents tracked; favorites flag persisted; environment grouping via tags |
+| Bulk edit / duplicate / move / copy              | 🟡 **Partial**  | Bulk move and bulk delete shipped via toolbar (`✓` add, `Bulk move`, `Bulk delete`); multi-row diff-style bulk *edit* still deferred |
+| Favorites / recents / environment grouping       | ✅ **Ready**    | Favorites flag, Recents ring (max 20), Environment filter Select |
 | Import / export XML and CSV                      | ✅ **Ready**    | `internal/import/mremoteng` |
 | Native versioned config format                   | ✅ **Ready**    | `internal/persistence` (atomic JSON + migrator) |
 | Backup / recovery                                | ✅ **Ready**    | Zip snapshots, validated restore |
@@ -96,7 +96,7 @@ See the protocols table above. All required first-class protocols are available;
 | Import of mRemoteNG XML/CSV with inheritance     | ✅ **Ready**    |
 | Migration warnings (no silent drops)             | ✅ **Ready**    |
 | Local encrypted storage for sensitive metadata   | ✅ **Ready**    |
-| External backends (SQL / Git sync)               | 🔶 **Planned**  |
+| External backends (SQL / Git sync)               | 🟡 **Partial**  | Git-sync via `app/sync` shipped (commit-and-push on save, opt-in via Settings); SQL backend still planned |
 | Schema migration with rollback safety            | ✅ **Ready**    |
 
 ### 4.6 Security
@@ -119,7 +119,8 @@ See the protocols table above. All required first-class protocols are available;
 | Light / dark themes, high-DPI                    | ✅ **Ready**    |
 | Keyboard navigation, contrast, scalable text     | ✅ **Ready**    |
 | Screen-reader friendly metadata                  | 🟡 **Partial**  | ARIA roles in place; full audit pending |
-| Tray / OS notifications / native file locations  | 🟡 **Partial**  | Notifications wired; tray menu deferred |
+| Tray / OS notifications / native file locations  | ✅ **Ready**    | Notifications + tray Show/Quit/Recents submenu via `desktop.App` |
+| Drag-to-reorder tabs                             | 🟡 **Partial**  | `Ctrl+Shift+PageUp/PageDown` shortcut shipped; pointer-drag awaits Fyne `OnReordered` |
 
 ### 5. Non-functional
 
@@ -134,7 +135,8 @@ See the protocols table above. All required first-class protocols are available;
 | Versioned plugin API; no native `plugin` pkg     | ✅ **Ready**    |
 | Structured logs with redaction                   | ✅ **Ready**    |
 | Cross-platform CI artifacts (linux/macos/windows) | ✅ **Ready**   |
-| Signed installers                                | 🔶 **Planned**  |
+| Signed installers                                | 🟡 **Partial**  | `release.yml` Authenticode-signs `.exe` + WiX MSI when secrets configured (`installers/windows/`); macOS notary + Linux .deb/.rpm still planned |
+| Auto-update (Ed25519-signed manifest)            | ✅ **Ready**    | `app/update` verifies per-target signature before download; in-place SwapInPlace; `cmd/sign-manifest` release helper |
 | Vulnerability scanning (`govulncheck`) in CI     | ✅ **Ready**    |
 
 ## Notes
