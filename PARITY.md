@@ -64,7 +64,7 @@ Source of truth for the feature list: `requirements.md`, `architecture.md`, `sta
 | Feature                                          | goremote        | Where |
 |--------------------------------------------------|-----------------|-------|
 | Tabbed workspace                                 | ✅ **Ready**    | `container.AppTabs` in `cmd/desktop/gui_fyne.go` |
-| Split-pane layouts                               | ✅ **Ready**    | Per-tab horizontal/vertical split via tree right-click ("Open in split right/below"); peel-off and detach handled |
+| Split-pane layouts                               | ✅ **Ready**    | Recursive H/V splits per tab via right-click; per-pane title bar with active indicator + close; layouts persist across restarts |
 | Reconnect / disconnect / duplicate session       | ✅ **Ready**    | `internal/app` commands |
 | Reopen last workspace                            | ✅ **Ready**    | `app/workspace` |
 | Per-session colors / icons / labels              | 🟡 **Partial**  | Color/label persisted; icon picker deferred |

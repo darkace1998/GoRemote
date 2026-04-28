@@ -36,6 +36,11 @@ type sessionTab struct {
 	// progress so the tab's OnClosed handler and the window's
 	// CloseIntercept know to skip the session-termination path.
 	transferring bool
+	// pendingSplit is consumed by sessionRegistry.add when this
+	// session is being attached as an additional pane in an existing
+	// tab. Empty means the session opens as a fresh tab. Values:
+	// "h" (split right) or "v" (split below).
+	pendingSplit string
 	ctx          context.Context
 	cancel       context.CancelFunc
 }

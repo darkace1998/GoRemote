@@ -170,4 +170,54 @@ func TestJSONOmitsOptionalEmpty(t *testing.T) {
 	if strings.Contains(s, "\"pinned\"") {
 		t.Errorf("pinned should be omitted when false: %s", s)
 	}
+	if strings.Contains(s, "\"paneLayouts\"") {
+		t.Errorf("paneLayouts should be omitted when empty: %s", s)
+	}
+}
+
+func TestPaneLayoutRoundTrip(t *testing.T) {
+	t.Parallel()
+	in := Workspace{
+		Version: 1,
+		OpenTabs: []TabState{
+			{ID: "h1", ConnectionID: "c1", PaneGroup: "g-x"},
+			{ID: "h2", ConnectionID: "c2", PaneGroup: "g-x"},
+			{ID: "h3", ConnectionID: "c3", PaneGroup: "g-x"},
+		},
+		PaneLayouts: []PaneLayout{
+			{
+				GroupID: "g-x",
+				Root: &PaneNode{
+					Orientation: "h",
+					A:           &PaneNode{ConnectionID: "c1"},
+					B: &PaneNode{
+						Orientation: "v",
+						A:           &PaneNode{ConnectionID: "c2"},
+						B:           &PaneNode{ConnectionID: "c3"},
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	var out Workspace
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(out.PaneLayouts) != 1 {
+		t.Fatalf("PaneLayouts len = %d, want 1", len(out.PaneLayouts))
+	}
+	got := out.PaneLayouts[0]
+	if got.GroupID != "g-x" || got.Root == nil || got.Root.Orientation != "h" {
+		t.Fatalf("layout root mismatch: %+v", got)
+	}
+	if got.Root.A == nil || got.Root.A.ConnectionID != "c1" {
+		t.Errorf("left leaf mismatch: %+v", got.Root.A)
+	}
+	if got.Root.B == nil || got.Root.B.Orientation != "v" || got.Root.B.A == nil || got.Root.B.A.ConnectionID != "c2" || got.Root.B.B == nil || got.Root.B.B.ConnectionID != "c3" {
+		t.Errorf("right subtree mismatch: %+v", got.Root.B)
+	}
 }

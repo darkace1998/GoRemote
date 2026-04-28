@@ -22,10 +22,31 @@ const CurrentVersion = 1
 
 // Workspace is the full persisted UI workspace document.
 type Workspace struct {
-	Version   int        `json:"version"`
-	OpenTabs  []TabState `json:"openTabs"`
-	ActiveTab string     `json:"activeTab,omitempty"`
-	UpdatedAt time.Time  `json:"updatedAt"`
+	Version     int          `json:"version"`
+	OpenTabs    []TabState   `json:"openTabs"`
+	ActiveTab   string       `json:"activeTab,omitempty"`
+	PaneLayouts []PaneLayout `json:"paneLayouts,omitempty"`
+	UpdatedAt   time.Time    `json:"updatedAt"`
+}
+
+// PaneLayout describes the split structure of a single tab that hosts
+// more than one session pane. GroupID is the stable identifier shared
+// by all TabStates that belong to this group (TabState.PaneGroup).
+// Root is the pane tree: leaves carry a ConnectionID that the UI uses
+// to match the tab's restored sessions back into the correct slot.
+type PaneLayout struct {
+	GroupID string    `json:"groupId"`
+	Root    *PaneNode `json:"root"`
+}
+
+// PaneNode is one node in a PaneLayout's tree. A node is either a leaf
+// (ConnectionID set, A/B nil) or a branch (Orientation set to "h" or
+// "v" and both A/B non-nil).
+type PaneNode struct {
+	ConnectionID string    `json:"connectionId,omitempty"`
+	Orientation  string    `json:"orientation,omitempty"`
+	A            *PaneNode `json:"a,omitempty"`
+	B            *PaneNode `json:"b,omitempty"`
 }
 
 // TabState is a single open tab. ID is a UI-assigned identifier (uuid)

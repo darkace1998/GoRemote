@@ -192,49 +192,245 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 
 // --- Session registry -----------------------------------------------------
 
-// paneGroup tracks the panes hosted in a single tabItem. The simplest
-// and most common case is a single-member group (one session per tab).
-// When the user splits a tab, the group grows to two members and its
-// rebuildLayout() wraps the two cached content widgets in an HSplit or
-// VSplit which becomes the tabItem's content.
-//
-// v1 supports up to two members per group. Splitting an already-split
-// tab is rejected; users who want >2 simultaneous sessions can detach
-// to floating windows.
-type paneGroup struct {
-	tabItem *container.TabItem
-	members []*sessionTab
-	// orientation is "" for single-member groups, "h" for horizontal
-	// split (members[0] left, members[1] right) or "v" for vertical
-	// split (members[0] top, members[1] bottom).
-	orientation string
+// paneNode is one node in a paneGroup's split tree. A node is either a
+// leaf (session != nil, both children nil) or a branch (session nil,
+// orientation set, both children non-nil).
+type paneNode struct {
+	parent *paneNode
+
+	// Leaf state ---------------------------------------------------
+	session *sessionTab
+	// titleBtn is the small clickable header above a leaf's content
+	// that doubles as an active-pane indicator. Lazily built by
+	// buildLeaf and reused on subsequent rebuilds.
+	titleBtn *widget.Button
+	// closeBtn closes just this pane.
+	closeBtn *widget.Button
+
+	// Branch state --------------------------------------------------
+	orientation string // "h" or "v"
+	a, b        *paneNode
 }
 
-// rebuildLayout replaces the tabItem.Content with the appropriate widget
-// for the current member count and orientation. Caller must hold the
-// UI goroutine.
+func (n *paneNode) isLeaf() bool { return n != nil && n.session != nil }
+
+// paneGroup tracks the panes hosted in a single tabItem. Layout is
+// represented as a binary tree of paneNodes: each branch is a
+// horizontal or vertical split with two children, and each leaf hosts
+// exactly one sessionTab. Single-pane tabs have a leaf root; recursive
+// splits grow the tree to arbitrary depth.
+type paneGroup struct {
+	id      string
+	tabItem *container.TabItem
+	root    *paneNode
+	// active points to the currently-focused leaf. Operations that
+	// don't carry an explicit target (e.g. tree right-click "Open in
+	// split right") apply to this leaf. Always a leaf or nil.
+	active *paneNode
+}
+
+// leaves returns the session leaves in left-to-right / top-to-bottom
+// traversal order. Useful for snapshotting and for label building.
+func (g *paneGroup) leaves() []*paneNode {
+	var out []*paneNode
+	var walk func(n *paneNode)
+	walk = func(n *paneNode) {
+		if n == nil {
+			return
+		}
+		if n.isLeaf() {
+			out = append(out, n)
+			return
+		}
+		walk(n.a)
+		walk(n.b)
+	}
+	walk(g.root)
+	return out
+}
+
+// leafFor finds the leaf hosting st, or nil.
+func (g *paneGroup) leafFor(st *sessionTab) *paneNode {
+	for _, lf := range g.leaves() {
+		if lf.session == st {
+			return lf
+		}
+	}
+	return nil
+}
+
+// splitLeaf replaces target (which must be a leaf in this group) with
+// a branch whose children are the original target and a new leaf
+// hosting newSt. Orientation is "h" or "v". Sets active to the new
+// leaf.
+func (g *paneGroup) splitLeaf(target *paneNode, newSt *sessionTab, orientation string) *paneNode {
+	if target == nil || !target.isLeaf() {
+		return nil
+	}
+	if orientation != "h" && orientation != "v" {
+		orientation = "h"
+	}
+	newLeaf := &paneNode{session: newSt}
+	branch := &paneNode{orientation: orientation, a: target, b: newLeaf, parent: target.parent}
+	newLeaf.parent = branch
+	if target.parent == nil {
+		g.root = branch
+	} else {
+		if target.parent.a == target {
+			target.parent.a = branch
+		} else {
+			target.parent.b = branch
+		}
+	}
+	target.parent = branch
+	g.active = newLeaf
+	return newLeaf
+}
+
+// removeLeaf removes the leaf hosting st. Collapses the surviving
+// sibling into the removed leaf's grandparent slot. Returns ok=true
+// when the leaf was found, and emptyTab=true when the group is now
+// empty (caller should remove the tab).
+func (g *paneGroup) removeLeaf(st *sessionTab) (ok, emptyTab bool) {
+	leaf := g.leafFor(st)
+	if leaf == nil {
+		return false, false
+	}
+	parent := leaf.parent
+	if parent == nil {
+		// Removing root leaf -> empty group.
+		g.root = nil
+		g.active = nil
+		return true, true
+	}
+	var sibling *paneNode
+	if parent.a == leaf {
+		sibling = parent.b
+	} else {
+		sibling = parent.a
+	}
+	gp := parent.parent
+	sibling.parent = gp
+	if gp == nil {
+		g.root = sibling
+	} else {
+		if gp.a == parent {
+			gp.a = sibling
+		} else {
+			gp.b = sibling
+		}
+	}
+	if g.active == leaf {
+		// Pick any remaining leaf as the new active; prefer one
+		// inside the sibling subtree.
+		var pick func(n *paneNode) *paneNode
+		pick = func(n *paneNode) *paneNode {
+			if n == nil {
+				return nil
+			}
+			if n.isLeaf() {
+				return n
+			}
+			if l := pick(n.a); l != nil {
+				return l
+			}
+			return pick(n.b)
+		}
+		g.active = pick(sibling)
+	}
+	return true, false
+}
+
+// setActive updates the active leaf and refreshes title button styling.
+func (g *paneGroup) setActive(node *paneNode) {
+	if node == nil || !node.isLeaf() {
+		return
+	}
+	g.active = node
+	for _, lf := range g.leaves() {
+		if lf.titleBtn == nil {
+			continue
+		}
+		if lf == node {
+			lf.titleBtn.Importance = widget.HighImportance
+		} else {
+			lf.titleBtn.Importance = widget.MediumImportance
+		}
+		lf.titleBtn.Refresh()
+	}
+}
+
+// buildLeaf constructs (or reuses) the canvas chrome for a leaf node.
+// The result is a Border with a thin header (title + close button)
+// above the session's terminal content widget. Header taps mark the
+// leaf as the active pane.
+func (g *paneGroup) buildLeaf(node *paneNode) fyne.CanvasObject {
+	st := node.session
+	if node.titleBtn == nil {
+		node.titleBtn = widget.NewButton(tabLabelFor(st), func() {
+			g.setActive(node)
+		})
+		node.titleBtn.Importance = widget.MediumImportance
+	} else {
+		node.titleBtn.SetText(tabLabelFor(st))
+	}
+	if node.closeBtn == nil {
+		node.closeBtn = widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
+			handle, b := st.handle, st.b
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := b.CloseSession(ctx, handle); err != nil {
+					slog.Warn("close pane", "handle", handle, "err", err)
+				}
+			}()
+		})
+		node.closeBtn.Importance = widget.LowImportance
+	}
+	if g.active == node {
+		node.titleBtn.Importance = widget.HighImportance
+	} else {
+		node.titleBtn.Importance = widget.MediumImportance
+	}
+	header := container.NewBorder(nil, nil, nil, node.closeBtn, node.titleBtn)
+	return container.NewBorder(header, nil, nil, nil, st.content())
+}
+
+// build returns the canvas object for an arbitrary subtree.
+func (g *paneGroup) build(node *paneNode) fyne.CanvasObject {
+	if node == nil {
+		return widget.NewLabel("")
+	}
+	if node.isLeaf() {
+		return g.buildLeaf(node)
+	}
+	left := g.build(node.a)
+	right := g.build(node.b)
+	var sp *container.Split
+	if node.orientation == "v" {
+		sp = container.NewVSplit(left, right)
+	} else {
+		sp = container.NewHSplit(left, right)
+	}
+	sp.SetOffset(0.5)
+	return sp
+}
+
+// rebuildLayout replaces the tabItem.Content with the rendered tree.
+// Caller must be on the UI goroutine.
 func (g *paneGroup) rebuildLayout() {
 	if g.tabItem == nil {
 		return
 	}
-	switch len(g.members) {
-	case 0:
-		// Caller is expected to remove the tab; nothing to render.
+	if g.root == nil {
 		g.tabItem.Content = widget.NewLabel("")
-	case 1:
-		g.tabItem.Content = g.members[0].content()
-		g.orientation = ""
-	default:
-		left := g.members[0].content()
-		right := g.members[1].content()
-		var sp *container.Split
-		if g.orientation == "v" {
-			sp = container.NewVSplit(left, right)
-		} else {
-			sp = container.NewHSplit(left, right)
-		}
-		sp.SetOffset(0.5)
-		g.tabItem.Content = sp
+	} else if g.root.isLeaf() {
+		// Single-pane tab: skip the per-leaf chrome to keep the
+		// terminal flush with the tab body, matching the pre-Phase-2
+		// look.
+		g.tabItem.Content = g.root.session.content()
+	} else {
+		g.tabItem.Content = g.build(g.root)
 	}
 	g.tabItem.Text = g.label()
 	if g.tabItem.Content != nil {
@@ -242,16 +438,30 @@ func (g *paneGroup) rebuildLayout() {
 	}
 }
 
-// label composes the tab title from the member names.
+// label composes the tab title from the leaf names in traversal order.
 func (g *paneGroup) label() string {
-	switch len(g.members) {
+	leaves := g.leaves()
+	switch len(leaves) {
 	case 0:
 		return ""
 	case 1:
-		return tabLabelFor(g.members[0])
-	default:
-		return tabLabelFor(g.members[0]) + " | " + tabLabelFor(g.members[1])
+		return tabLabelFor(leaves[0].session)
 	}
+	parts := make([]string, 0, len(leaves))
+	for _, lf := range leaves {
+		parts = append(parts, tabLabelFor(lf.session))
+	}
+	return strings.Join(parts, " | ")
+}
+
+// memberSessions returns the session pointers for all leaves.
+func (g *paneGroup) memberSessions() []*sessionTab {
+	leaves := g.leaves()
+	out := make([]*sessionTab, 0, len(leaves))
+	for _, lf := range leaves {
+		out = append(out, lf.session)
+	}
+	return out
 }
 
 func tabLabelFor(st *sessionTab) string {
@@ -301,20 +511,37 @@ func (r *sessionRegistry) add(st *sessionTab) {
 	if st.tabItem != nil {
 		g = r.groups[st.tabItem]
 		if g == nil {
-			g = &paneGroup{tabItem: st.tabItem}
+			g = &paneGroup{tabItem: st.tabItem, id: domain.NewID().String()}
 			r.groups[st.tabItem] = g
 			newTab = true
 		}
-		// Avoid duplicate-add: only append when not already a member.
-		already := false
-		for _, m := range g.members {
-			if m == st {
-				already = true
-				break
+		// Skip duplicate-add by checking existing leaves.
+		if g.leafFor(st) == nil {
+			if g.root == nil {
+				leaf := &paneNode{session: st}
+				g.root = leaf
+				g.active = leaf
+			} else {
+				target := g.active
+				if target == nil || !target.isLeaf() {
+					// Fall back to first leaf if active was lost.
+					if leaves := g.leaves(); len(leaves) > 0 {
+						target = leaves[len(leaves)-1]
+					}
+				}
+				orientation := st.pendingSplit
+				if orientation == "" {
+					orientation = "h"
+				}
+				st.pendingSplit = ""
+				if target != nil {
+					g.splitLeaf(target, st, orientation)
+				} else {
+					leaf := &paneNode{session: st}
+					g.root = leaf
+					g.active = leaf
+				}
 			}
-		}
-		if !already {
-			g.members = append(g.members, st)
 		}
 	}
 	r.mu.Unlock()
@@ -342,14 +569,8 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	if ok && st.tabItem != nil {
 		g = r.groups[st.tabItem]
 		if g != nil {
-			out := g.members[:0]
-			for _, m := range g.members {
-				if m != st {
-					out = append(out, m)
-				}
-			}
-			g.members = out
-			if len(g.members) == 0 {
+			_, empty := g.removeLeaf(st)
+			if empty {
 				delete(r.groups, st.tabItem)
 				removeTab = true
 			}
@@ -394,20 +615,23 @@ func (r *sessionRegistry) membersOfTab(item *container.TabItem) []*sessionTab {
 	if g == nil {
 		return nil
 	}
-	out := make([]*sessionTab, len(g.members))
-	copy(out, g.members)
-	return out
+	return g.memberSessions()
 }
 
 // findByTab returns the active session within the given tab. For
-// multi-pane groups, the most recently added member is treated as
-// active; this matches the typical "I just split, target the new pane"
-// expectation. Returns nil when no group/session is registered.
+// multi-pane groups, the active leaf's session is returned; this
+// matches "the pane the user is most likely operating on" semantics.
+// Returns nil when no group/session is registered.
 func (r *sessionRegistry) findByTab(item *container.TabItem) *sessionTab {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if g := r.groups[item]; g != nil && len(g.members) > 0 {
-		return g.members[len(g.members)-1]
+	if g := r.groups[item]; g != nil {
+		if g.active != nil && g.active.session != nil {
+			return g.active.session
+		}
+		for _, lf := range g.leaves() {
+			return lf.session
+		}
 	}
 	for _, st := range r.items {
 		if st.tabItem == item {
@@ -1163,23 +1387,22 @@ func attachSessionInto(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv
 	st.ctx, st.cancel = context.WithCancel(context.Background())
 
 	if targetTab != nil {
-		// Validate target still exists and has only one member.
+		// Validate the target tab still hosts a group; allow any
+		// depth — recursive splits target the active leaf inside.
 		sessions.mu.Lock()
 		g := sessions.groups[targetTab]
-		ok := g != nil && len(g.members) == 1
+		ok := g != nil && g.root != nil
+		sessions.mu.Unlock()
 		if ok && orientation != "h" && orientation != "v" {
 			orientation = "h"
 		}
-		if ok {
-			g.orientation = orientation
-		}
-		sessions.mu.Unlock()
 		if !ok {
 			// Fall back to opening as its own tab if the target
 			// group has been mutated since the user clicked.
 			targetTab = nil
 		} else {
 			st.tabItem = targetTab
+			st.pendingSplit = orientation
 		}
 	}
 	if targetTab == nil {
@@ -1203,8 +1426,8 @@ func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, c
 		dialog.ShowInformation("No Active Tab", "Open a session first, then split it.", w)
 		return
 	}
-	if g := sessions.groupFor(target); g == nil || len(g.members) != 1 {
-		dialog.ShowInformation("Cannot Split", "Tab already hosts two panes; close one first.", w)
+	if g := sessions.groupFor(target); g == nil || g.root == nil {
+		dialog.ShowInformation("Cannot Split", "Selected tab is empty.", w)
 		return
 	}
 	if !sessions.reserveConn(connID) {
@@ -1412,20 +1635,14 @@ func detachCurrentTab(a fyne.App, sessions *sessionRegistry) {
 
 	st.transferring = true
 	// If the source tab hosts another session in a split, peel off
-	// just this session and rebuild the tab around the remaining
-	// member; otherwise remove the whole tab.
+	// just this session and rebuild the tab around the surviving
+	// subtree; otherwise remove the whole tab.
 	sessions.mu.Lock()
 	g := sessions.groups[st.tabItem]
 	keepTab := false
 	if g != nil {
-		out := g.members[:0]
-		for _, m := range g.members {
-			if m != st {
-				out = append(out, m)
-			}
-		}
-		g.members = out
-		if len(g.members) > 0 {
+		_, empty := g.removeLeaf(st)
+		if !empty {
 			keepTab = true
 		} else {
 			delete(sessions.groups, st.tabItem)
@@ -1489,7 +1706,8 @@ func reattachToMain(sessions *sessionRegistry, st *sessionTab) {
 	tabItem := container.NewTabItem(label, contentObj)
 	st.tabItem = tabItem
 	sessions.mu.Lock()
-	sessions.groups[tabItem] = &paneGroup{tabItem: tabItem, members: []*sessionTab{st}}
+	leaf := &paneNode{session: st}
+	sessions.groups[tabItem] = &paneGroup{tabItem: tabItem, id: domain.NewID().String(), root: leaf, active: leaf}
 	sessions.mu.Unlock()
 	sessions.tabs.Append(tabItem)
 	sessions.tabs.Select(tabItem)
@@ -2518,13 +2736,44 @@ func persistWorkspace(b *Bindings, sessions *sessionRegistry) {
 	}
 	tabs := sessions.snapshot()
 	doc := appworkspace.Default()
+
+	// Build a session->group ID map by snapshotting the registry's
+	// groups under the lock so the per-tab loop below can attach the
+	// PaneGroup field consistently.
+	type groupInfo struct {
+		id   string
+		size int
+	}
+	sessions.mu.Lock()
+	sessionGroup := make(map[*sessionTab]groupInfo, len(sessions.items))
+	layouts := make([]appworkspace.PaneLayout, 0, len(sessions.groups))
+	for _, g := range sessions.groups {
+		leaves := g.leaves()
+		gi := groupInfo{id: g.id, size: len(leaves)}
+		for _, lf := range leaves {
+			sessionGroup[lf.session] = gi
+		}
+		if len(leaves) >= 2 {
+			layouts = append(layouts, appworkspace.PaneLayout{
+				GroupID: g.id,
+				Root:    snapshotPaneTree(g.root),
+			})
+		}
+	}
+	sessions.mu.Unlock()
+	doc.PaneLayouts = layouts
+
 	for _, st := range tabs {
-		doc.OpenTabs = append(doc.OpenTabs, appworkspace.TabState{
+		state := appworkspace.TabState{
 			ID:           st.handle,
 			ConnectionID: st.connID,
 			Title:        st.cv.Name,
 			LastUsedAt:   time.Now(),
-		})
+		}
+		if gi, ok := sessionGroup[st]; ok && gi.size > 1 {
+			state.PaneGroup = gi.id
+		}
+		doc.OpenTabs = append(doc.OpenTabs, state)
 	}
 	if selected := sessions.tabs.Selected(); selected != nil {
 		if st := sessions.findByTab(selected); st != nil {
@@ -2539,6 +2788,24 @@ func persistWorkspace(b *Bindings, sessions *sessionRegistry) {
 	}
 }
 
+// snapshotPaneTree converts a runtime paneNode tree into the persisted
+// workspace.PaneNode shape (using ConnectionID as the leaf identifier
+// so leaves remain matchable across restarts where session handles are
+// regenerated).
+func snapshotPaneTree(n *paneNode) *appworkspace.PaneNode {
+	if n == nil {
+		return nil
+	}
+	if n.isLeaf() {
+		return &appworkspace.PaneNode{ConnectionID: n.session.connID}
+	}
+	return &appworkspace.PaneNode{
+		Orientation: n.orientation,
+		A:           snapshotPaneTree(n.a),
+		B:           snapshotPaneTree(n.b),
+	}
+}
+
 func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 	if b == nil || b.workspace == nil {
 		return
@@ -2547,7 +2814,9 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 	if err != nil || len(ws.OpenTabs) == 0 {
 		return
 	}
-	// Hydrate one connection at a time on a goroutine so the UI is responsive.
+	// Hydrate one connection at a time on a goroutine so the UI is
+	// responsive. Once all sessions are open, regroup any persisted
+	// split layouts.
 	go func() {
 		for _, t := range ws.OpenTabs {
 			if t.ConnectionID == "" {
@@ -2556,7 +2825,135 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 			openSession(w, b, sessions, t.ConnectionID)
 			time.Sleep(150 * time.Millisecond)
 		}
+		if len(ws.PaneLayouts) > 0 {
+			// Allow openSession goroutines to finish attaching tabs
+			// before we regroup.
+			time.Sleep(500 * time.Millisecond)
+			fyne.Do(func() { restorePaneLayouts(sessions, ws.PaneLayouts) })
+		}
 	}()
+}
+
+// restorePaneLayouts walks the persisted PaneLayouts and merges the
+// matching connections' tabs into a single split-pane group per
+// layout. Must run on the UI goroutine.
+func restorePaneLayouts(sessions *sessionRegistry, layouts []appworkspace.PaneLayout) {
+	for _, ly := range layouts {
+		if ly.Root == nil {
+			continue
+		}
+		// Resolve all leaf connection IDs to live sessionTabs.
+		var connIDs []string
+		var collect func(n *appworkspace.PaneNode)
+		collect = func(n *appworkspace.PaneNode) {
+			if n == nil {
+				return
+			}
+			if n.ConnectionID != "" {
+				connIDs = append(connIDs, n.ConnectionID)
+				return
+			}
+			collect(n.A)
+			collect(n.B)
+		}
+		collect(ly.Root)
+		if len(connIDs) < 2 {
+			continue
+		}
+		sessionByConn := make(map[string]*sessionTab, len(connIDs))
+		sessions.mu.Lock()
+		for _, st := range sessions.items {
+			sessionByConn[st.connID] = st
+		}
+		sessions.mu.Unlock()
+		members := make([]*sessionTab, 0, len(connIDs))
+		for _, cid := range connIDs {
+			if st := sessionByConn[cid]; st != nil {
+				members = append(members, st)
+			}
+		}
+		if len(members) < 2 {
+			continue
+		}
+		host := members[0]
+		hostTab := host.tabItem
+		if hostTab == nil {
+			continue
+		}
+		// Detach the others from their current tabs (they're solo
+		// tabs at this point), reparent under the host group.
+		for _, st := range members[1:] {
+			if st.tabItem == nil || st.tabItem == hostTab {
+				continue
+			}
+			sessions.mu.Lock()
+			if g := sessions.groups[st.tabItem]; g != nil {
+				delete(sessions.groups, st.tabItem)
+			}
+			sessions.mu.Unlock()
+			sessions.tabs.Remove(st.tabItem)
+			st.tabItem = hostTab
+		}
+		// Build the runtime tree from the persisted shape.
+		var build func(n *appworkspace.PaneNode) *paneNode
+		build = func(n *appworkspace.PaneNode) *paneNode {
+			if n == nil {
+				return nil
+			}
+			if n.ConnectionID != "" {
+				st := sessionByConn[n.ConnectionID]
+				if st == nil {
+					return nil
+				}
+				return &paneNode{session: st}
+			}
+			a := build(n.A)
+			b := build(n.B)
+			if a == nil && b == nil {
+				return nil
+			}
+			if a == nil {
+				return b
+			}
+			if b == nil {
+				return a
+			}
+			branch := &paneNode{orientation: n.Orientation, a: a, b: b}
+			a.parent = branch
+			b.parent = branch
+			return branch
+		}
+		root := build(ly.Root)
+		if root == nil {
+			continue
+		}
+		// Pick first leaf as initial active.
+		var firstLeaf func(n *paneNode) *paneNode
+		firstLeaf = func(n *paneNode) *paneNode {
+			if n == nil {
+				return nil
+			}
+			if n.isLeaf() {
+				return n
+			}
+			if l := firstLeaf(n.a); l != nil {
+				return l
+			}
+			return firstLeaf(n.b)
+		}
+		sessions.mu.Lock()
+		g := sessions.groups[hostTab]
+		if g == nil {
+			g = &paneGroup{tabItem: hostTab, id: ly.GroupID}
+			sessions.groups[hostTab] = g
+		} else {
+			g.id = ly.GroupID
+		}
+		g.root = root
+		g.active = firstLeaf(root)
+		sessions.mu.Unlock()
+		g.rebuildLayout()
+	}
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -2710,7 +3107,7 @@ splitRightItem := fyne.NewMenuItem("Open in split right", func() { openSessionIn
 splitBelowItem := fyne.NewMenuItem("Open in split below", func() { openSessionInSplit(w, b, sessions, connID, "v") })
 canSplit := false
 if sel := sessions.tabs.Selected(); sel != nil {
-if g := sessions.groupFor(sel); g != nil && len(g.members) == 1 {
+if g := sessions.groupFor(sel); g != nil && g.root != nil {
 canSplit = true
 }
 }
