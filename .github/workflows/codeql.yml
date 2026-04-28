@@ -2,7 +2,7 @@ name: CodeQL
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   schedule:
     - cron: '37 4 * * 1'
@@ -12,30 +12,36 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    name: Analyze (Go)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
       actions: read
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [go, javascript-typescript]
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Go
-        if: matrix.language == 'go'
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.25.x'
+          cache: true
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev xorg-dev \
+            libxxf86vm-dev libxkbcommon-dev
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+          languages: go
+          build-mode: autobuild
+
       - name: Analyze
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:go"

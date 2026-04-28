@@ -1,14 +1,20 @@
 # Release workflow for goremote desktop binaries.
 #
-# Stages:
-#   1. build: cross-compile the desktop binary for every supported target.
+# Pipeline:
+#   1. build:        natively compile cmd/desktop on each target OS (CGO is
+#                    required by Fyne, so cross-compiling from one host is
+#                    not viable without per-target C toolchains).
 #   2. sign-windows: Authenticode-sign the .exe and produce an MSI via WiX.
-#   3. manifest: assemble update.json with per-target SHA-256, sign each
-#      target with the Ed25519 release key, upload as a release artifact.
+#   3. manifest:     assemble update.json with per-target SHA-256, sign with
+#                    the Ed25519 release key, upload as a release artifact.
 #
-# macOS notarization is intentionally absent at this stage - the hooks
-# are documented in installers/windows/README.md so they can be wired up
-# in a follow-on PR once a Developer ID certificate is available.
+# Only amd64 targets are produced today. linux-arm64 and windows-arm64
+# require additional cross-toolchain wiring and will be added once the
+# release surface stabilises.
+#
+# macOS notarization is intentionally absent at this stage — the hooks
+# are documented in installers/windows/README.md so they can be wired
+# up in a follow-on PR once a Developer ID certificate is available.
 #
 # Required secrets (see installers/windows/README.md):
 #   GOREMOTE_RELEASE_KEY      Ed25519 private key (base64) for update manifest
@@ -25,96 +31,146 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.13.0)'
+        description: 'Release version (e.g. 1.18.2)'
         required: true
         type: string
 
-jobs:
-  build:
-    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+permissions:
+  contents: read
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+env:
+  GO_VERSION: '1.25.x'
+
+jobs:
+  build-linux:
+    name: Build linux/amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev xorg-dev \
+            libxxf86vm-dev libxkbcommon-dev
 
       - name: Build cmd/desktop
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
+          CGO_ENABLED: '1'
           VERSION: ${{ inputs.version }}
         run: |
           mkdir -p dist
-          ext=""
-          if [ "$GOOS" = "windows" ]; then
-            ext=".exe"
-          fi
-          out="dist/goremote-${GOOS}-${GOARCH}${ext}"
-          go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "$out" ./cmd/desktop
-          ls -la dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION}" \
+            -o dist/goremote-linux-amd64 ./cmd/desktop
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: goremote-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          name: goremote-linux-amd64
+          path: dist/goremote-linux-amd64
+          if-no-files-found: error
+
+  build-darwin:
+    name: Build darwin/${{ matrix.goarch }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build cmd/desktop
+        env:
+          CGO_ENABLED: '1'
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION}" \
+            -o dist/goremote-darwin-${GOARCH} ./cmd/desktop
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goremote-darwin-${{ matrix.goarch }}
+          path: dist/goremote-darwin-${{ matrix.goarch }}
+          if-no-files-found: error
+
+  build-windows:
+    name: Build windows/amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build cmd/desktop
+        shell: pwsh
+        env:
+          CGO_ENABLED: '1'
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir dist | Out-Null
+          go build -trimpath `
+            -ldflags "-s -w -H windowsgui -X main.Version=$env:VERSION" `
+            -o dist\goremote-windows-amd64.exe .\cmd\desktop
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goremote-windows-amd64
+          path: dist/goremote-windows-amd64.exe
           if-no-files-found: error
 
   sign-windows:
     name: Sign Windows + build MSI
-    needs: build
+    needs: build-windows
     runs-on: windows-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
+    # Surface signing-related secrets as env vars so step-level `if:`
+    # guards can reference them — `secrets.*` is not available at that
+    # scope. Empty string when the secret isn't configured.
+    env:
+      PFX_B64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+      CERT_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: goremote-windows-${{ matrix.arch }}
+          name: goremote-windows-amd64
           path: dist
 
       - name: Decode signing certificate
-        env:
-          PFX_B64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+        if: ${{ env.PFX_B64 != '' }}
         shell: pwsh
         run: |
-          if (-not $env:PFX_B64) { Write-Host "no signing cert configured, skipping"; exit 0 }
           [System.IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:PFX_B64))
 
       - name: Authenticode-sign goremote.exe
-        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
-        env:
-          CERT_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        if: ${{ env.PFX_B64 != '' }}
         shell: pwsh
         run: |
-          $exe = Get-ChildItem dist\goremote-windows-${{ matrix.arch }}.exe | Select-Object -First 1
-          & "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" `
-            sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+          $exe = Get-ChildItem dist\goremote-windows-amd64.exe | Select-Object -First 1
+          $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+                       Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
             /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PW $exe.FullName
 
       - name: Install WiX
@@ -127,8 +183,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not $env:UPGRADE_CODE) { throw "WINDOWS_UPGRADE_CODE variable is not set" }
-          $exe = "dist\goremote-windows-${{ matrix.arch }}.exe"
-          # WiX wants an RTF; generate a minimal one if the repo doesn't ship one.
+          $exe = "dist\goremote-windows-amd64.exe"
           if (-not (Test-Path "installers\windows\license.rtf")) {
             "{\rtf1\ansi goremote - see LICENSE in source repository.}" | Out-File -Encoding ascii installers\windows\license.rtf
           }
@@ -138,38 +193,38 @@ jobs:
             -d "LicenseRtf=installers\windows\license.rtf" `
             -d "UpgradeCode=$env:UPGRADE_CODE" `
             -ext WixToolset.UI.wixext `
-            -arch ${{ matrix.arch == 'amd64' && 'x64' || 'arm64' }} `
-            -o "dist\goremote-${{ matrix.arch }}-$env:VERSION.msi"
+            -arch x64 `
+            -o "dist\goremote-amd64-$env:VERSION.msi"
 
       - name: Authenticode-sign MSI
-        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
-        env:
-          CERT_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        if: ${{ env.PFX_B64 != '' }}
         shell: pwsh
         run: |
-          $msi = Get-ChildItem "dist\goremote-${{ matrix.arch }}-${{ inputs.version }}.msi" | Select-Object -First 1
-          & "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" `
-            sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+          $msi = Get-ChildItem "dist\goremote-amd64-${{ inputs.version }}.msi" | Select-Object -First 1
+          $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+                       Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
             /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PW $msi.FullName
 
       - name: Upload signed artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: goremote-windows-${{ matrix.arch }}-signed
+          name: goremote-windows-amd64-signed
           path: dist/*
 
   manifest:
     name: Sign update manifest
-    needs: [build, sign-windows]
+    needs: [build-linux, build-darwin, build-windows, sign-windows]
     runs-on: ubuntu-latest
+    env:
+      RELEASE_KEY: ${{ secrets.GOREMOTE_RELEASE_KEY }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -186,25 +241,23 @@ jobs:
           targets='[]'
           add() {
             local file="$1" os="$2" arch="$3" url_name="$4"
-            [ -f "$file" ] || return 0
+            [ -f "$file" ] || { echo "skip: $file (not present)"; return 0; }
             local sum
             sum="$(sha256sum "$file" | cut -d' ' -f1)"
             targets="$(jq --arg os "$os" --arg arch "$arch" --arg url "${BASE_URL}/${VERSION}/${url_name}" --arg sha "$sum" \
               '. += [{os:$os,arch:$arch,url:$url,sha256:$sha}]' <<<"$targets")"
           }
-          add dist/goremote-linux-amd64/goremote-linux-amd64               linux   amd64 goremote-linux-amd64
-          add dist/goremote-linux-arm64/goremote-linux-arm64               linux   arm64 goremote-linux-arm64
-          add dist/goremote-darwin-amd64/goremote-darwin-amd64             darwin  amd64 goremote-darwin-amd64
-          add dist/goremote-darwin-arm64/goremote-darwin-arm64             darwin  arm64 goremote-darwin-arm64
-          add dist/goremote-windows-amd64-signed/goremote-windows-amd64.exe windows amd64 goremote-windows-amd64.exe
-          add dist/goremote-windows-arm64-signed/goremote-windows-arm64.exe windows arm64 goremote-windows-arm64.exe
+          add dist/goremote-linux-amd64/goremote-linux-amd64                 linux   amd64 goremote-linux-amd64
+          add dist/goremote-darwin-amd64/goremote-darwin-amd64               darwin  amd64 goremote-darwin-amd64
+          add dist/goremote-darwin-arm64/goremote-darwin-arm64               darwin  arm64 goremote-darwin-arm64
+          add dist/goremote-windows-amd64-signed/goremote-windows-amd64.exe  windows amd64 goremote-windows-amd64.exe
           jq --arg v "$VERSION" --argjson t "$targets" \
             '{version:$v, notes:"", targets:$t}' \
             <<<'{}' > update.json
           cat update.json
 
       - name: Sign manifest
-        if: ${{ secrets.GOREMOTE_RELEASE_KEY != '' }}
+        if: ${{ env.RELEASE_KEY != '' }}
         env:
           GOREMOTE_RELEASE_KEY: ${{ secrets.GOREMOTE_RELEASE_KEY }}
         run: |

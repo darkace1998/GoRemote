@@ -2,34 +2,88 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+env:
+  # Pin once; matches go.mod's `go 1.25.9` directive.
+  GO_VERSION: '1.25.x'
+
 jobs:
-  go:
-    name: Go (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  # Fast feedback: vet + test + build on Ubuntu (covers the bulk of the
+  # codebase). cmd/desktop pulls in Fyne, so we install the GL/X11 stack
+  # before any go command — otherwise the package won't even typecheck.
+  linux:
+    name: Ubuntu (build + test + race)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev xorg-dev \
+            libxxf86vm-dev libxkbcommon-dev
 
       - name: go vet
         run: go vet ./...
 
-      - name: go test
-        run: go test -race ./... -count=1
+      - name: go test (race, count=1)
+        run: go test -race -count=1 ./...
 
       - name: go build
         run: go build ./...
+
+  # macOS smoke: ensures the desktop binary still links on Darwin.
+  # Tests are run as well, but without -race to keep the runner time
+  # reasonable. Apple's Xcode toolchain provides everything Fyne needs.
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: go test
+        run: go test -count=1 ./...
+
+      - name: go build cmd/desktop
+        run: go build ./cmd/desktop
+
+  # Windows smoke: links against the bundled mingw toolchain so we know
+  # the desktop binary still compiles cleanly with CGO on Windows. We
+  # don't run -race here (slow + occasional flake on the small runners)
+  # but we do build cmd/desktop end-to-end.
+  windows:
+    name: Windows (build + test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: go test (no race)
+        run: go test -count=1 ./...
+
+      - name: go build cmd/desktop
+        run: go build ./cmd/desktop

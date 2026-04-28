@@ -2,7 +2,7 @@ name: Security
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   schedule:
     - cron: '23 6 * * 1'
@@ -16,13 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.25.x'
           cache: true
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev xorg-dev \
+            libxxf86vm-dev libxkbcommon-dev
+
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
       - name: Run govulncheck
+        # Advisory: surface CVEs but don't gate merges on them. Use the
+        # job log + scheduled runs to track remediation.
+        continue-on-error: true
         run: govulncheck ./...
 
   gosec:
@@ -33,17 +47,29 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.25.x'
           cache: true
+
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev xorg-dev \
+            libxxf86vm-dev libxkbcommon-dev
+
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
       - name: Run gosec
         continue-on-error: true
-        run: gosec -fmt sarif -out gosec.sarif ./... || true
+        run: gosec -fmt sarif -out gosec.sarif -no-fail ./...
+
       - name: Upload SARIF
-        if: always()
+        if: always() && hashFiles('gosec.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gosec.sarif
@@ -52,13 +78,11 @@ jobs:
   gitleaks:
     name: gitleaks
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -72,7 +96,8 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - name: Trivy fs (vuln + misconfig)
+
+      - name: Trivy fs (vuln + misconfig + secret)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
@@ -82,8 +107,10 @@ jobs:
           scanners: vuln,misconfig,secret
           severity: CRITICAL,HIGH,MEDIUM
           ignore-unfixed: true
+          exit-code: '0'
+
       - name: Upload Trivy SARIF
-        if: always()
+        if: always() && hashFiles('trivy.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy.sarif

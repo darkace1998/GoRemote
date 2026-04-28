@@ -2,7 +2,7 @@ name: Lint
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 permissions:
@@ -10,17 +10,29 @@ permissions:
 
 jobs:
   golangci:
-    name: golangci-lint
+    name: golangci-lint (v2)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.25.x'
           cache: true
+
+      # Required for cmd/desktop (Fyne) to typecheck during linting.
+      - name: Install Fyne build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev xorg-dev \
+            libxxf86vm-dev libxkbcommon-dev
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
-        continue-on-error: true
         with:
-          version: latest
+          # The repository ships a v2-schema .golangci.yml; pin a v2 binary.
+          version: v2.6.0
           args: --timeout=5m
