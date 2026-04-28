@@ -206,6 +206,24 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 			openSessionInSplit(w, b, sessions, id, "v")
 		}
 	})
+	// Ctrl+Shift+PageUp / PageDown move the active tab one slot left
+	// or right respectively, matching browser conventions. The tabs
+	// container is a DocTabs whose Items slice is mutable; we swap and
+	// refresh, then persist the new visual order.
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyPageUp,
+		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
+	}, func(_ fyne.Shortcut) {
+		moveCurrentTab(sessions, -1)
+		persistWorkspace(b, sessions)
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyPageDown,
+		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
+	}, func(_ fyne.Shortcut) {
+		moveCurrentTab(sessions, +1)
+		persistWorkspace(b, sessions)
+	})
 
 	// Confirm-on-close: ask the user when there are open sessions or when
 	// the user has explicitly opted into confirmation.
@@ -1450,8 +1468,73 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.LoginIcon(), func() { showCredentialsDialog(w, b) }),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { showSettingsDialog(w, b, a) }),
+		widget.NewToolbarAction(theme.StorageIcon(), func() { runSyncNow(w, b) }),
+		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() { runUpdateCheck(w, b) }),
 		widget.NewToolbarAction(theme.InfoIcon(), func() { showAboutDialog(w) }),
 	)
+}
+
+// runSyncNow triggers an explicit git-sync commit-and-push in a
+// background goroutine. The result is surfaced via a non-blocking
+// dialog on the UI thread.
+func runSyncNow(w fyne.Window, b *Bindings) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if err := b.SyncNow(ctx); err != nil {
+			fyne.Do(func() { dialog.ShowError(err, w) })
+			return
+		}
+		fyne.Do(func() {
+			dialog.ShowInformation("Sync", "Workspace committed and pushed.", w)
+		})
+	}()
+}
+
+// runUpdateCheck checks the configured update manifest and, if a newer
+// version is available and verified, offers the user an in-place
+// upgrade.
+func runUpdateCheck(w fyne.Window, b *Bindings) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		info, err := b.CheckForUpdate(ctx)
+		if err != nil {
+			fyne.Do(func() { dialog.ShowError(err, w) })
+			return
+		}
+		if !info.Available {
+			fyne.Do(func() {
+				dialog.ShowInformation("Up to date",
+					fmt.Sprintf("goremote %s is the latest version.", info.CurrentVersion), w)
+			})
+			return
+		}
+		msg := fmt.Sprintf("Version %s is available (current: %s).\n\nDownload and install now?",
+			info.LatestVersion, info.CurrentVersion)
+		if info.Notes != "" {
+			msg += "\n\nNotes:\n" + info.Notes
+		}
+		fyne.Do(func() {
+			dialog.ShowConfirm("Update available", msg, func(ok bool) {
+				if !ok {
+					return
+				}
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+					defer cancel()
+					if err := b.ApplyUpdate(ctx); err != nil {
+						fyne.Do(func() { dialog.ShowError(err, w) })
+						return
+					}
+					fyne.Do(func() {
+						dialog.ShowInformation("Update installed",
+							"Restart goremote to start the new version.", w)
+					})
+				}()
+			}, w)
+		})
+	}()
 }
 
 // showRecentsMenu pops a list of recently-opened connections, most-recent
@@ -2051,6 +2134,48 @@ func closeCurrentSession(sessions *sessionRegistry) {
 			slog.Warn("close session", "handle", st.handle, "err", err)
 		}
 	}()
+}
+
+// moveCurrentTab swaps the currently selected tab with its neighbour
+// in the given direction (-1 = left, +1 = right). It is a no-op when
+// the swap would move out of bounds or no tab is selected.
+//
+// container.DocTabs.Items is a mutable slice; mutating it then calling
+// Refresh is the supported way to reorder tabs in Fyne 2.7. We hold
+// the registry lock across the swap so concurrent add/remove paths see
+// a consistent slice.
+func moveCurrentTab(sessions *sessionRegistry, dir int) {
+	if sessions == nil || sessions.tabs == nil {
+		return
+	}
+	selected := sessions.tabs.Selected()
+	if selected == nil {
+		return
+	}
+	sessions.mu.Lock()
+	items := sessions.tabs.Items
+	idx := -1
+	for i, it := range items {
+		if it == selected {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		sessions.mu.Unlock()
+		return
+	}
+	target := idx + dir
+	if target < 0 || target >= len(items) {
+		sessions.mu.Unlock()
+		return
+	}
+	items[idx], items[target] = items[target], items[idx]
+	sessions.mu.Unlock()
+	fyne.Do(func() {
+		sessions.tabs.Refresh()
+		sessions.tabs.Select(selected)
+	})
 }
 
 // reconnectCurrentSession closes the current tab's session and immediately
@@ -3007,6 +3132,25 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 	}
 	logLevelSelect.SetSelected(s.LogLevel)
 
+	gitSyncCheck := widget.NewCheck("", nil)
+	gitSyncCheck.SetChecked(s.GitSyncEnabled)
+	gitRemoteEntry := widget.NewEntry()
+	gitRemoteEntry.SetText(s.GitSyncRemote)
+	gitRemoteEntry.SetPlaceHolder("git@github.com:user/workspace.git (blank = local-only)")
+	gitBranchEntry := widget.NewEntry()
+	gitBranchEntry.SetText(s.GitSyncBranch)
+	gitBranchEntry.SetPlaceHolder("main")
+
+	autoUpdateCheck := widget.NewCheck("", nil)
+	autoUpdateCheck.SetChecked(s.AutoUpdateEnabled)
+	autoUpdateURLEntry := widget.NewEntry()
+	autoUpdateURLEntry.SetText(s.AutoUpdateURL)
+	autoUpdateURLEntry.SetPlaceHolder("https://example.com/goremote/manifest.json")
+	autoUpdateKeyEntry := widget.NewMultiLineEntry()
+	autoUpdateKeyEntry.SetText(s.AutoUpdatePublicKey)
+	autoUpdateKeyEntry.SetPlaceHolder("Ed25519 public key (base64)")
+	autoUpdateKeyEntry.Wrapping = fyne.TextWrapBreak
+
 	items := []*widget.FormItem{
 		widget.NewFormItem("Theme", themeSelect),
 		widget.NewFormItem("Font family", fontFamilyEntry),
@@ -3017,6 +3161,12 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 		widget.NewFormItem("Reconnect max attempts", reconMaxEntry),
 		widget.NewFormItem("Reconnect delay (ms)", reconDelayEntry),
 		widget.NewFormItem("Anonymous telemetry", telemetryCheck),
+		widget.NewFormItem("Git sync (commit on save)", gitSyncCheck),
+		widget.NewFormItem("Git remote URL", gitRemoteEntry),
+		widget.NewFormItem("Git branch", gitBranchEntry),
+		widget.NewFormItem("Auto-update enabled", autoUpdateCheck),
+		widget.NewFormItem("Update manifest URL", autoUpdateURLEntry),
+		widget.NewFormItem("Update public key (base64)", autoUpdateKeyEntry),
 	}
 	d := dialog.NewForm("Settings", "Save", "Cancel", items, func(ok bool) {
 		if !ok {
@@ -3046,6 +3196,12 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 		s.ReconnectMaxN = rmax
 		s.ReconnectDelayMs = rdelay
 		s.TelemetryEnabled = telemetryCheck.Checked
+		s.GitSyncEnabled = gitSyncCheck.Checked
+		s.GitSyncRemote = strings.TrimSpace(gitRemoteEntry.Text)
+		s.GitSyncBranch = strings.TrimSpace(gitBranchEntry.Text)
+		s.AutoUpdateEnabled = autoUpdateCheck.Checked
+		s.AutoUpdateURL = strings.TrimSpace(autoUpdateURLEntry.Text)
+		s.AutoUpdatePublicKey = strings.TrimSpace(autoUpdateKeyEntry.Text)
 		updated, err := b.UpdateSettings(ctx, s)
 		if err != nil {
 			dialog.ShowError(err, w)
@@ -3129,8 +3285,28 @@ func persistWorkspace(b *Bindings, sessions *sessionRegistry) {
 			})
 		}
 	}
+	// Capture the visual order of tabs (DocTabs.Items) under the same
+	// lock so the persisted OpenTabs slice matches what the user sees.
+	visualOrder := make(map[*container.TabItem]int, len(sessions.tabs.Items))
+	for i, it := range sessions.tabs.Items {
+		visualOrder[it] = i
+	}
 	sessions.mu.Unlock()
 	doc.PaneLayouts = layouts
+
+	// Sort the registry snapshot by visual tab index so duplicate-tab
+	// orderings (split panes share a tab) collapse stably.
+	sort.SliceStable(tabs, func(i, j int) bool {
+		ai, aok := visualOrder[tabs[i].tabItem]
+		bi, bok := visualOrder[tabs[j].tabItem]
+		if !aok {
+			return false
+		}
+		if !bok {
+			return true
+		}
+		return ai < bi
+	})
 
 	for _, st := range tabs {
 		state := appworkspace.TabState{

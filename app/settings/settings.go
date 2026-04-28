@@ -50,7 +50,22 @@ type Settings struct {
 	ReconnectDelayMs int       `json:"reconnectDelayMs"`
 	TelemetryEnabled bool      `json:"telemetryEnabled"`
 	LogLevel         string    `json:"logLevel"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+
+	// Git sync — when enabled, the configured workspace directory is
+	// initialised as a git repo and a commit-and-push is fired on every
+	// successful Save. Push is skipped when GitSyncRemote is empty.
+	GitSyncEnabled bool   `json:"gitSyncEnabled,omitempty"`
+	GitSyncRemote  string `json:"gitSyncRemote,omitempty"`
+	GitSyncBranch  string `json:"gitSyncBranch,omitempty"`
+
+	// Auto-update — periodic check against AutoUpdateURL for a manifest
+	// signed with AutoUpdatePublicKey (base64 ed25519). When enabled and
+	// a newer version is found, the user is offered an in-app upgrade.
+	AutoUpdateEnabled   bool   `json:"autoUpdateEnabled,omitempty"`
+	AutoUpdateURL       string `json:"autoUpdateUrl,omitempty"`
+	AutoUpdatePublicKey string `json:"autoUpdatePublicKey,omitempty"`
+
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Default returns the baseline settings for a fresh install.
@@ -96,6 +111,14 @@ func (s *Settings) Validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("invalid logLevel %q: want one of %s|%s|%s|%s|%s",
 			s.LogLevel, LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError))
+	}
+	if s.AutoUpdateEnabled {
+		if s.AutoUpdateURL == "" {
+			errs = append(errs, fmt.Errorf("autoUpdateUrl required when autoUpdateEnabled is true"))
+		}
+		if s.AutoUpdatePublicKey == "" {
+			errs = append(errs, fmt.Errorf("autoUpdatePublicKey required when autoUpdateEnabled is true"))
+		}
 	}
 	if len(errs) == 0 {
 		return nil

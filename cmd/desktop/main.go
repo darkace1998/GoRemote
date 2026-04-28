@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/goremote/goremote/app/settings"
+	gosync "github.com/goremote/goremote/app/sync"
+	"github.com/goremote/goremote/app/update"
 	"github.com/goremote/goremote/app/workspace"
 	pluginhost "github.com/goremote/goremote/host/plugin"
 	"github.com/goremote/goremote/internal/app"
@@ -69,6 +71,7 @@ type Bindings struct {
 	settings  settings.Store
 	workspace workspace.Store
 	logLevel  *slog.LevelVar
+	stateDir  string
 }
 
 // NewBindings constructs a Bindings value wrapping a started App.
@@ -98,6 +101,14 @@ func (b *Bindings) WithWorkspaceStore(s workspace.Store) *Bindings {
 // settings UI can change verbosity without restarting the application.
 func (b *Bindings) WithLogLevelVar(v *slog.LevelVar) *Bindings {
 	b.logLevel = v
+	return b
+}
+
+// WithStateDir records the on-disk directory the app stores its
+// configuration / inventory in. It is used by optional features like
+// the git sync backend to know what directory to mirror.
+func (b *Bindings) WithStateDir(dir string) *Bindings {
+	b.stateDir = dir
 	return b
 }
 
@@ -479,11 +490,164 @@ func (b *Bindings) GetWorkspace(ctx context.Context) (workspace.Workspace, error
 }
 
 // SaveWorkspace validates and persists the supplied workspace.
+//
+// On a successful local save, if the user has enabled git sync in their
+// settings, the workspace directory is committed and (best-effort)
+// pushed to the configured remote. Sync failures are logged but never
+// returned — they must not block the UI.
 func (b *Bindings) SaveWorkspace(ctx context.Context, w workspace.Workspace) error {
 	if b.workspace == nil {
 		return errors.New("workspace store not initialised")
 	}
-	return b.workspace.Save(ctx, w)
+	if err := b.workspace.Save(ctx, w); err != nil {
+		return err
+	}
+	go b.maybeGitSync("workspace updated")
+	return nil
+}
+
+// maybeGitSync runs the git-sync backend if the user has enabled it.
+// Best-effort: any failure is logged but never propagates. Runs on its
+// own context with a fresh timeout so it does not extend the caller's
+// save deadline.
+func (b *Bindings) maybeGitSync(msg string) {
+	if b.stateDir == "" || b.settings == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	s, err := b.settings.Get(ctx)
+	if err != nil || !s.GitSyncEnabled {
+		return
+	}
+	g, err := gosync.New(gosync.Config{Dir: b.stateDir, Remote: s.GitSyncRemote, Branch: s.GitSyncBranch})
+	if err != nil {
+		b.logger.Warn("git sync: new", slog.String("err", err.Error()))
+		return
+	}
+	if !g.Available() {
+		b.logger.Warn("git sync: git binary not available on PATH")
+		return
+	}
+	if err := g.CommitAndPush(ctx, msg); err != nil {
+		b.logger.Warn("git sync: commit/push", slog.String("err", err.Error()))
+		return
+	}
+	b.logger.Info("git sync: ok")
+}
+
+// SyncNow runs the git sync backend immediately, regardless of the
+// enabled flag. The flag still controls whether saves auto-trigger
+// sync; this method is the explicit "Sync now" toolbar action.
+func (b *Bindings) SyncNow(ctx context.Context) error {
+	if b.stateDir == "" {
+		return errors.New("state directory not configured")
+	}
+	if b.settings == nil {
+		return errors.New("settings store not configured")
+	}
+	s, err := b.settings.Get(ctx)
+	if err != nil {
+		return err
+	}
+	g, err := gosync.New(gosync.Config{Dir: b.stateDir, Remote: s.GitSyncRemote, Branch: s.GitSyncBranch})
+	if err != nil {
+		return err
+	}
+	if !g.Available() {
+		return errors.New("git binary not available on PATH")
+	}
+	return g.CommitAndPush(ctx, "goremote: manual sync")
+}
+
+// UpdateInfo summarises the result of CheckForUpdate for the UI.
+type UpdateInfo struct {
+	Available      bool   `json:"available"`
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	Notes          string `json:"notes,omitempty"`
+}
+
+// CheckForUpdate fetches the configured update manifest, verifies the
+// signature against the configured public key, and reports whether a
+// newer version is available. Returns an error when settings are
+// missing/invalid; an "available=false" result is never an error.
+func (b *Bindings) CheckForUpdate(ctx context.Context) (UpdateInfo, error) {
+	if b.settings == nil {
+		return UpdateInfo{}, errors.New("settings store not configured")
+	}
+	s, err := b.settings.Get(ctx)
+	if err != nil {
+		return UpdateInfo{}, err
+	}
+	if s.AutoUpdateURL == "" || s.AutoUpdatePublicKey == "" {
+		return UpdateInfo{}, errors.New("auto-update URL or public key not configured")
+	}
+	m, err := update.FetchManifest(ctx, s.AutoUpdateURL)
+	if err != nil {
+		return UpdateInfo{}, err
+	}
+	tgt, err := m.SelectTarget()
+	if err != nil {
+		return UpdateInfo{}, err
+	}
+	if err := tgt.VerifySignature(m.Version, s.AutoUpdatePublicKey); err != nil {
+		return UpdateInfo{}, err
+	}
+	current := strings.TrimSpace(currentAppVersion())
+	out := UpdateInfo{CurrentVersion: current, LatestVersion: m.Version, Notes: m.Notes}
+	out.Available = update.IsNewer(m.Version, current)
+	return out, nil
+}
+
+// ApplyUpdate downloads the verified target and replaces the running
+// binary in place. The caller is expected to inform the user to
+// restart the application after this returns nil.
+func (b *Bindings) ApplyUpdate(ctx context.Context) error {
+	if b.settings == nil {
+		return errors.New("settings store not configured")
+	}
+	s, err := b.settings.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if s.AutoUpdateURL == "" || s.AutoUpdatePublicKey == "" {
+		return errors.New("auto-update URL or public key not configured")
+	}
+	m, err := update.FetchManifest(ctx, s.AutoUpdateURL)
+	if err != nil {
+		return err
+	}
+	tgt, err := m.SelectTarget()
+	if err != nil {
+		return err
+	}
+	if err := tgt.VerifySignature(m.Version, s.AutoUpdatePublicKey); err != nil {
+		return err
+	}
+	tmpDir := os.TempDir()
+	if b.stateDir != "" {
+		tmpDir = filepath.Join(b.stateDir, "updates")
+	}
+	path, err := update.Download(ctx, tgt, tmpDir)
+	if err != nil {
+		return err
+	}
+	if err := update.SwapInPlace(path); err != nil {
+		return err
+	}
+	b.logger.Info("update: applied", slog.String("version", m.Version))
+	return nil
+}
+
+// currentAppVersion is overridden in main.go via the linker (-X
+// main.Version). Keeping it as a function lets the bindings stay
+// independent of package-level state.
+func currentAppVersion() string {
+	if Version == "" {
+		return "0.0.0"
+	}
+	return Version
 }
 
 // --- Credential providers ----------------------------------------------
@@ -699,7 +863,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	bindings := NewBindings(a).WithLogLevelVar(levelVar)
+	bindings := NewBindings(a).WithLogLevelVar(levelVar).WithStateDir(dir)
+
+	// Best-effort: clean up any leftover .old executable from a prior
+	// in-place update. Runs once, no error.
+	update.CleanupOld()
 
 	// Subscribe to the app event bus and log lifecycle events. Without
 	// this, errors published as Event{Kind: EventError} (e.g. SSH auth
