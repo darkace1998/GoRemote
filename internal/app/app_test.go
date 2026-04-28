@@ -507,3 +507,69 @@ func TestImportMRemoteNGCSV(t *testing.T) {
 		t.Fatalf("expected >=2 imported, got %d", res.Imported)
 	}
 }
+
+func TestToggleFavoriteAndListFavorites(t *testing.T) {
+a, _ := newTestApp(t)
+defer a.Shutdown(context.Background())
+ctx := context.Background()
+if err := a.Start(ctx); err != nil {
+t.Fatalf("start: %v", err)
+}
+c1, _ := a.CreateConnection(ctx, domain.NilID, ConnectionOpts{
+Name: "alpha", ProtocolID: "io.goremote.protocol.ssh", Host: "h1",
+})
+c2, _ := a.CreateConnection(ctx, domain.NilID, ConnectionOpts{
+Name: "beta", ProtocolID: "io.goremote.protocol.ssh", Host: "h2",
+})
+_, _ = a.CreateConnection(ctx, domain.NilID, ConnectionOpts{
+Name: "gamma", ProtocolID: "io.goremote.protocol.ssh", Host: "h3",
+})
+if favs := a.ListFavorites(ctx); len(favs) != 0 {
+t.Fatalf("expected 0 favorites, got %d", len(favs))
+}
+on, err := a.ToggleFavorite(ctx, c1)
+if err != nil || !on {
+t.Fatalf("ToggleFavorite c1 = %v, %v; want true, nil", on, err)
+}
+on, _ = a.ToggleFavorite(ctx, c2)
+if !on {
+t.Fatal("expected c2 favorite=true")
+}
+favs := a.ListFavorites(ctx)
+if len(favs) != 2 {
+t.Fatalf("expected 2 favorites, got %d", len(favs))
+}
+if favs[0].Name != "alpha" || favs[1].Name != "beta" {
+t.Errorf("unsorted favorites: %v", favs)
+}
+on, _ = a.ToggleFavorite(ctx, c1)
+if on {
+t.Fatal("expected c1 favorite=false after second toggle")
+}
+favs = a.ListFavorites(ctx)
+if len(favs) != 1 || favs[0].Name != "beta" {
+t.Fatalf("after untoggle: %v", favs)
+}
+}
+
+func TestUpdateConnectionFavoritePatch(t *testing.T) {
+a, _ := newTestApp(t)
+defer a.Shutdown(context.Background())
+ctx := context.Background()
+_ = a.Start(ctx)
+cid, _ := a.CreateConnection(ctx, domain.NilID, ConnectionOpts{
+Name: "x", ProtocolID: "io.goremote.protocol.ssh", Host: "h", Favorite: true,
+})
+view, err := a.GetConnection(ctx, cid)
+if err != nil || !view.Favorite {
+t.Fatalf("GetConnection favorite=%v err=%v; want true, nil", view.Favorite, err)
+}
+off := false
+if err := a.UpdateConnection(ctx, cid, ConnectionPatch{Favorite: &off}); err != nil {
+t.Fatalf("update: %v", err)
+}
+view, _ = a.GetConnection(ctx, cid)
+if view.Favorite {
+t.Errorf("favorite still true after patch")
+}
+}

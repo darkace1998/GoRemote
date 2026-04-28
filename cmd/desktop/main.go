@@ -270,6 +270,88 @@ func (b *Bindings) Search(ctx context.Context, q app.SearchQuery) []app.NodeView
 	return b.app.Search(ctx, q)
 }
 
+// ToggleFavorite flips the favorite flag on a connection. Returns the new
+// state. Errors when the id does not resolve to a connection.
+func (b *Bindings) ToggleFavorite(ctx context.Context, id string) (bool, error) {
+	nid, err := parseID(id)
+	if err != nil {
+		return false, err
+	}
+	logging.Trace(b.logger, "tree.ToggleFavorite", slog.String("id", id))
+	state, err := b.app.ToggleFavorite(ctx, nid)
+	if err != nil {
+		b.logger.Debug("tree.ToggleFavorite failed", slog.String("id", id), slog.String("err", err.Error()))
+		return false, err
+	}
+	b.logger.Debug("tree.ToggleFavorite ok", slog.String("id", id), slog.Bool("favorite", state))
+	return state, nil
+}
+
+// ListFavorites returns every connection whose Favorite flag is set.
+func (b *Bindings) ListFavorites(ctx context.Context) []*app.NodeView {
+	return b.app.ListFavorites(ctx)
+}
+
+// TouchRecent records a fresh open of the given connection in the
+// workspace's recents list. Best-effort: errors are logged but not
+// returned to the caller (a missing recent must never block opening
+// a session).
+func (b *Bindings) TouchRecent(ctx context.Context, connectionID string) {
+	if b.workspace == nil || connectionID == "" {
+		return
+	}
+	w, err := b.workspace.Load(ctx)
+	if err != nil {
+		b.logger.Debug("recents: load failed", slog.String("err", err.Error()))
+		return
+	}
+	w.TouchRecent(connectionID, time.Now())
+	if err := b.workspace.Save(ctx, w); err != nil {
+		b.logger.Debug("recents: save failed", slog.String("err", err.Error()))
+	}
+}
+
+// ListRecents returns the workspace's recents list (most-recent-first,
+// bounded to workspace.MaxRecents). Connection IDs that no longer
+// resolve are filtered out.
+func (b *Bindings) ListRecents(ctx context.Context) []app.NodeView {
+	if b.workspace == nil {
+		return nil
+	}
+	w, err := b.workspace.Load(ctx)
+	if err != nil || len(w.Recents) == 0 {
+		return nil
+	}
+	out := make([]app.NodeView, 0, len(w.Recents))
+	for _, r := range w.Recents {
+		nid, err := parseID(r.ConnectionID)
+		if err != nil {
+			continue
+		}
+		view, err := b.app.GetConnection(ctx, nid)
+		if err != nil {
+			continue
+		}
+		out = append(out, app.NodeView{
+			ID:          view.ID,
+			Kind:        "connection",
+			Name:        view.Name,
+			ParentID:    view.ParentID,
+			Description: view.Description,
+			Tags:        view.Tags,
+			Icon:        view.Icon,
+			Color:       view.Color,
+			Environment: view.Environment,
+			Favorite:    view.Favorite,
+			Protocol:    view.Protocol,
+			Host:        view.Host,
+			Port:        view.Port,
+			Username:    view.Username,
+		})
+	}
+	return out
+}
+
 // --- Session commands ---------------------------------------------------
 
 // OpenSession starts a session for a connection and returns the handle.
@@ -485,7 +567,10 @@ type ConnectionInput struct {
 	Description   string             `json:"description"`
 	Tags          []string           `json:"tags"`
 	Settings      map[string]any     `json:"settings"`
+	Icon          string             `json:"icon,omitempty"`
+	Color         string             `json:"color,omitempty"`
 	Environment   string             `json:"environment"`
+	Favorite      bool               `json:"favorite,omitempty"`
 }
 
 // CredentialRefInput is the JSON form of credential.Reference.
@@ -506,7 +591,10 @@ func (in ConnectionInput) toAppOpts() app.ConnectionOpts {
 		Description:   in.Description,
 		Tags:          in.Tags,
 		Settings:      in.Settings,
+		Icon:          in.Icon,
+		Color:         in.Color,
 		Environment:   in.Environment,
+		Favorite:      in.Favorite,
 	}
 }
 
@@ -522,7 +610,10 @@ type ConnectionPatchInput struct {
 	Description   *string             `json:"description,omitempty"`
 	Tags          *[]string           `json:"tags,omitempty"`
 	Settings      *map[string]any     `json:"settings,omitempty"`
+	Icon          *string             `json:"icon,omitempty"`
+	Color         *string             `json:"color,omitempty"`
 	Environment   *string             `json:"environment,omitempty"`
+	Favorite      *bool               `json:"favorite,omitempty"`
 }
 
 func (p ConnectionPatchInput) toAppPatch() app.ConnectionPatch {
@@ -535,7 +626,10 @@ func (p ConnectionPatchInput) toAppPatch() app.ConnectionPatch {
 		Description: p.Description,
 		Tags:        p.Tags,
 		Settings:    p.Settings,
+		Icon:        p.Icon,
+		Color:       p.Color,
 		Environment: p.Environment,
+		Favorite:    p.Favorite,
 	}
 	if p.AuthMethod != nil {
 		am := protocol.AuthMethod(*p.AuthMethod)

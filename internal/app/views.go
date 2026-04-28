@@ -16,6 +16,7 @@ type NodeView struct {
 	Icon        string      `json:"icon,omitempty"`
 	Color       string      `json:"color,omitempty"`
 	Environment string      `json:"environment,omitempty"`
+	Favorite    bool        `json:"favorite,omitempty"`
 	Protocol    string      `json:"protocol,omitempty"`
 	Host        string      `json:"host,omitempty"`
 	Port        int         `json:"port,omitempty"`
@@ -47,6 +48,7 @@ type ConnectionView struct {
 	Icon          string            `json:"icon,omitempty"`
 	Color         string            `json:"color,omitempty"`
 	Environment   string            `json:"environment,omitempty"`
+	Favorite      bool              `json:"favorite,omitempty"`
 	Protocol      string            `json:"protocol,omitempty"`
 	Host          string            `json:"host,omitempty"`
 	Port          int               `json:"port,omitempty"`
@@ -109,6 +111,7 @@ func connectionNodeView(c *domain.ConnectionNode) *NodeView {
 		Icon:        c.Icon,
 		Color:       c.Color,
 		Environment: c.Environment,
+		Favorite:    c.Favorite,
 		Protocol:    c.ProtocolID,
 		Host:        c.Host,
 		Port:        c.Port,

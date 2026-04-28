@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
+	"strings"
 
 	"github.com/goremote/goremote/internal/domain"
 	mremoteng "github.com/goremote/goremote/internal/import/mremoteng"
@@ -48,6 +50,7 @@ type ConnectionOpts struct {
 	Icon          string
 	Color         string
 	Environment   string
+	Favorite      bool
 	Inheritance   domain.InheritanceProfile
 }
 
@@ -67,6 +70,7 @@ type ConnectionPatch struct {
 	Icon          *string
 	Color         *string
 	Environment   *string
+	Favorite      *bool
 	Inheritance   *domain.InheritanceProfile
 }
 
@@ -143,6 +147,7 @@ func (a *App) CreateConnection(ctx context.Context, parent domain.ID, opts Conne
 		Icon:          opts.Icon,
 		Color:         opts.Color,
 		Environment:   opts.Environment,
+		Favorite:      opts.Favorite,
 		Inheritance:   opts.Inheritance,
 		CreatedAt:     a.now(),
 		UpdatedAt:     a.now(),
@@ -211,6 +216,9 @@ func (a *App) UpdateConnection(ctx context.Context, id domain.ID, patch Connecti
 	if patch.Environment != nil {
 		c.Environment = *patch.Environment
 	}
+	if patch.Favorite != nil {
+		c.Favorite = *patch.Favorite
+	}
 	if patch.Inheritance != nil {
 		c.Inheritance = *patch.Inheritance
 	}
@@ -223,6 +231,54 @@ func (a *App) UpdateConnection(ctx context.Context, id domain.ID, patch Connecti
 		NodeKind: string(domain.NodeKindConnection), Name: name,
 	})
 	return nil
+}
+
+// ToggleFavorite flips the Favorite flag on the connection with the
+// given id. Returns the new state. The command is its own publish
+// event so the UI can refresh the favorites virtual folder without
+// re-walking the entire tree.
+func (a *App) ToggleFavorite(ctx context.Context, id domain.ID) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	a.treeMu.Lock()
+	c, err := a.tree.Connection(id)
+	if err != nil {
+		a.treeMu.Unlock()
+		return false, err
+	}
+	c.Favorite = !c.Favorite
+	c.UpdatedAt = a.now()
+	state := c.Favorite
+	name, parent := c.Name, c.ParentID
+	a.treeMu.Unlock()
+	a.markDirty()
+	a.publish(Event{
+		Kind: EventNodeUpdated, NodeID: id, ParentID: parent,
+		NodeKind: string(domain.NodeKindConnection), Name: name,
+	})
+	return state, nil
+}
+
+// ListFavorites returns NodeView projections of every connection
+// whose Favorite flag is set, sorted by name (case-insensitive).
+func (a *App) ListFavorites(ctx context.Context) []*NodeView {
+	if err := ctx.Err(); err != nil {
+		return nil
+	}
+	a.treeMu.RLock()
+	defer a.treeMu.RUnlock()
+	out := []*NodeView{}
+	_ = a.tree.Walk(func(n domain.Node) error {
+		if c, ok := n.(*domain.ConnectionNode); ok && c.Favorite {
+			out = append(out, connectionNodeView(c))
+		}
+		return nil
+	})
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	return out
 }
 
 // UpdateFolder applies a patch to the folder with the given id.
@@ -371,6 +427,7 @@ func (a *App) GetConnection(ctx context.Context, id domain.ID) (ConnectionView, 
 		Icon:        c.Icon,
 		Color:       c.Color,
 		Environment: c.Environment,
+		Favorite:    c.Favorite,
 		Protocol:    c.ProtocolID,
 		Host:        c.Host,
 		Port:        c.Port,

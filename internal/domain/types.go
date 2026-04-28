@@ -113,6 +113,10 @@ type ConnectionNode struct {
 	Icon string
 	// Environment is an informational label ("prod", "staging", ...).
 	Environment string
+	// Favorite is true when the user has starred this connection so it
+	// appears in the Favorites virtual folder. It is purely a
+	// presentation hint; protocol behaviour is unaffected.
+	Favorite bool
 	// Description is free-form user notes.
 	Description string
 	// Inheritance declares per-field override/inherit policy for this node.

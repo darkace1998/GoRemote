@@ -22,11 +22,54 @@ const CurrentVersion = 1
 
 // Workspace is the full persisted UI workspace document.
 type Workspace struct {
-	Version     int          `json:"version"`
-	OpenTabs    []TabState   `json:"openTabs"`
-	ActiveTab   string       `json:"activeTab,omitempty"`
-	PaneLayouts []PaneLayout `json:"paneLayouts,omitempty"`
-	UpdatedAt   time.Time    `json:"updatedAt"`
+	Version     int           `json:"version"`
+	OpenTabs    []TabState    `json:"openTabs"`
+	ActiveTab   string        `json:"activeTab,omitempty"`
+	PaneLayouts []PaneLayout  `json:"paneLayouts,omitempty"`
+	Recents     []RecentEntry `json:"recents,omitempty"`
+	UpdatedAt   time.Time     `json:"updatedAt"`
+}
+
+// RecentEntry records a single connection's most recent open. The list
+// is bounded (see TouchRecent) and ordered most-recent-first so the UI
+// can render it directly without a sort. OpenCount is informational —
+// we do not currently use it for ranking but it's cheap to track.
+type RecentEntry struct {
+	ConnectionID string    `json:"connectionId"`
+	OpenedAt     time.Time `json:"openedAt"`
+	OpenCount    int       `json:"openCount,omitempty"`
+}
+
+// MaxRecents bounds the size of the Recents list. Twenty is the same
+// cap most editors use for "recent files" and easily fits in a pop-up
+// menu without scrolling.
+const MaxRecents = 20
+
+// TouchRecent records a fresh open for the given connection ID. The
+// matching entry (if any) is moved to the front and its counter
+// incremented; otherwise a new entry is prepended. The list is
+// truncated to MaxRecents.
+func (w *Workspace) TouchRecent(connID string, at time.Time) {
+	if connID == "" {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	out := make([]RecentEntry, 0, len(w.Recents)+1)
+	count := 1
+	for _, e := range w.Recents {
+		if e.ConnectionID == connID {
+			count = e.OpenCount + 1
+			continue
+		}
+		out = append(out, e)
+	}
+	out = append([]RecentEntry{{ConnectionID: connID, OpenedAt: at, OpenCount: count}}, out...)
+	if len(out) > MaxRecents {
+		out = out[:MaxRecents]
+	}
+	w.Recents = out
 }
 
 // PaneLayout describes the split structure of a single tab that hosts
