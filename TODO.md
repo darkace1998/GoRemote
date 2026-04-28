@@ -128,20 +128,28 @@ to close.
 
 ## 3. Protocol breadth & quality (P1/P2)
 
-- [ ] **PowerShell on Windows** currently uses stdin/stdout pipes (no PTY,
-  no resize). Investigate `ConPTY` (`golang.org/x/sys/windows`
-  `CreatePseudoConsole`) so Windows hosts get the same UX as Unix.
-- [ ] **Pure-Go RFB client** (🔶 Experimental). Either complete it for the
-  "no external `vncviewer`" portable case, or formally drop the experimental
-  scaffolding and shrink the binary.
-- [ ] **HTTP/HTTPS — embedded WebView**: today it shells out to a system
-  browser (acceptable per `PARITY.md` notes). Consider an opt-in embedded
-  view via `webview/webview` for tabs-inside-tabs, gated behind a build tag
-  so the default ships without a CGO browser dep.
+- [x] **PowerShell on Windows** now runs over **ConPTY**
+  (`github.com/ActiveState/termtest/conpty`, already a transitive dep), so
+  Windows hosts get the same full-VT terminal UX as Unix — including
+  working `Resize` via `ResizePseudoConsole`. The legacy stdin/stdout-pipe
+  fallback has been removed; Windows 10 1809+ is required (every
+  supported Windows release).
+- [x] **Pure-Go RFB client** — formally **dropped**. The "🔶 Experimental"
+  row has been removed from `PARITY.md`; the supported VNC path remains
+  the external `vncviewer` launcher. There was never any RFB code in
+  `plugins/protocol-vnc/` to remove — only the aspiration.
 - [ ] **SFTP browser tab** when an SSH session is open (file-tree pane that
   reuses the session's transport). Common request from mRemoteNG users.
+  **Deferred-by-policy** — needs `github.com/pkg/sftp`, which is the
+  pragmatic choice but a new external dep. Revisit once the no-external-deps
+  rule is relaxed for SFTP specifically.
+- [ ] **HTTP/HTTPS — embedded WebView**: today it shells out to a system
+  browser (acceptable per `PARITY.md` notes). **Deferred-by-policy** —
+  every realistic option (`webview/webview`, `wails`, CEF) brings a CGO
+  browser-engine dep. The system-browser path stays the default.
 - [ ] **Serial / COM port protocol** (mRemoteNG ships it via PuTTY). Low
-  priority but recurring user request.
+  priority. **Deferred-by-policy** — needs `go.bug.st/serial` (no stdlib
+  serial-port API exists).
 
 ## 4. Plugin / extensibility hardening (P2)
 

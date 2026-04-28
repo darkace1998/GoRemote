@@ -70,17 +70,17 @@ func TestWindowsStartAndExit(t *testing.T) {
 	}
 }
 
-// TestWindowsResizeIsNoOp verifies that Resize always returns nil on Windows
-// (no PTY means no resize channel; callers must tolerate this gracefully).
-func TestWindowsResizeIsNoOp(t *testing.T) {
+// TestWindowsResizeRejectsZero verifies Resize rejects non-positive
+// dimensions but accepts a real resize on the ConPTY.
+func TestWindowsResizeRejectsZero(t *testing.T) {
 	sess := openWinTestSession(t, nil)
 	defer sess.Close()
 
-	if err := sess.Resize(context.Background(), protocol.Size{Cols: 0, Rows: 0}); err != nil {
-		t.Fatalf("Resize: expected nil on Windows, got %v", err)
+	if err := sess.Resize(context.Background(), protocol.Size{Cols: 0, Rows: 0}); err == nil {
+		t.Fatalf("Resize: expected error for 0x0")
 	}
 	if err := sess.Resize(context.Background(), protocol.Size{Cols: 80, Rows: 24}); err != nil {
-		t.Fatalf("Resize: expected nil on Windows, got %v", err)
+		t.Fatalf("Resize 80x24: %v", err)
 	}
 }
 

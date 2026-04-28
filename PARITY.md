@@ -15,14 +15,13 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | Telnet       | ✅        | ✅ **Ready**       | RFC 854 negotiation; NAWS; TTYPE; configurable encoding. |
 | Rlogin       | ✅        | ✅ **Ready**       | RFC 1282 handshake; in-band window-size updates. |
 | Raw socket   | ✅        | ✅ **Ready**       | Configurable EOL (lf / crlf / none), keepalive, configurable encoding. |
-| PowerShell   | ✅        | ✅ **Ready**       | Local `pwsh`/`powershell` launch; on Unix uses PTY (full terminal), on Windows uses stdin/stdout pipes (functional but no resize). Argument quoting safe-by-default. |
+| PowerShell   | ✅        | ✅ **Ready**       | Local `pwsh`/`powershell` launch; on Unix uses PTY (full terminal), on Windows uses ConPTY (`CreatePseudoConsole`) with full ANSI/VT and working resize. Argument quoting safe-by-default. |
 | HTTP / HTTPS | ✅        | ✅ **Ready**       | In-app browser session via `webview`/system browser launcher; cookie isolation per session; basic / bearer auth from credential providers. |
 | RDP          | ✅        | ✅ **Ready** (external) | Launches `mstsc.exe` on Windows or `xfreerdp` on Linux/macOS; credentials handed off via the platform launcher with cleanup of any spool files. See **Notes**. |
 | VNC          | ✅        | ✅ **Ready** (external) | Launches the system `vncviewer` (TigerVNC / RealVNC / TightVNC) with credentials piped through the launcher. See **Notes**. |
 | IBM TN5250   | ✅        | ✅ **Ready** (external) | Launches `tn5250` / `xtn5250`. See **Notes**. |
 | External app | ✅        | ✅ **Ready**       | `internal/extlaunch` runs arbitrary launcher commands with templated args. |
 | MOSH         | (3rd-party) | ✅ **Ready** (external) | Launched via the system `mosh` binary (extlaunch, RenderExternal); not available on Windows (no native mosh.exe). |
-| Pure-Go RFB  | —         | 🔶 **Experimental** | An in-process VNC client is research-only; the external `vncviewer` is the supported path. |
 
 Plugins shipped today (`plugins/`):
 

@@ -4,6 +4,7 @@ go 1.25.9
 
 require (
 	fyne.io/fyne/v2 v2.7.4-0.20260404155105-c53f9d6e424e
+	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/creack/pty v1.1.24
 	github.com/fyne-io/terminal v0.0.0-20260426193242-b58db860086d
 	github.com/zalando/go-keyring v0.2.8
@@ -13,7 +14,6 @@ require (
 
 require (
 	fyne.io/systray v1.12.0 // indirect
-	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/FyshOS/fancyfs v0.0.0-20251025194026-1f03098ff624 // indirect
