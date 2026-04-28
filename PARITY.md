@@ -22,13 +22,15 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | IBM TN5250   | ✅        | ✅ **Ready** (external) | Launches `tn5250` / `xtn5250`. See **Notes**. |
 | External app | ✅        | ✅ **Ready**       | `internal/extlaunch` runs arbitrary launcher commands with templated args. |
 | MOSH         | (3rd-party) | ✅ **Ready** (external) | Launched via the system `mosh` binary (extlaunch, RenderExternal); not available on Windows (no native mosh.exe). |
+| SFTP         | (3rd-party) | ✅ **Ready**       | Interactive SFTP file-browser shell (ls/cd/get/put/mkdir/rm/mv/chmod/...) over an SSH connection. Reuses the SSH plugin's auth + known-hosts machinery. |
+| Serial / COM | ✅ (PuTTY)  | ✅ **Ready**       | Local serial-console terminal sessions. Configurable baud/data-bits/parity/stop-bits/EOL. Cross-platform (Linux/macOS `/dev/tty*`, Windows `COMn`). |
 
 Plugins shipped today (`plugins/`):
 
 ```
-protocol-ssh        protocol-telnet     protocol-rlogin     protocol-rawsocket
-protocol-powershell protocol-http       protocol-rdp        protocol-vnc
-protocol-tn5250     protocol-mosh
+protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
+protocol-rawsocket  protocol-powershell protocol-http       protocol-rdp
+protocol-vnc        protocol-tn5250     protocol-mosh       protocol-serial
 ```
 
 ## Credential providers

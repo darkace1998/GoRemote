@@ -45,6 +45,8 @@ import (
 	protoraw "github.com/goremote/goremote/plugins/protocol-rawsocket"
 	protordp "github.com/goremote/goremote/plugins/protocol-rdp"
 	protorlogin "github.com/goremote/goremote/plugins/protocol-rlogin"
+	protoserial "github.com/goremote/goremote/plugins/protocol-serial"
+	protosftp "github.com/goremote/goremote/plugins/protocol-sftp"
 	protossh "github.com/goremote/goremote/plugins/protocol-ssh"
 	prototelnet "github.com/goremote/goremote/plugins/protocol-telnet"
 	prototn5250 "github.com/goremote/goremote/plugins/protocol-tn5250"
@@ -1005,6 +1007,7 @@ func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
 		mod  protocol.Module
 	}{
 		{"ssh", protossh.New()},
+		{"sftp", protosftp.New()},
 		{"telnet", prototelnet.New()},
 		{"rlogin", protorlogin.New()},
 		{"rawsocket", protoraw.New()},
@@ -1014,6 +1017,7 @@ func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
 		{"vnc", protovnc.New()},
 		{"tn5250", prototn5250.New()},
 		{"mosh", protomosh.New()},
+		{"serial", protoserial.New()},
 	}
 	for _, p := range protos {
 		if err := a.RegisterProtocol(ctx, p.mod, sdkplugin.TrustCore); err != nil {

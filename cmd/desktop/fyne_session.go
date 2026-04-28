@@ -53,6 +53,8 @@ var terminalProtocols = map[string]bool{
 	"rlogin":     true,
 	"rawsocket":  true,
 	"powershell": true,
+	"sftp":       true,
+	"serial":     true,
 }
 
 // content builds the Fyne canvas object for this session tab on first call

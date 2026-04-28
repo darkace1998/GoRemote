@@ -1529,6 +1529,10 @@ func protocolIcon(proto string) fyne.Resource {
 		return theme.HelpIcon()
 	case "rawsocket", "tn5250":
 		return theme.MailAttachmentIcon()
+	case "sftp":
+		return theme.FolderOpenIcon()
+	case "serial":
+		return theme.MailComposeIcon()
 	default:
 		return theme.ComputerIcon()
 	}
@@ -3156,7 +3160,7 @@ func containsString(opts []string, v string) bool {
 // preserving a stable preferred ordering and falling back to the canonical
 // list when the host registry is unavailable.
 func availableProtocols(b *Bindings) []string {
-	preferred := []string{"ssh", "telnet", "rlogin", "rawsocket", "rdp", "vnc", "powershell", "mosh", "tn5250", "http"}
+	preferred := []string{"ssh", "sftp", "telnet", "rlogin", "rawsocket", "rdp", "vnc", "powershell", "mosh", "tn5250", "http", "serial"}
 	if b == nil || b.app == nil || b.app.ProtocolHost() == nil {
 		return preferred
 	}

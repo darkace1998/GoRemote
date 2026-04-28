@@ -138,18 +138,21 @@ to close.
   row has been removed from `PARITY.md`; the supported VNC path remains
   the external `vncviewer` launcher. There was never any RFB code in
   `plugins/protocol-vnc/` to remove — only the aspiration.
-- [ ] **SFTP browser tab** when an SSH session is open (file-tree pane that
-  reuses the session's transport). Common request from mRemoteNG users.
-  **Deferred-by-policy** — needs `github.com/pkg/sftp`, which is the
-  pragmatic choice but a new external dep. Revisit once the no-external-deps
-  rule is relaxed for SFTP specifically.
-- [ ] **HTTP/HTTPS — embedded WebView**: today it shells out to a system
-  browser (acceptable per `PARITY.md` notes). **Deferred-by-policy** —
-  every realistic option (`webview/webview`, `wails`, CEF) brings a CGO
-  browser-engine dep. The system-browser path stays the default.
-- [ ] **Serial / COM port protocol** (mRemoteNG ships it via PuTTY). Low
-  priority. **Deferred-by-policy** — needs `go.bug.st/serial` (no stdlib
-  serial-port API exists).
+- [x] **SFTP browser tab** — shipped as `plugins/protocol-sftp`. Renders an
+  interactive file-browser shell (ls/cd/pwd/get/put/mkdir/rmdir/rm/mv/
+  chmod/lcd/lls/lpwd, plus quote-aware tokenisation) inside the host's
+  fyne-io/terminal pane, so no custom file-tree widget is needed. The
+  plugin reuses the SSH plugin's exported `Dial` helper, so auth /
+  known-hosts / strict-host-checking match SSH exactly. Powered by
+  `github.com/pkg/sftp`.
+- [x] **Serial / COM port protocol** — shipped as `plugins/protocol-serial`.
+  Cross-platform serial-console sessions (Linux/macOS `/dev/tty*`,
+  Windows `COMn`) with configurable baud / data-bits / parity / stop-bits
+  / EOL. Powered by `go.bug.st/serial`. Renders through the existing
+  terminal pane.
+- [ ] **HTTP/HTTPS — embedded WebView**: **dropped**. The system-browser
+  launcher path is the supported design going forward; an embedded
+  CGO browser engine (`webview/webview`, CEF, etc.) is out of scope.
 
 ## 4. Plugin / extensibility hardening (P2)
 
