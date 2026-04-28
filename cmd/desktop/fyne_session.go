@@ -99,7 +99,7 @@ func (st *sessionTab) run(onClose func()) {
 		_, _ = st.term.Write([]byte("\r\n[Error: " + err.Error() + "]\r\n"))
 		return
 	}
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 
 	// Forward terminal resize events to the remote session.
 	cfgCh := make(chan terminal.Config, 4)

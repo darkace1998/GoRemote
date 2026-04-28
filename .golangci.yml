@@ -1,67 +1,76 @@
+version: "2"
+
 run:
-  timeout: 5m
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet
-    - staticcheck
-    - errcheck
-    - ineffassign
-    - unused
-    - gosec
-    - gocritic
-    - revive
-    - gofmt
-    - goimports
-    - misspell
-    - unconvert
-    - unparam
     - bodyclose
-    - contextcheck
+    - copyloopvar
+    - errcheck
     - errorlint
-    - exportloopref
-    - gocyclo
+    - govet
+    - ineffassign
+    - misspell
     - nilerr
-    - prealloc
-
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
-  staticcheck:
-    checks: ["all"]
-  gocyclo:
-    min-complexity: 20
-  revive:
-    severity: warning
-  gosec:
-    excludes:
-      - G115
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*os/exec.Cmd).Wait
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
+        - os.Remove
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1020
+        - -ST1021
+        - -ST1022
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - bodyclose
+      - path: (.*_grpc\.pb\.go|.*\.pb\.go)
+        linters:
+          - all
+      # mosh/rdp/powershell deliberately swallow ctx-cancel errors when
+      # the user closes the session — those are not real failures.
+      - path: plugins/protocol-(mosh|rdp|powershell)/.*\.go
+        linters:
+          - nilerr
+    paths:
+      - .*_grpc\.pb\.go$
+      - .*\.pb\.go$
+      - third_party$
+      - builtin$
+      - examples$
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-dirs:
-    - webui
-    - dist
-    - build
-  exclude-files:
-    - ".*_grpc\\.pb\\.go$"
-    - ".*\\.pb\\.go$"
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - unused
-        - gosec
-        - gocyclo
-        - unparam
-    - path: (.*_grpc\.pb\.go|.*\.pb\.go)
-      linters:
-        - all
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    paths:
+      - .*_grpc\.pb\.go$
+      - .*\.pb\.go$

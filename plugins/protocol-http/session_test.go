@@ -135,7 +135,7 @@ func TestOpenRejectsInvalidScheme(t *testing.T) {
 		"",
 	}
 	for _, raw := range cases {
-		raw := raw
+
 		t.Run(raw, func(t *testing.T) {
 			mod := New()
 			_, err := mod.Open(context.Background(), protocol.OpenRequest{
@@ -150,7 +150,7 @@ func TestOpenRejectsInvalidScheme(t *testing.T) {
 
 func TestOpenAcceptsHTTPAndHTTPS(t *testing.T) {
 	for _, raw := range []string{"http://example.com/", "https://example.com:8443/path?x=1"} {
-		raw := raw
+
 		t.Run(raw, func(t *testing.T) {
 			fl := &fakeLauncher{}
 			sess := openSession(t, map[string]any{SettingURL: raw}, fl)

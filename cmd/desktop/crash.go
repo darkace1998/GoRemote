@@ -46,7 +46,7 @@ func dumpCrashIfPanicking() {
 	fmt.Fprintf(f, "version: %s\n", Version)
 	fmt.Fprintf(f, "time: %s\n", time.Now().UTC().Format(time.RFC3339Nano))
 	fmt.Fprintf(f, "panic: %v\n\n", r)
-	f.Write(debug.Stack())
+	_, _ = f.Write(debug.Stack())
 	_ = f.Close()
 	fmt.Fprintf(os.Stderr, "goremote crashed; report written to %s\n", path)
 	panic(r)

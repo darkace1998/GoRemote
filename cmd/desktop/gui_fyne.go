@@ -82,7 +82,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 			if st.transferring {
 				continue
 			}
-			st := st
+
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -298,7 +298,7 @@ func installSystemTray(w fyne.Window, a fyne.App, b *Bindings, sessions *session
 		} else {
 			subs := make([]*fyne.MenuItem, 0, len(recents))
 			for _, r := range recents {
-				r := r
+
 				label := r.Name
 				if r.Host != "" {
 					label = fmt.Sprintf("%s — %s", r.Name, r.Host)
@@ -3811,89 +3811,89 @@ func indexOf(xs []string, v string) int {
 // installed but the master password hasn't been entered yet; clicking
 // "Unlock" prompts for the master password and pipes it to `bw unlock`.
 func showCredentialsDialog(w fyne.Window, b *Bindings) {
-ctx := context.Background()
-providers := b.ListCredentialProviders(ctx)
+	ctx := context.Background()
+	providers := b.ListCredentialProviders(ctx)
 
-// rebuildContent generates the dialog body. It is captured below by
-// individual action callbacks so each successful unlock/lock refreshes
-// the listing without dismissing the dialog.
-var dlg dialog.Dialog
-var rebuild func()
-rebuild = func() {
-providers = b.ListCredentialProviders(ctx)
-rows := []fyne.CanvasObject{}
-if len(providers) == 0 {
-rows = append(rows, widget.NewLabel("No credential providers registered."))
-}
-for _, p := range providers {
-p := p
-row := buildCredentialRow(w, b, p, func() {
-if rebuild != nil {
-rebuild()
-}
-})
-rows = append(rows, row)
-}
-body := container.NewVBox(rows...)
-if dlg != nil {
-dlg.Hide()
-}
-dlg = dialog.NewCustom("Credential providers", "Close",
-container.NewVScroll(body), w)
-dlg.Resize(fyne.NewSize(520, 360))
-dlg.Show()
-}
-rebuild()
+	// rebuildContent generates the dialog body. It is captured below by
+	// individual action callbacks so each successful unlock/lock refreshes
+	// the listing without dismissing the dialog.
+	var dlg dialog.Dialog
+	var rebuild func()
+	rebuild = func() {
+		providers = b.ListCredentialProviders(ctx)
+		rows := []fyne.CanvasObject{}
+		if len(providers) == 0 {
+			rows = append(rows, widget.NewLabel("No credential providers registered."))
+		}
+		for _, p := range providers {
+
+			row := buildCredentialRow(w, b, p, func() {
+				if rebuild != nil {
+					rebuild()
+				}
+			})
+			rows = append(rows, row)
+		}
+		body := container.NewVBox(rows...)
+		if dlg != nil {
+			dlg.Hide()
+		}
+		dlg = dialog.NewCustom("Credential providers", "Close",
+			container.NewVScroll(body), w)
+		dlg.Resize(fyne.NewSize(520, 360))
+		dlg.Show()
+	}
+	rebuild()
 }
 
 func buildCredentialRow(w fyne.Window, b *Bindings, p CredentialProviderInfo, onChange func()) fyne.CanvasObject {
-stateLabel := widget.NewLabel(fmt.Sprintf("%s (%s)", p.Name, p.State))
-stateLabel.TextStyle = fyne.TextStyle{Bold: true}
+	stateLabel := widget.NewLabel(fmt.Sprintf("%s (%s)", p.Name, p.State))
+	stateLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-idLabel := widget.NewLabel(p.ID)
-idLabel.Wrapping = fyne.TextWrapBreak
+	idLabel := widget.NewLabel(p.ID)
+	idLabel.Wrapping = fyne.TextWrapBreak
 
-var actions []fyne.CanvasObject
-switch p.State {
-case "locked":
-actions = append(actions, widget.NewButtonWithIcon("Unlock", theme.LoginIcon(), func() {
-pwEntry := widget.NewPasswordEntry()
-pwEntry.SetPlaceHolder("master password")
-form := dialog.NewForm("Unlock "+p.Name, "Unlock", "Cancel",
-[]*widget.FormItem{widget.NewFormItem("Password", pwEntry)},
-func(ok bool) {
-if !ok {
-return
-}
-if err := b.UnlockCredentialProvider(context.Background(), p.ID, pwEntry.Text); err != nil {
-dialog.ShowError(err, w)
-return
-}
-if onChange != nil {
-onChange()
-}
-}, w)
-form.Resize(fyne.NewSize(360, 160))
-form.Show()
-}))
-case "unlocked":
-actions = append(actions, widget.NewButtonWithIcon("Lock", theme.LogoutIcon(), func() {
-if err := b.LockCredentialProvider(context.Background(), p.ID); err != nil {
-dialog.ShowError(err, w)
-return
-}
-if onChange != nil {
-onChange()
-}
-}))
-case "unavailable":
-hint := widget.NewLabel("Provider unavailable.")
-hint.TextStyle = fyne.TextStyle{Italic: true}
-actions = append(actions, hint)
-}
+	var actions []fyne.CanvasObject
+	switch p.State {
+	case "locked":
+		actions = append(actions, widget.NewButtonWithIcon("Unlock", theme.LoginIcon(), func() {
+			pwEntry := widget.NewPasswordEntry()
+			pwEntry.SetPlaceHolder("master password")
+			form := dialog.NewForm("Unlock "+p.Name, "Unlock", "Cancel",
+				[]*widget.FormItem{widget.NewFormItem("Password", pwEntry)},
+				func(ok bool) {
+					if !ok {
+						return
+					}
+					if err := b.UnlockCredentialProvider(context.Background(), p.ID, pwEntry.Text); err != nil {
+						dialog.ShowError(err, w)
+						return
+					}
+					if onChange != nil {
+						onChange()
+					}
+				}, w)
+			form.Resize(fyne.NewSize(360, 160))
+			form.Show()
+		}))
+	case "unlocked":
+		actions = append(actions, widget.NewButtonWithIcon("Lock", theme.LogoutIcon(), func() {
+			if err := b.LockCredentialProvider(context.Background(), p.ID); err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if onChange != nil {
+				onChange()
+			}
+		}))
+	case "unavailable":
+		hint := widget.NewLabel("Provider unavailable.")
+		hint.TextStyle = fyne.TextStyle{Italic: true}
+		actions = append(actions, hint)
+	}
 
-right := container.NewHBox(actions...)
-return container.NewBorder(nil, idLabel, nil, right, stateLabel)
+	right := container.NewHBox(actions...)
+	return container.NewBorder(nil, idLabel, nil, right, stateLabel)
 }
 
 // showTreeContextMenu builds and shows a per-row right-click menu for the
@@ -3902,115 +3902,115 @@ return container.NewBorder(nil, idLabel, nil, right, stateLabel)
 // selection-driven helpers (editSelectedNode, deleteSelectedNode, etc.)
 // operate on it.
 func showTreeContextMenu(w fyne.Window, a fyne.App, b *Bindings, tree *connTree, sessions *sessionRegistry, uid string, abs fyne.Position) {
-tree.mu.RLock()
-root := tree.view.Root
-tree.mu.RUnlock()
-n := tree.findNode(root, uid)
-if n == nil {
-return
-}
-tree.tree.Select(uid)
+	tree.mu.RLock()
+	root := tree.view.Root
+	tree.mu.RUnlock()
+	n := tree.findNode(root, uid)
+	if n == nil {
+		return
+	}
+	tree.tree.Select(uid)
 
-var items []*fyne.MenuItem
-if n.Kind == "connection" {
-connID := n.ID
-host := n.Host
-port := n.Port
-connectItem := fyne.NewMenuItem("Connect", func() { openSession(w, b, sessions, connID) })
-newWinItem := fyne.NewMenuItem("Open in new window…", func() { openSessionInWindow(w, a, b, sessions, connID) })
-splitRightItem := fyne.NewMenuItem("Open in split right", func() { openSessionInSplit(w, b, sessions, connID, "h") })
-splitBelowItem := fyne.NewMenuItem("Open in split below", func() { openSessionInSplit(w, b, sessions, connID, "v") })
-canSplit := false
-if sel := sessions.tabs.Selected(); sel != nil {
-if g := sessions.groupFor(sel); g != nil && g.root != nil {
-canSplit = true
-}
-}
-splitRightItem.Disabled = !canSplit
-splitBelowItem.Disabled = !canSplit
-copyHost := fyne.NewMenuItem("Copy host", func() { a.Clipboard().SetContent(host) })
-copyHost.Disabled = host == ""
-copyHostPort := fyne.NewMenuItem("Copy host:port", func() {
-if port > 0 {
-a.Clipboard().SetContent(fmt.Sprintf("%s:%d", host, port))
-} else {
-a.Clipboard().SetContent(host)
-}
-})
-copyHostPort.Disabled = host == ""
-favLabel := "Add to favorites"
-if n.Favorite {
-favLabel = "Remove from favorites"
-}
-favItem := fyne.NewMenuItem(favLabel, func() {
-if _, err := b.ToggleFavorite(context.Background(), connID); err != nil {
-dialog.ShowError(err, w)
-return
-}
-tree.refresh()
-})
-items = append(items,
-connectItem,
-newWinItem,
-splitRightItem,
-splitBelowItem,
-fyne.NewMenuItemSeparator(),
-fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
-fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }),
-favItem,
-fyne.NewMenuItemSeparator(),
-copyHost,
-copyHostPort,
-fyne.NewMenuItemSeparator(),
-fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
-)
-} else {
-items = append(items,
-fyne.NewMenuItem("New connection here…", func() {
-showNewConnectionDialog(w, b, tree)
-}),
-fyne.NewMenuItem("New folder here…", func() {
-showNewFolderDialog(w, b, tree)
-}),
-fyne.NewMenuItemSeparator(),
-fyne.NewMenuItem("Expand all", func() {
-expandAllUnder(tree, n)
-}),
-fyne.NewMenuItem("Collapse all", func() {
-collapseAllUnder(tree, n)
-}),
-fyne.NewMenuItemSeparator(),
-fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
-fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
-)
-}
-menu := fyne.NewMenu("", items...)
-pop := widget.NewPopUpMenu(menu, w.Canvas())
-pop.ShowAtPosition(abs)
+	var items []*fyne.MenuItem
+	if n.Kind == "connection" {
+		connID := n.ID
+		host := n.Host
+		port := n.Port
+		connectItem := fyne.NewMenuItem("Connect", func() { openSession(w, b, sessions, connID) })
+		newWinItem := fyne.NewMenuItem("Open in new window…", func() { openSessionInWindow(w, a, b, sessions, connID) })
+		splitRightItem := fyne.NewMenuItem("Open in split right", func() { openSessionInSplit(w, b, sessions, connID, "h") })
+		splitBelowItem := fyne.NewMenuItem("Open in split below", func() { openSessionInSplit(w, b, sessions, connID, "v") })
+		canSplit := false
+		if sel := sessions.tabs.Selected(); sel != nil {
+			if g := sessions.groupFor(sel); g != nil && g.root != nil {
+				canSplit = true
+			}
+		}
+		splitRightItem.Disabled = !canSplit
+		splitBelowItem.Disabled = !canSplit
+		copyHost := fyne.NewMenuItem("Copy host", func() { a.Clipboard().SetContent(host) })
+		copyHost.Disabled = host == ""
+		copyHostPort := fyne.NewMenuItem("Copy host:port", func() {
+			if port > 0 {
+				a.Clipboard().SetContent(fmt.Sprintf("%s:%d", host, port))
+			} else {
+				a.Clipboard().SetContent(host)
+			}
+		})
+		copyHostPort.Disabled = host == ""
+		favLabel := "Add to favorites"
+		if n.Favorite {
+			favLabel = "Remove from favorites"
+		}
+		favItem := fyne.NewMenuItem(favLabel, func() {
+			if _, err := b.ToggleFavorite(context.Background(), connID); err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			tree.refresh()
+		})
+		items = append(items,
+			connectItem,
+			newWinItem,
+			splitRightItem,
+			splitBelowItem,
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
+			fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }),
+			favItem,
+			fyne.NewMenuItemSeparator(),
+			copyHost,
+			copyHostPort,
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
+		)
+	} else {
+		items = append(items,
+			fyne.NewMenuItem("New connection here…", func() {
+				showNewConnectionDialog(w, b, tree)
+			}),
+			fyne.NewMenuItem("New folder here…", func() {
+				showNewFolderDialog(w, b, tree)
+			}),
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Expand all", func() {
+				expandAllUnder(tree, n)
+			}),
+			fyne.NewMenuItem("Collapse all", func() {
+				collapseAllUnder(tree, n)
+			}),
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
+			fyne.NewMenuItem("Delete…", func() { deleteSelectedNode(w, b, tree, sessions) }),
+		)
+	}
+	menu := fyne.NewMenu("", items...)
+	pop := widget.NewPopUpMenu(menu, w.Canvas())
+	pop.ShowAtPosition(abs)
 }
 
 // expandAllUnder expands the given folder and all descendant folders.
 func expandAllUnder(tree *connTree, n *iapp.NodeView) {
-if n == nil {
-return
-}
-tree.tree.OpenBranch(n.ID)
-for _, c := range n.Children {
-if c != nil && c.Kind == "folder" {
-expandAllUnder(tree, c)
-}
-}
+	if n == nil {
+		return
+	}
+	tree.tree.OpenBranch(n.ID)
+	for _, c := range n.Children {
+		if c != nil && c.Kind == "folder" {
+			expandAllUnder(tree, c)
+		}
+	}
 }
 
 // collapseAllUnder collapses the given folder and all descendant folders.
 func collapseAllUnder(tree *connTree, n *iapp.NodeView) {
-if n == nil {
-return
-}
-for _, c := range n.Children {
-if c != nil && c.Kind == "folder" {
-collapseAllUnder(tree, c)
-}
-}
-tree.tree.CloseBranch(n.ID)
+	if n == nil {
+		return
+	}
+	for _, c := range n.Children {
+		if c != nil && c.Kind == "folder" {
+			collapseAllUnder(tree, c)
+		}
+	}
+	tree.tree.CloseBranch(n.ID)
 }

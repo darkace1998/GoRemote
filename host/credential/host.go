@@ -354,7 +354,7 @@ func (h *Host) State(ctx context.Context, providerID string) credential.State {
 	if !ok {
 		return credential.StateNotConfigured
 	}
-	var s credential.State = credential.StateError
+	s := credential.StateError
 	_ = safeCall(func() error {
 		s = p.State(ctx)
 		return nil

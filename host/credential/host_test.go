@@ -293,37 +293,37 @@ func TestUnlockLockStatePassthrough(t *testing.T) {
 }
 
 func TestAuditLogger(t *testing.T) {
-var buf strings.Builder
-logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-h, _ := newHost(t, WithAuditLogger(logger))
-p := &stubProvider{id: "cred.audit"}
-if err := h.Register(context.Background(), p, sdkplugin.TrustCore); err != nil {
-t.Fatal(err)
-}
-if _, err := h.Resolve(context.Background(), credential.Reference{ProviderID: "cred.audit", EntryID: "k"}, 0); err != nil {
-t.Fatal(err)
-}
-if _, err := h.Resolve(context.Background(), credential.Reference{ProviderID: "missing"}, 0); err == nil {
-t.Fatal("expected error")
-}
-if err := h.Unlock(context.Background(), "cred.audit", "pw", 0); err != nil {
-t.Fatal(err)
-}
-if err := h.Lock(context.Background(), "cred.audit", 0); err != nil {
-t.Fatal(err)
-}
-out := buf.String()
-for _, want := range []string{
-"credential.resolve attempt",
-"credential.resolve ok",
-"credential.resolve denied",
-"credential.unlock ok",
-"credential.lock ok",
-"component=credential.audit",
-"provider=cred.audit",
-} {
-if !strings.Contains(out, want) {
-t.Errorf("audit log missing %q in:\n%s", want, out)
-}
-}
+	var buf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	h, _ := newHost(t, WithAuditLogger(logger))
+	p := &stubProvider{id: "cred.audit"}
+	if err := h.Register(context.Background(), p, sdkplugin.TrustCore); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Resolve(context.Background(), credential.Reference{ProviderID: "cred.audit", EntryID: "k"}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Resolve(context.Background(), credential.Reference{ProviderID: "missing"}, 0); err == nil {
+		t.Fatal("expected error")
+	}
+	if err := h.Unlock(context.Background(), "cred.audit", "pw", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Lock(context.Background(), "cred.audit", 0); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"credential.resolve attempt",
+		"credential.resolve ok",
+		"credential.resolve denied",
+		"credential.unlock ok",
+		"credential.lock ok",
+		"component=credential.audit",
+		"provider=cred.audit",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("audit log missing %q in:\n%s", want, out)
+		}
+	}
 }

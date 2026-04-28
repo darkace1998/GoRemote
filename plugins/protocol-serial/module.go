@@ -25,9 +25,9 @@ const (
 
 // Parity option values matching the user-visible enum.
 const (
-	ParityNone  = "none"
-	ParityOdd   = "odd"
-	ParityEven  = "even"
+	ParityNone = "none"
+	ParityOdd  = "odd"
+	ParityEven = "even"
 )
 
 // StopBits option values.

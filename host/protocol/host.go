@@ -164,7 +164,7 @@ func (s *safeSession) Start(ctx context.Context, stdin io.Reader, stdout io.Writ
 	err := safeCall(func() error { return s.inner.Start(ctx, stdin, stdout) })
 	if err != nil && isPanicErr(err) {
 		s.host.reportCrash(ctx, s.pluginID, err)
-		return fmt.Errorf("%w: %v", ErrSessionCrashed, err)
+		return fmt.Errorf("%w: %w", ErrSessionCrashed, err)
 	}
 	return err
 }
@@ -173,7 +173,7 @@ func (s *safeSession) Resize(ctx context.Context, size protocol.Size) error {
 	err := safeCall(func() error { return s.inner.Resize(ctx, size) })
 	if err != nil && isPanicErr(err) {
 		s.host.reportCrash(ctx, s.pluginID, err)
-		return fmt.Errorf("%w: %v", ErrSessionCrashed, err)
+		return fmt.Errorf("%w: %w", ErrSessionCrashed, err)
 	}
 	return err
 }
@@ -182,7 +182,7 @@ func (s *safeSession) SendInput(ctx context.Context, data []byte) error {
 	err := safeCall(func() error { return s.inner.SendInput(ctx, data) })
 	if err != nil && isPanicErr(err) {
 		s.host.reportCrash(ctx, s.pluginID, err)
-		return fmt.Errorf("%w: %v", ErrSessionCrashed, err)
+		return fmt.Errorf("%w: %w", ErrSessionCrashed, err)
 	}
 	return err
 }
@@ -194,7 +194,7 @@ func (s *safeSession) Close() error {
 	err := safeCall(func() error { return s.inner.Close() })
 	if err != nil && isPanicErr(err) {
 		s.host.reportCrash(context.Background(), s.pluginID, err)
-		return fmt.Errorf("%w: %v", ErrSessionCrashed, err)
+		return fmt.Errorf("%w: %w", ErrSessionCrashed, err)
 	}
 	return err
 }

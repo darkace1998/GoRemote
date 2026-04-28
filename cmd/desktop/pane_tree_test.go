@@ -208,7 +208,7 @@ func TestPaneGroupMemberSessionsTraversalOrder(t *testing.T) {
 	g := &paneGroup{root: &paneNode{session: a}}
 	g.active = g.root
 	g.splitLeaf(g.active, b, "h") // [A | B]
-	g.active = g.root.a            // back to A
+	g.active = g.root.a           // back to A
 	g.splitLeaf(g.active, c, "v") // [[A / C] | B]
 	got := []string{}
 	for _, st := range g.memberSessions() {

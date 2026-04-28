@@ -12,7 +12,7 @@ type HelloRequest struct {
 type HelloResponse struct {
 	PluginVersion  string   `json:"plugin_version"`
 	Capabilities   []string `json:"capabilities"`
-	Status         string   `json:"status"`           // "ready" or "degraded:<reason>"
+	Status         string   `json:"status"` // "ready" or "degraded:<reason>"
 	ServerTimeUnix int64    `json:"server_time_unix"`
 }
 

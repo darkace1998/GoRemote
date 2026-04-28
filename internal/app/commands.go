@@ -474,7 +474,7 @@ func (a *App) Search(ctx context.Context, q SearchQuery) []NodeView {
 	if q.Protocol != "" {
 		preds = append(preds, domain.MatchProtocol(q.Protocol))
 	}
-	var pred domain.Predicate = domain.MatchAll
+	pred := domain.MatchAll
 	if len(preds) > 0 {
 		pred = domain.And(preds...)
 	}

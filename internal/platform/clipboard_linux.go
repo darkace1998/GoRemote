@@ -15,13 +15,13 @@ type clipboardImpl struct{}
 var readCmds = [][]string{
 	{"wl-paste", "--no-newline"},               // Wayland
 	{"xclip", "-selection", "clipboard", "-o"}, // X11 xclip
-	{"xsel", "--clipboard", "--output"},         // X11 xsel
+	{"xsel", "--clipboard", "--output"},        // X11 xsel
 }
 
 var writeCmds = [][]string{
-	{"wl-copy"},                            // Wayland
-	{"xclip", "-selection", "clipboard"},   // X11 xclip
-	{"xsel", "--clipboard", "--input"},     // X11 xsel
+	{"wl-copy"},                          // Wayland
+	{"xclip", "-selection", "clipboard"}, // X11 xclip
+	{"xsel", "--clipboard", "--input"},   // X11 xsel
 }
 
 func (clipboardImpl) ReadText() (string, error) {

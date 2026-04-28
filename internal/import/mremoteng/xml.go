@@ -2,6 +2,7 @@ package mremoteng
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -255,7 +256,7 @@ func parseXML(r io.Reader) ([]rawConnection, error) {
 	// Seek the root <Connections> element.
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("mremoteng: empty document")
 		}
 		if err != nil {
@@ -274,7 +275,7 @@ func parseXML(r io.Reader) ([]rawConnection, error) {
 	var roots []rawConnection
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

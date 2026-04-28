@@ -457,7 +457,7 @@ func TestBackupRetention(t *testing.T) {
 	dir := t.TempDir()
 	s := New(dir)
 	// Use a time function we can advance so each backup gets a unique name.
-	var clock time.Time = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	clock := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	s.now = func() time.Time {
 		clock = clock.Add(time.Second)
 		return clock

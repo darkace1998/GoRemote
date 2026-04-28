@@ -41,15 +41,15 @@ const (
 // Settings is the full user-configurable settings document. All fields are
 // JSON-serialisable so the value can cross the UI bridge unchanged.
 type Settings struct {
-	Theme            string    `json:"theme"`
-	FontFamily       string    `json:"fontFamily"`
-	FontSizePx       int       `json:"fontSizePx"`
-	ConfirmOnClose   bool      `json:"confirmOnClose"`
-	AutoReconnect    bool      `json:"autoReconnect"`
-	ReconnectMaxN    int       `json:"reconnectMaxN"`
-	ReconnectDelayMs int       `json:"reconnectDelayMs"`
-	TelemetryEnabled bool      `json:"telemetryEnabled"`
-	LogLevel         string    `json:"logLevel"`
+	Theme            string `json:"theme"`
+	FontFamily       string `json:"fontFamily"`
+	FontSizePx       int    `json:"fontSizePx"`
+	ConfirmOnClose   bool   `json:"confirmOnClose"`
+	AutoReconnect    bool   `json:"autoReconnect"`
+	ReconnectMaxN    int    `json:"reconnectMaxN"`
+	ReconnectDelayMs int    `json:"reconnectDelayMs"`
+	TelemetryEnabled bool   `json:"telemetryEnabled"`
+	LogLevel         string `json:"logLevel"`
 
 	// Git sync — when enabled, the configured workspace directory is
 	// initialised as a git repo and a commit-and-push is fired on every

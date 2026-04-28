@@ -525,7 +525,7 @@ func appendKnownHost(path, hostname string, remote net.Addr, key ssh.PublicKey) 
 	if err := lockFile(f); err != nil {
 		return fmt.Errorf("known_hosts: lock: %w", err)
 	}
-	defer unlockFile(f)
+	defer func() { _ = unlockFile(f) }()
 	if !strings.HasSuffix(line, "\n") {
 		line += "\n"
 	}

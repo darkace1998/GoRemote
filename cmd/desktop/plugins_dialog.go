@@ -71,7 +71,7 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 		pluginRows = append(pluginRows, widget.NewLabel("No plugins discovered. Drop a plugin folder under "+reg.Root()+" and click Refresh."))
 	}
 	for _, e := range entries {
-		e := e
+
 		pluginRows = append(pluginRows, buildPluginRow(w, reg, e, onChange))
 	}
 
@@ -99,7 +99,7 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 		keyRows = append(keyRows, widget.NewLabel("No trusted keys configured."))
 	}
 	for _, k := range keys {
-		k := k
+
 		fp := k.PubKey
 		if len(fp) > 16 {
 			fp = fp[:16] + "…"
@@ -202,7 +202,7 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 				marketStatus.SetText(fmt.Sprintf("%d listing(s).", len(doc.Listings)))
 				marketList.Objects = nil
 				for _, l := range doc.Listings {
-					l := l
+
 					marketList.Add(buildListingRow(w, reg, l, onChange))
 				}
 				marketList.Refresh()

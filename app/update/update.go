@@ -219,7 +219,7 @@ func splitSemver(s string) []int {
 	}
 	// Truncate at first non-numeric/dot character (e.g. "-rc1").
 	for i, r := range s {
-		if !(r == '.' || (r >= '0' && r <= '9')) {
+		if r != '.' && (r < '0' || r > '9') {
 			s = s[:i]
 			break
 		}

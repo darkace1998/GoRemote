@@ -207,7 +207,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err != nil {
 		return fmt.Errorf("persistence: open backup %s: %w", backupPath, err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	for _, f := range zr.File {
 		clean := filepath.ToSlash(filepath.Clean(f.Name))

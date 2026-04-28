@@ -432,14 +432,14 @@ func (s *Session) getCmd(ctx context.Context, args []string) {
 		_ = s.writeLine("get: open remote: " + err.Error())
 		return
 	}
-	defer rf.Close()
+	defer func() { _ = rf.Close() }()
 
 	lf, err := os.Create(local)
 	if err != nil {
 		_ = s.writeLine("get: create local: " + err.Error())
 		return
 	}
-	defer lf.Close()
+	defer func() { _ = lf.Close() }()
 
 	n, err := s.copyWithCancel(ctx, lf, rf)
 	if err != nil {
@@ -469,14 +469,14 @@ func (s *Session) putCmd(ctx context.Context, args []string) {
 		_ = s.writeLine("put: open local: " + err.Error())
 		return
 	}
-	defer lf.Close()
+	defer func() { _ = lf.Close() }()
 
 	rf, err := s.sc.Create(remote)
 	if err != nil {
 		_ = s.writeLine("put: create remote: " + err.Error())
 		return
 	}
-	defer rf.Close()
+	defer func() { _ = rf.Close() }()
 
 	n, err := s.copyWithCancel(ctx, rf, lf)
 	if err != nil {

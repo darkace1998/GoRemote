@@ -17,7 +17,7 @@ vet:
 	$(GO) vet ./...
 
 lint:
-	@command -v golangci-lint >/dev/null 2>&1 || $(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@command -v golangci-lint >/dev/null 2>&1 || $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	@PATH="$(GOBIN):$$PATH" golangci-lint run ./...
 
 vuln:

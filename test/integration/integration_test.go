@@ -361,7 +361,7 @@ func TestConcurrentSessions(t *testing.T) {
 	errCh := make(chan error, N)
 	wg.Add(N)
 	for i := 0; i < N; i++ {
-		i := i
+
 		go func() {
 			defer wg.Done()
 			sess, err := h.App.OpenSession(testCtx(t), connIDs[i])

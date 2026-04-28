@@ -11,7 +11,7 @@ const maxFrameSize = 4 << 20 // 4 MB
 
 // Frame is the envelope for request and response messages.
 type Frame struct {
-	Method  string          `json:"method,omitempty"`  // set on requests
+	Method  string          `json:"method,omitempty"` // set on requests
 	ID      uint64          `json:"id"`
 	Payload json.RawMessage `json:"payload,omitempty"`
 	Error   string          `json:"error,omitempty"` // set on error responses

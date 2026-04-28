@@ -1,0 +1,67 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gosec
+    - gocritic
+    - revive
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - unparam
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - exportloopref
+    - gocyclo
+    - nilerr
+    - prealloc
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+  staticcheck:
+    checks: ["all"]
+  gocyclo:
+    min-complexity: 20
+  revive:
+    severity: warning
+  gosec:
+    excludes:
+      - G115
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - webui
+    - dist
+    - build
+  exclude-files:
+    - ".*_grpc\\.pb\\.go$"
+    - ".*\\.pb\\.go$"
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - unused
+        - gosec
+        - gocyclo
+        - unparam
+    - path: (.*_grpc\.pb\.go|.*\.pb\.go)
+      linters:
+        - all

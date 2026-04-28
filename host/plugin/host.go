@@ -273,11 +273,11 @@ func safeCall(fn func() error) (err error) {
 func checkAPIMajor(pluginVer, hostVer string) error {
 	pm, err := majorOf(pluginVer)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrAPIVersionMismatch, err)
+		return fmt.Errorf("%w: %w", ErrAPIVersionMismatch, err)
 	}
 	hm, err := majorOf(hostVer)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrAPIVersionMismatch, err)
+		return fmt.Errorf("%w: %w", ErrAPIVersionMismatch, err)
 	}
 	if pm != hm {
 		return fmt.Errorf("%w: plugin=%s host=%s", ErrAPIVersionMismatch, pluginVer, hostVer)

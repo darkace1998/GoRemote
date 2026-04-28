@@ -52,5 +52,5 @@ func translateKeyringErr(err error) error {
 	// go-keyring surfaces backend-unavailable conditions (dbus not
 	// running, no Secret Service provider, etc.) as generic errors;
 	// treat anything else as a transport/availability failure.
-	return fmt.Errorf("%w: %v", ErrKeychainUnavailable, err)
+	return fmt.Errorf("%w: %w", ErrKeychainUnavailable, err)
 }

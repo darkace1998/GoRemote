@@ -37,9 +37,9 @@ import (
 	sdkplugin "github.com/goremote/goremote/sdk/plugin"
 	protocol "github.com/goremote/goremote/sdk/protocol"
 
+	credbw "github.com/goremote/goremote/plugins/credential-bitwarden"
 	credfile "github.com/goremote/goremote/plugins/credential-file"
 	credkeychain "github.com/goremote/goremote/plugins/credential-keychain"
-	credbw "github.com/goremote/goremote/plugins/credential-bitwarden"
 	protohttp "github.com/goremote/goremote/plugins/protocol-http"
 	protomosh "github.com/goremote/goremote/plugins/protocol-mosh"
 	protopowershell "github.com/goremote/goremote/plugins/protocol-powershell"
@@ -883,7 +883,7 @@ func main() {
 	// Build the logger writer: stderr (always) plus a rotating file
 	// under <state>/logs/goremote.log. Failures to open the file sink
 	// degrade to stderr-only logging.
-	logWriter := io.Writer(chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout))
+	logWriter := chooseLogWriter(runtime.GOOS, os.Stderr, os.Stdout)
 	logFilePath := filepath.Join(dir, "logs", "goremote.log")
 	var fileSink *logging.FileSink
 	if fs, ferr := logging.OpenFileSink(logFilePath, 0); ferr != nil {
@@ -898,7 +898,7 @@ func main() {
 	})
 	slog.SetDefault(logger)
 	if fileSink != nil {
-		defer fileSink.Close()
+		defer func() { _ = fileSink.Close() }()
 	}
 
 	a, err := newAppWithRecovery(app.Config{Dir: dir, Logger: logger}, logger)
@@ -1046,7 +1046,7 @@ func newAppWithRecovery(cfg app.Config, logger *slog.Logger) (*app.App, error) {
 	}
 	quarantineDir, qerr := quarantineStateDir(cfg.Dir)
 	if qerr != nil {
-		return nil, fmt.Errorf("%w (quarantine failed: %v)", err, qerr)
+		return nil, fmt.Errorf("%w (quarantine failed: %w)", err, qerr)
 	}
 	logger.Error("state load failed; quarantined state and retrying",
 		slog.String("dir", cfg.Dir),

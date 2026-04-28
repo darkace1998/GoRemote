@@ -29,8 +29,8 @@ func WithDialTimeout(d time.Duration) DialOption {
 // multiplexing via a mutex-guarded in-flight map.
 type Client struct {
 	conn     net.Conn
-	wmu      sync.Mutex             // serialises writes
-	mu       sync.Mutex             // guards nextID and inflight
+	wmu      sync.Mutex // serialises writes
+	mu       sync.Mutex // guards nextID and inflight
 	nextID   uint64
 	inflight map[uint64]chan pluginv1.Frame
 }

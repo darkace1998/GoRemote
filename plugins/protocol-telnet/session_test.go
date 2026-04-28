@@ -108,13 +108,14 @@ func (f *fakeServer) serveOnce(t *testing.T) {
 							sbBuf = append(sbBuf, b)
 						}
 					case 22:
-						if b == IAC {
+						switch b {
+						case IAC:
 							sbBuf = append(sbBuf, 0xFF)
 							state = 21
-						} else if b == SE {
+						case SE:
 							f.recordSB(sbOpt, sbBuf)
 							state = 0
-						} else {
+						default:
 							state = 0
 						}
 					}
