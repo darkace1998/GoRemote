@@ -65,6 +65,11 @@ type Settings struct {
 	AutoUpdateURL       string `json:"autoUpdateUrl,omitempty"`
 	AutoUpdatePublicKey string `json:"autoUpdatePublicKey,omitempty"`
 
+	// Plugin marketplace — optional HTTPS URL to a JSON document listing
+	// installable plugins. Empty disables the marketplace section in the
+	// Plugins dialog.
+	PluginMarketplaceURL string `json:"pluginMarketplaceUrl,omitempty"`
+
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 

@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/goremote/goremote/app/extplugin"
 	"github.com/goremote/goremote/app/settings"
 	gosync "github.com/goremote/goremote/app/sync"
 	"github.com/goremote/goremote/app/update"
@@ -74,6 +75,7 @@ type Bindings struct {
 	workspace workspace.Store
 	logLevel  *slog.LevelVar
 	stateDir  string
+	pluginReg *extplugin.Registry
 }
 
 // NewBindings constructs a Bindings value wrapping a started App.
@@ -113,6 +115,16 @@ func (b *Bindings) WithStateDir(dir string) *Bindings {
 	b.stateDir = dir
 	return b
 }
+
+// WithPluginRegistry attaches the external-plugin registry. May be nil
+// (e.g. when the registry could not be opened); UI code must guard.
+func (b *Bindings) WithPluginRegistry(r *extplugin.Registry) *Bindings {
+	b.pluginReg = r
+	return b
+}
+
+// PluginRegistry returns the attached external-plugin registry or nil.
+func (b *Bindings) PluginRegistry() *extplugin.Registry { return b.pluginReg }
 
 // SetLogLevel updates the active runtime log level. Recognised names are
 // "trace", "debug", "info", "warn", "error" (case-insensitive). An unknown
@@ -866,6 +878,14 @@ func main() {
 	}
 
 	bindings := NewBindings(a).WithLogLevelVar(levelVar).WithStateDir(dir)
+
+	// External plugin registry — best-effort. Failures degrade the
+	// Plugins dialog to a read-only warning state.
+	if reg, err := extplugin.Open(filepath.Join(dir, "plugins")); err != nil {
+		logger.Warn("extplugin: open registry", slog.String("err", err.Error()))
+	} else {
+		bindings.WithPluginRegistry(reg)
+	}
 
 	// Best-effort: clean up any leftover .old executable from a prior
 	// in-place update. Runs once, no error.

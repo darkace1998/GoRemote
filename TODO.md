@@ -156,16 +156,20 @@ to close.
 
 ## 4. Plugin / extensibility hardening (P2)
 
-- [ ] **External plugin loader UI**: add Settings → "Plugins" with install /
-  enable / disable / quarantine controls. The host APIs exist; this is just
-  the missing surface.
-- [ ] **Plugin marketplace bootstrap** (`requirements.md §8`). Even just a
-  static JSON manifest hosted alongside releases, listing trusted-key
-  fingerprints and download URLs, would unblock community plugins.
-- [ ] **gRPC / Connect IPC stress test**: today `host/plugin/ipc` is exercised
-  by `plugins/external-example` only. Add a chaos test that crashes the
-  child mid-call and asserts the host quarantines the plugin without
-  hanging the dispatcher.
+- [x] **External plugin loader UI** — shipped in `app/extplugin` (filesystem
+  discovery, persisted enable/disable/quarantine state, trusted-key store +
+  permissive/strict policy) wired into a new toolbar Plugins dialog
+  (`cmd/desktop/plugins_dialog.go`). Out-of-process launcher /
+  IPCRegistrar shim into `host/plugin` is a follow-up.
+- [x] **Plugin marketplace bootstrap** — shipped as `app/marketplace`
+  (stdlib-only HTTPS Fetch + sha256-verified atomic Install). The
+  marketplace URL is persisted on `Settings.PluginMarketplaceURL` and
+  exposed in the Plugins dialog. Ed25519 chain-of-trust at install time
+  is a follow-up; sha256 is enforced today.
+- [x] **gRPC / Connect IPC chaos test** — shipped as
+  `host/plugin/ipc/chaos_test.go` covering single-caller and 50-caller
+  survival across server stop, dial-after-stop fast-fail, and caller-side
+  context cancellation without inflight leaks.
 
 ## 5. Observability & diagnostics (P2)
 
