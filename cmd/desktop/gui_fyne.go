@@ -1409,6 +1409,15 @@ func attachSessionInto(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv
 		st.tabItem = container.NewTabItem(label, widget.NewLabel("Connecting…"))
 	}
 
+	// Initialize the session's content widget (and st.term for terminal
+	// protocols) synchronously here. Otherwise st.run() — which we kick
+	// off immediately below — can race against the asynchronous
+	// fyne.Do(add) and observe st.term == nil, mistakenly treating an
+	// SSH/Telnet session as "external" and never wiring up the
+	// terminal. content() is idempotent (cached), so the subsequent
+	// rebuildLayout call inside add reuses the same widget.
+	st.content()
+
 	fyne.Do(func() { sessions.add(st) })
 
 	st.run(func() {
