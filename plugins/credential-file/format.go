@@ -88,31 +88,9 @@ func deriveKey(passphrase string, salt []byte) []byte {
 	return argon2.IDKey([]byte(passphrase), salt, ArgonTime, ArgonMemoryKiB, ArgonThreads, ArgonKeyLen)
 }
 
-// encodeFile produces the on-disk byte payload for the given plaintext vault
-// using a freshly generated salt and nonce.
-func encodeFile(v *vault, passphrase string) ([]byte, error) {
-	plaintext, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("marshal vault: %w", err)
-	}
-
-	salt := make([]byte, saltLen)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		return nil, fmt.Errorf("random salt: %w", err)
-	}
-	nonce := make([]byte, nonceLen)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("random nonce: %w", err)
-	}
-
-	key := deriveKey(passphrase, salt)
-	defer zero(key)
-
-	return sealWith(key, salt, nonce, plaintext)
-}
-
-// encodeFileWithKey is like encodeFile but reuses an already-derived key and
-// salt, avoiding the Argon2id cost on every save. The nonce is always fresh.
+// encodeFileWithKey produces the on-disk byte payload using an already-derived
+// key and salt, avoiding the Argon2id cost on every save. The nonce is always
+// fresh.
 func encodeFileWithKey(v *vault, key, salt []byte) ([]byte, error) {
 	plaintext, err := json.Marshal(v)
 	if err != nil {

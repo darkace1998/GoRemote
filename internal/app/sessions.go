@@ -24,10 +24,6 @@ type SessionHandle = domain.ID
 // credentials during OpenSession.
 const CredentialResolveTimeout = 5 * time.Second
 
-// outputBufferBytes is the default buffer size for each output fan-out
-// subscriber channel; items are dropped for slow subscribers.
-const outputBufferBytes = 64
-
 // sessionEntry is the internal record tracked per open session.
 type sessionEntry struct {
 	handle       SessionHandle

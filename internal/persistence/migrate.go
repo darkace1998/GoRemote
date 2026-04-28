@@ -131,7 +131,7 @@ func toRaw(files map[string][]byte) (map[string]any, error) {
 // fromRaw re-serializes raw back into the file-bytes shape. Keys in raw that
 // are not present in the template are emitted under "<key>.json". Keys that
 // were present in the original template but absent in raw are dropped.
-func fromRaw(raw map[string]any, template map[string][]byte) (map[string][]byte, error) {
+func fromRaw(raw map[string]any, _ map[string][]byte) (map[string][]byte, error) {
 	out := make(map[string][]byte, len(raw))
 	// Preserve deterministic file names for known entries.
 	for _, name := range []string{FileMeta, FileInventory, FileTemplates, FileWorkspace} {
@@ -143,9 +143,9 @@ func fromRaw(raw map[string]any, template map[string][]byte) (map[string][]byte,
 			}
 			out[name] = data
 			delete(raw, key)
-		} else if _, had := template[name]; had {
-			// File existed but the migration removed it → skip.
 		}
+		// If the file existed in the template but the migration removed it,
+		// the absence here means we deliberately drop it.
 	}
 	// Any residual keys become <key>.json files.
 	for key, v := range raw {

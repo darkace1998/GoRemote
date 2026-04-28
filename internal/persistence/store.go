@@ -193,25 +193,6 @@ func (s *Store) readAll() (map[string][]byte, error) {
 	return out, nil
 }
 
-// writeFiles writes a map of files atomically relative to Dir(). Any files
-// named in the map but with a nil body are deleted if present.
-func (s *Store) writeFiles(files map[string][]byte) error {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return err
-	}
-	for name, data := range files {
-		path := filepath.Join(s.dir, name)
-		if data == nil {
-			_ = os.Remove(path)
-			continue
-		}
-		if err := WriteAtomic(path, data); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // MarshalIndent is a re-export so callers can produce the same indented
 // JSON shape the Store uses on disk without reaching for encoding/json
 // directly. It is mainly useful for tests and tooling.

@@ -3440,14 +3440,28 @@ func showAboutDialog(w fyne.Window) {
 
 // --- Theme handling --------------------------------------------------------
 
+// forcedVariantTheme wraps a fyne.Theme and pins it to a specific
+// ThemeVariant so user-pref toggles in Fyne's default theme don't override
+// our explicit Light/Dark choices. Replaces the deprecated
+// theme.LightTheme()/theme.DarkTheme().
+type forcedVariantTheme struct {
+	fyne.Theme
+	variant fyne.ThemeVariant
+}
+
+func (t *forcedVariantTheme) Color(name fyne.ThemeColorName, _ fyne.ThemeVariant) color.Color {
+	return t.Theme.Color(name, t.variant)
+}
+
 func applyTheme(a fyne.App, pref string) {
+	base := theme.DefaultTheme()
 	switch pref {
 	case appsettings.ThemeLight:
-		a.Settings().SetTheme(theme.LightTheme())
+		a.Settings().SetTheme(&forcedVariantTheme{Theme: base, variant: theme.VariantLight})
 	case appsettings.ThemeDark:
-		a.Settings().SetTheme(theme.DarkTheme())
+		a.Settings().SetTheme(&forcedVariantTheme{Theme: base, variant: theme.VariantDark})
 	default:
-		a.Settings().SetTheme(theme.DefaultTheme())
+		a.Settings().SetTheme(base)
 	}
 }
 

@@ -110,7 +110,7 @@ func showLogViewerDialog(w fyne.Window, b *Bindings) {
 
 	refreshBtn := widget.NewButtonWithIcon("Refresh", theme.ViewRefreshIcon(), load)
 	copyBtn := widget.NewButtonWithIcon("Copy all", theme.ContentCopyIcon(), func() {
-		w.Clipboard().SetContent(textArea.Text)
+		fyne.CurrentApp().Clipboard().SetContent(textArea.Text)
 	})
 	openFolderBtn := widget.NewButtonWithIcon("Open folder", theme.FolderOpenIcon(), func() {
 		_ = openPath(filenameDir(lp))
@@ -122,7 +122,7 @@ func showLogViewerDialog(w fyne.Window, b *Bindings) {
 	body := container.NewBorder(
 		container.NewVBox(pathLabel, container.NewHBox(refreshBtn, copyBtn, openFolderBtn)),
 		nil, nil, nil,
-		container.NewMax(textArea),
+		container.NewStack(textArea),
 	)
 
 	dlg := dialog.NewCustom("Log viewer", "Close", body, w)

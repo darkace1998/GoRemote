@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -59,9 +58,6 @@ func openTestSession(t *testing.T, settings map[string]any) protocol.Session {
 }
 
 func TestOpenSendInputEcho(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("pty unsupported on windows")
-	}
 	sess := openTestSession(t, nil)
 	defer sess.Close()
 

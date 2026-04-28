@@ -194,9 +194,10 @@ func (r *Registry) RemoveTrustedKey(label string) error {
 	return r.Refresh()
 }
 
-// verifier returns a sdk/plugin.Verifier configured against the current
-// trust store and policy.
-func (r *Registry) verifier() *sdkplugin.Verifier {
+// Verifier returns a sdk/plugin.Verifier configured against the current
+// trust store and policy. Callers use this to verify a plugin's signed
+// manifest before launching its host process.
+func (r *Registry) Verifier() *sdkplugin.Verifier {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	store := &sdkplugin.TrustStore{}
