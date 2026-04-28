@@ -111,6 +111,38 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		tree.setFilter(text)
 	}
 
+	envSelect := widget.NewSelect([]string{"All environments"}, nil)
+	envSelect.SetSelected("All environments")
+	envSelect.OnChanged = func(v string) {
+		if v == "All environments" {
+			tree.setEnvFilter("")
+			return
+		}
+		tree.setEnvFilter(v)
+	}
+	// Refresh env choices on demand: each tree.refresh() invocation
+	// rebuilds them so newly-tagged connections show up.
+	refreshEnvChoices := func() {
+		envs := tree.collectEnvironments()
+		opts := append([]string{"All environments"}, envs...)
+		envSelect.Options = opts
+		// Preserve current selection if it still exists.
+		cur := envSelect.Selected
+		found := false
+		for _, o := range opts {
+			if o == cur {
+				found = true
+				break
+			}
+		}
+		if !found {
+			envSelect.SetSelected("All environments")
+		} else {
+			envSelect.Refresh()
+		}
+	}
+	tree.onAfterRefresh = refreshEnvChoices
+
 	// Tree action toolbar.
 	treeActions := widget.NewToolbar(
 		widget.NewToolbarAction(theme.DocumentCreateIcon(), func() {
@@ -128,7 +160,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		}),
 	)
 
-	leftHeader := container.NewBorder(nil, treeActions, nil, nil, searchEntry)
+	leftHeader := container.NewBorder(envSelect, treeActions, nil, nil, searchEntry)
 	left := container.NewBorder(leftHeader, nil, nil, nil, tree.tree)
 
 	toolbar := buildToolbar(w, b, tree, sessions, a)
@@ -154,6 +186,25 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	})
 	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
 		detachCurrentTab(a, sessions)
+	})
+	// Ctrl+Shift+\ splits right with the currently-selected tree connection;
+	// Ctrl+Shift+- splits below. No-op if nothing is selected or no
+	// active tab to split into.
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyBackslash,
+		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
+	}, func(_ fyne.Shortcut) {
+		if id := tree.selected(); id != "" {
+			openSessionInSplit(w, b, sessions, id, "h")
+		}
+	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{
+		KeyName:  fyne.KeyMinus,
+		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
+	}, func(_ fyne.Shortcut) {
+		if id := tree.selected(); id != "" {
+			openSessionInSplit(w, b, sessions, id, "v")
+		}
 	})
 
 	// Confirm-on-close: ask the user when there are open sessions or when
@@ -756,6 +807,7 @@ type connTree struct {
 	tree   *widget.Tree
 	selID  string
 	filter string
+	envSel string
 
 	// Drag-and-drop state
 	rowsMu     sync.RWMutex
@@ -777,6 +829,11 @@ type connTree struct {
 	// can call into the session registry, dialogs, etc., without the
 	// tree itself needing to know about them.
 	onContextMenu func(uid string, abs fyne.Position)
+
+	// onAfterRefresh is invoked after each successful tree refresh.
+	// Used by the env-filter Select to update its options when the
+	// tree contents change.
+	onAfterRefresh func()
 }
 
 func newConnTree(b *Bindings, onOpen func(string)) *connTree {
@@ -814,6 +871,48 @@ func (ct *connTree) setFilter(s string) {
 	ct.tree.Refresh()
 }
 
+// setEnvFilter restricts the tree view to connections whose Environment
+// matches env (case-insensitive). An empty env disables the filter.
+// Folders are kept in the rendered tree if any descendant connection
+// passes — otherwise users would lose all context for filtered envs.
+func (ct *connTree) setEnvFilter(env string) {
+	ct.mu.Lock()
+	ct.envSel = strings.ToLower(strings.TrimSpace(env))
+	ct.mu.Unlock()
+	ct.tree.Refresh()
+}
+
+// collectEnvironments walks the tree and returns the sorted set of
+// distinct Environment values seen on connections. Used by the toolbar
+// env-filter Select to populate its choices.
+func (ct *connTree) collectEnvironments() []string {
+	ct.mu.RLock()
+	defer ct.mu.RUnlock()
+	if ct.view.Root == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var visit func(n *iapp.NodeView)
+	visit = func(n *iapp.NodeView) {
+		if n == nil {
+			return
+		}
+		if n.Kind == "connection" && n.Environment != "" {
+			seen[n.Environment] = struct{}{}
+		}
+		for _, c := range n.Children {
+			visit(c)
+		}
+	}
+	visit(ct.view.Root)
+	out := make([]string, 0, len(seen))
+	for e := range seen {
+		out = append(out, e)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (ct *connTree) childUIDs(uid widget.TreeNodeID) []widget.TreeNodeID {
 	ct.mu.RLock()
 	defer ct.mu.RUnlock()
@@ -840,6 +939,9 @@ func (ct *connTree) childUIDs(uid widget.TreeNodeID) []widget.TreeNodeID {
 }
 
 func (ct *connTree) matchesFilter(n *iapp.NodeView) bool {
+	if !ct.matchesEnv(n) {
+		return false
+	}
 	if ct.filter == "" {
 		return true
 	}
@@ -848,6 +950,24 @@ func (ct *connTree) matchesFilter(n *iapp.NodeView) bool {
 	}
 	for _, c := range n.Children {
 		if ct.matchesFilter(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesEnv returns true when n is admitted by the active environment
+// filter. Folders are admitted if any descendant connection passes;
+// when no filter is set everything is admitted.
+func (ct *connTree) matchesEnv(n *iapp.NodeView) bool {
+	if ct.envSel == "" {
+		return true
+	}
+	if n.Kind == "connection" {
+		return strings.EqualFold(n.Environment, ct.envSel)
+	}
+	for _, c := range n.Children {
+		if ct.matchesEnv(c) {
 			return true
 		}
 	}
@@ -1255,6 +1375,9 @@ func (ct *connTree) refresh() {
 	ct.view = view
 	ct.mu.Unlock()
 	ct.tree.Refresh()
+	if ct.onAfterRefresh != nil {
+		ct.onAfterRefresh()
+	}
 }
 
 func (ct *connTree) selected() string {
@@ -1442,11 +1565,48 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 		handle, err := b.OpenSession(context.Background(), connID)
 		if err != nil {
 			sessions.releaseConn(connID)
+			if isAuthFailure(err) {
+				fyne.Do(func() {
+					dialog.ShowConfirm("Authentication failed",
+						fmt.Sprintf("%v\n\nEnter a password and retry?", err),
+						func(retry bool) {
+							if !retry {
+								return
+							}
+							if !sessions.reserveConn(connID) {
+								return
+							}
+							promptPasswordAndOpen(w, b, sessions, cv, connID)
+						}, w)
+				})
+				return
+			}
 			fyne.Do(func() { dialog.ShowError(err, w) })
 			return
 		}
 		attachSession(w, b, sessions, cv, connID, handle)
 	}()
+}
+
+// isAuthFailure returns true when err looks like an auth/permission
+// problem (bad password, wrong key, "permission denied", etc). Used by
+// openSession to decide whether to fall back to an interactive
+// password prompt instead of a flat error.
+func isAuthFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	for _, k := range []string{
+		"authenticate", "authentication", "auth fail",
+		"permission denied", "unable to authenticate",
+		"password", "publickey", "keyboard-interactive",
+	} {
+		if strings.Contains(s, k) {
+			return true
+		}
+	}
+	return false
 }
 
 // needsInteractivePassword reports true when the connection is configured to

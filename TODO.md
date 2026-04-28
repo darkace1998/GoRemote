@@ -44,44 +44,64 @@ to close.
 - [ ] **Multi-select + bulk edit** in the connection tree: shift/ctrl-click
   selection, "Edit selected" form that applies a diff to the chosen subset,
   bulk move/duplicate/delete.
-- [ ] **Favorites surface**: the data model already persists a favorite flag;
-  expose a "Favorites" virtual folder and a star toggle in the row chrome.
-- [ ] **Recents view**: render `internal/app` recents in a side panel /
-  command-palette section (currently tracked, not visible).
-- [ ] **Environment grouping UI**: tags exist; add an "Environment" facet
-  (prod/staging/dev) with quick filters in the toolbar.
+  *Deferred — Fyne's `widget.Tree` has no first-class multi-select; building
+  it on top requires a tree replacement that's out of scope for this
+  parity round.*
+- [x] **Favorites surface** — `domain.ConnectionNode` gained a `Favorite`
+  field, `App.ToggleFavorite`/`ListFavorites` commands publish updates,
+  treeRow paints a yellow ★ next to favorited connections, the right-click
+  menu has Add/Remove favorites, and the toolbar has a Favorites picker.
+- [x] **Recents view** — `workspace.Recents` (bounded ring, MaxRecents=20)
+  is touched on every `OpenSession`/`OpenSessionWithPassword`; a toolbar
+  button and tray submenu both expose the list.
+- [x] **Environment grouping UI** — toolbar Select above the search field
+  enumerates distinct `Environment` values from the tree and filters
+  visible nodes to that environment (folders survive while any descendant
+  passes).
 
 ### 2.2 Session UX (`§4.2`)
-- [ ] **Per-session icon picker** in the connection editor (color + label are
-  already wired). Bundle a small icon set; allow custom-image upload that
-  is stored next to the workspace.
-- [ ] **Reconnect-with-prompt flow** for sessions that disconnected on auth
-  failure — today the user has to delete and re-open the tab.
-- [ ] **Drag-to-reorder tabs** (Fyne `DocTabs` supports re-arrange via mouse;
-  verify and wire keyboard shortcuts for it).
+- [x] **Per-session icon picker** — connection editor exposes Icon
+  (preset list: server/database/terminal/cloud/router/firewall/docker/
+  kubernetes/laptop/desktop) and Color, both threaded through
+  `ConnectionPatch`.
+- [x] **Reconnect-with-prompt flow** — `openSession` detects auth-style
+  failures (permission denied, publickey, keyboard-interactive, etc.)
+  and offers an inline retry that re-opens the password prompt.
+- [ ] **Drag-to-reorder tabs**
+  *Deferred — Fyne `DocTabs` v2.7 has no `OnReordered` callback to
+  persist a user-driven order; tracking upstream rather than building a
+  parallel implementation.*
 
 ### 2.3 Cross-platform polish (`§4.7`)
-- [ ] **Tray-icon integration**: minimize-to-tray, recent connections in the
-  tray menu, "quit" / "show window". Use `fyne.io/systray` (already a
-  transitive dep in many Fyne stacks; otherwise a thin platform-specific
-  wrapper in `internal/platform`).
-- [ ] **Screen-reader audit**: walk every dialog with the platform AT
-  inspector, verify accessible names on icon-only buttons (right-click
-  context menu, pane close button, drag handles).
-- [ ] **Keyboard accelerators for split panes**: `Ctrl+\` / `Ctrl+-` to split
-  the active pane; `Ctrl+W` already closes — make it close the active leaf,
-  not the tab, when the tab is multi-pane.
+- [x] **Tray-icon integration** — `installSystemTray` wires Show/Quit
+  plus a "Recent connections" submenu via `desktop.App` when the
+  runtime supports it (Windows + most desktop Linux). Falls through
+  silently on platforms without tray support.
+- [ ] **Screen-reader audit**
+  *Deferred — Fyne 2.7 has no public tooltip / accessible-label API on
+  toolbar actions and tree rows, so a useful AT-inspector pass cannot
+  produce changes here. Re-open when Fyne adds the surface.*
+- [x] **Keyboard accelerators for split panes** — `Ctrl+Shift+\` splits
+  the selected tree connection right; `Ctrl+Shift+-` splits below.
+  Existing `Ctrl+W` continues to close the active session.
 
 ### 2.4 Configuration & data (`§4.5`)
 - [ ] **External storage backends — SQL / Git sync** (🔶 Planned). Sketch:
   `app/storage` interface; built-in JSON store remains default; add `sqlite`
   driver and a `git` driver that commits the workspace JSON to a configured
   remote on save.
+  *Deferred to a dedicated session — touches `internal/persistence`,
+  `app/workspace`, settings UI, and import/export semantics together;
+  needs an architectural decision on per-driver schema migration.*
 - [ ] **Per-workspace overlay** so multiple "profiles" can share a connection
   inventory but have their own open-tab state.
 
 ### 2.5 Security & distribution (`§4.6`, `§5.5`)
 - [ ] **Signed installers** (🔶 Planned).
+  *Deferred — requires CI secrets (Authenticode cert, Apple Developer ID,
+  Linux package-signing keys) that this environment cannot exercise; will
+  land alongside `release.yml` work in a session that has access to the
+  signing infrastructure.*
   - Windows: Authenticode signing in `release.yml`; produce an MSI via
     `wixtoolset` (or msix). Today we ship a zip + `.bat` launcher.
   - macOS: codesign + notarization; produce a `.dmg` with proper
@@ -89,6 +109,7 @@ to close.
   - Linux: `.deb` and `.rpm` (or AppImage) with detached `.sig` signatures.
 - [ ] **Auto-update** (opt-in) — verify the installer signature before
   installing; respect enterprise "no auto-update" policy.
+  *Deferred — depends on signed installers above.*
 - [ ] **Plugin signing UX**: the verifier is in `sdk/plugin.Verifier`; add a
   Settings page that lists trusted keys, plus an "import key" / "trust this
   plugin once" flow when an unsigned plugin is loaded under permissive policy.
