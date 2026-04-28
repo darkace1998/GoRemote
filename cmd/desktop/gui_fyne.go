@@ -61,26 +61,36 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		tabs:          tabs,
 		items:         make(map[domain.ID]*sessionTab),
 		openConns:     make(map[string]struct{}),
+		groups:        make(map[*container.TabItem]*paneGroup),
 		statusLabel:   statusLabel,
 		sessionsLabel: sessionsLabel,
 		bindings:      b,
 	}
 	tabs.OnClosed = func(item *container.TabItem) {
-		st := sessions.findByTab(item)
-		if st == nil {
-			return
-		}
-		if st.transferring {
-			// Detach in progress: do not terminate the session.
-			return
-		}
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := st.b.CloseSession(ctx, st.handle); err != nil {
-				slog.Warn("close session", "handle", st.handle, "err", err)
+		members := sessions.membersOfTab(item)
+		if len(members) == 0 {
+			// Could be a tab that's currently transferring (single
+			// session being detached); fall back to per-tab session
+			// lookup so we still suppress in that case.
+			st := sessions.findByTab(item)
+			if st == nil || st.transferring {
+				return
 			}
-		}()
+			members = []*sessionTab{st}
+		}
+		for _, st := range members {
+			if st.transferring {
+				continue
+			}
+			st := st
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := st.b.CloseSession(ctx, st.handle); err != nil {
+					slog.Warn("close session", "handle", st.handle, "err", err)
+				}
+			}()
+		}
 	}
 
 	tree := newConnTree(b, func(connID string) {
@@ -182,10 +192,83 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 
 // --- Session registry -----------------------------------------------------
 
+// paneGroup tracks the panes hosted in a single tabItem. The simplest
+// and most common case is a single-member group (one session per tab).
+// When the user splits a tab, the group grows to two members and its
+// rebuildLayout() wraps the two cached content widgets in an HSplit or
+// VSplit which becomes the tabItem's content.
+//
+// v1 supports up to two members per group. Splitting an already-split
+// tab is rejected; users who want >2 simultaneous sessions can detach
+// to floating windows.
+type paneGroup struct {
+	tabItem *container.TabItem
+	members []*sessionTab
+	// orientation is "" for single-member groups, "h" for horizontal
+	// split (members[0] left, members[1] right) or "v" for vertical
+	// split (members[0] top, members[1] bottom).
+	orientation string
+}
+
+// rebuildLayout replaces the tabItem.Content with the appropriate widget
+// for the current member count and orientation. Caller must hold the
+// UI goroutine.
+func (g *paneGroup) rebuildLayout() {
+	if g.tabItem == nil {
+		return
+	}
+	switch len(g.members) {
+	case 0:
+		// Caller is expected to remove the tab; nothing to render.
+		g.tabItem.Content = widget.NewLabel("")
+	case 1:
+		g.tabItem.Content = g.members[0].content()
+		g.orientation = ""
+	default:
+		left := g.members[0].content()
+		right := g.members[1].content()
+		var sp *container.Split
+		if g.orientation == "v" {
+			sp = container.NewVSplit(left, right)
+		} else {
+			sp = container.NewHSplit(left, right)
+		}
+		sp.SetOffset(0.5)
+		g.tabItem.Content = sp
+	}
+	g.tabItem.Text = g.label()
+	if g.tabItem.Content != nil {
+		g.tabItem.Content.Refresh()
+	}
+}
+
+// label composes the tab title from the member names.
+func (g *paneGroup) label() string {
+	switch len(g.members) {
+	case 0:
+		return ""
+	case 1:
+		return tabLabelFor(g.members[0])
+	default:
+		return tabLabelFor(g.members[0]) + " | " + tabLabelFor(g.members[1])
+	}
+}
+
+func tabLabelFor(st *sessionTab) string {
+	if st == nil {
+		return ""
+	}
+	if st.cv.Name != "" {
+		return st.cv.Name
+	}
+	return st.cv.EffectiveHost
+}
+
 type sessionRegistry struct {
 	mu            sync.Mutex
 	items         map[domain.ID]*sessionTab
 	openConns     map[string]struct{}
+	groups        map[*container.TabItem]*paneGroup
 	tabs          *container.DocTabs
 	statusLabel   *widget.Label
 	sessionsLabel *widget.Label
@@ -213,9 +296,33 @@ func (r *sessionRegistry) add(st *sessionTab) {
 	r.mu.Lock()
 	r.items[st.hid] = st
 	count := len(r.items)
-	r.mu.Unlock()
+	var g *paneGroup
+	var newTab bool
 	if st.tabItem != nil {
-		r.tabs.Append(st.tabItem)
+		g = r.groups[st.tabItem]
+		if g == nil {
+			g = &paneGroup{tabItem: st.tabItem}
+			r.groups[st.tabItem] = g
+			newTab = true
+		}
+		// Avoid duplicate-add: only append when not already a member.
+		already := false
+		for _, m := range g.members {
+			if m == st {
+				already = true
+				break
+			}
+		}
+		if !already {
+			g.members = append(g.members, st)
+		}
+	}
+	r.mu.Unlock()
+	if st.tabItem != nil && g != nil {
+		g.rebuildLayout()
+		if newTab {
+			r.tabs.Append(st.tabItem)
+		}
 		r.tabs.Select(st.tabItem)
 	}
 	r.setStatus(fmt.Sprintf("Connected: %s", st.cv.Name))
@@ -230,10 +337,32 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 		delete(r.openConns, st.connID)
 	}
 	count := len(r.items)
+	var g *paneGroup
+	var removeTab bool
+	if ok && st.tabItem != nil {
+		g = r.groups[st.tabItem]
+		if g != nil {
+			out := g.members[:0]
+			for _, m := range g.members {
+				if m != st {
+					out = append(out, m)
+				}
+			}
+			g.members = out
+			if len(g.members) == 0 {
+				delete(r.groups, st.tabItem)
+				removeTab = true
+			}
+		}
+	}
 	r.mu.Unlock()
 	if ok {
 		if st.tabItem != nil {
-			r.tabs.Remove(st.tabItem)
+			if removeTab {
+				r.tabs.Remove(st.tabItem)
+			} else if g != nil {
+				g.rebuildLayout()
+			}
 		}
 		if st.window != nil {
 			fyne.Do(func() { st.window.Close() })
@@ -243,9 +372,43 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	r.setSessionCount(count)
 }
 
+// groupFor returns the paneGroup hosting the given tabItem, or nil.
+func (r *sessionRegistry) groupFor(item *container.TabItem) *paneGroup {
+	if item == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.groups[item]
+}
+
+// membersOfTab returns a copy of the sessions hosted in the given tab,
+// or nil. Safe to call from outside the registry lock.
+func (r *sessionRegistry) membersOfTab(item *container.TabItem) []*sessionTab {
+	if item == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	g := r.groups[item]
+	if g == nil {
+		return nil
+	}
+	out := make([]*sessionTab, len(g.members))
+	copy(out, g.members)
+	return out
+}
+
+// findByTab returns the active session within the given tab. For
+// multi-pane groups, the most recently added member is treated as
+// active; this matches the typical "I just split, target the new pane"
+// expectation. Returns nil when no group/session is registered.
 func (r *sessionRegistry) findByTab(item *container.TabItem) *sessionTab {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if g := r.groups[item]; g != nil && len(g.members) > 0 {
+		return g.members[len(g.members)-1]
+	}
 	for _, st := range r.items {
 		if st.tabItem == item {
 			return st
@@ -962,6 +1125,15 @@ func promptPasswordAndOpen(w fyne.Window, b *Bindings, sessions *sessionRegistry
 }
 
 func attachSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID, handle string) {
+	attachSessionInto(w, b, sessions, cv, connID, handle, nil, "")
+}
+
+// attachSessionInto attaches a newly opened session into the UI. When
+// targetTab is nil a fresh tab is created. When targetTab is non-nil
+// the session is wrapped into a split inside that tab using the given
+// orientation ("h" or "v"). Splitting an already-split tab is rejected
+// at the call site.
+func attachSessionInto(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID, handle string, targetTab *container.TabItem, orientation string) {
 	hid, err := domain.ParseID(handle)
 	if err != nil {
 		// Backend session was opened but we can't track it; close it so
@@ -980,24 +1152,121 @@ func attachSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iap
 	if label == "" {
 		label = cv.EffectiveHost
 	}
-	tabItem := container.NewTabItem(label, widget.NewLabel("Connecting…"))
 
 	st := &sessionTab{
-		b:       b,
-		cv:      cv,
-		handle:  handle,
-		hid:     hid,
-		connID:  connID,
-		tabItem: tabItem,
+		b:      b,
+		cv:     cv,
+		handle: handle,
+		hid:    hid,
+		connID: connID,
 	}
 	st.ctx, st.cancel = context.WithCancel(context.Background())
-	tabItem.Content = st.content()
+
+	if targetTab != nil {
+		// Validate target still exists and has only one member.
+		sessions.mu.Lock()
+		g := sessions.groups[targetTab]
+		ok := g != nil && len(g.members) == 1
+		if ok && orientation != "h" && orientation != "v" {
+			orientation = "h"
+		}
+		if ok {
+			g.orientation = orientation
+		}
+		sessions.mu.Unlock()
+		if !ok {
+			// Fall back to opening as its own tab if the target
+			// group has been mutated since the user clicked.
+			targetTab = nil
+		} else {
+			st.tabItem = targetTab
+		}
+	}
+	if targetTab == nil {
+		st.tabItem = container.NewTabItem(label, widget.NewLabel("Connecting…"))
+	}
 
 	fyne.Do(func() { sessions.add(st) })
 
 	st.run(func() {
 		fyne.Do(func() { sessions.remove(hid) })
 	})
+}
+
+// openSessionInSplit opens connID and attaches it as a second pane in
+// the currently-selected tab using the given split orientation ("h" or
+// "v"). Falls back to a regular tab if no tab is selected or the
+// selected tab already hosts two panes.
+func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID, orientation string) {
+	target := sessions.tabs.Selected()
+	if target == nil {
+		dialog.ShowInformation("No Active Tab", "Open a session first, then split it.", w)
+		return
+	}
+	if g := sessions.groupFor(target); g == nil || len(g.members) != 1 {
+		dialog.ShowInformation("Cannot Split", "Tab already hosts two panes; close one first.", w)
+		return
+	}
+	if !sessions.reserveConn(connID) {
+		dialog.ShowInformation("Already Open", "A session for this connection is already active.", w)
+		return
+	}
+	ctx := context.Background()
+	cv, err := b.GetConnection(ctx, connID)
+	if err != nil {
+		sessions.releaseConn(connID)
+		dialog.ShowError(err, w)
+		return
+	}
+	sessions.setStatus(fmt.Sprintf("Connecting to %s…", cv.Name))
+	if needsInteractivePassword(cv) {
+		promptPasswordAndAttach(w, b, sessions, cv, connID, target, orientation)
+		return
+	}
+	go func() {
+		handle, err := b.OpenSession(context.Background(), connID)
+		if err != nil {
+			sessions.releaseConn(connID)
+			fyne.Do(func() { dialog.ShowError(err, w) })
+			return
+		}
+		attachSessionInto(w, b, sessions, cv, connID, handle, target, orientation)
+	}()
+}
+
+// promptPasswordAndAttach is the split-aware version of
+// promptPasswordAndOpen.
+func promptPasswordAndAttach(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string, targetTab *container.TabItem, orientation string) {
+	userEntry := widget.NewEntry()
+	userEntry.SetText(cv.Username)
+	userEntry.SetPlaceHolder("username")
+	pwEntry := widget.NewPasswordEntry()
+	pwEntry.SetPlaceHolder("password")
+	items := []*widget.FormItem{
+		widget.NewFormItem("Username", userEntry),
+		widget.NewFormItem("Password", pwEntry),
+	}
+	title := fmt.Sprintf("Sign in to %s", cv.Name)
+	d := dialog.NewForm(title, "Connect", "Cancel", items, func(ok bool) {
+		if !ok {
+			sessions.releaseConn(connID)
+			sessions.setStatus("")
+			return
+		}
+		username := strings.TrimSpace(userEntry.Text)
+		password := pwEntry.Text
+		go func() {
+			handle, err := b.OpenSessionWithPassword(context.Background(), connID, username, password)
+			if err != nil {
+				sessions.releaseConn(connID)
+				fyne.Do(func() { dialog.ShowError(err, w) })
+				return
+			}
+			attachSessionInto(w, b, sessions, cv, connID, handle, targetTab, orientation)
+		}()
+	}, w)
+	d.Resize(fyne.NewSize(360, 180))
+	d.Show()
 }
 
 // openSessionInWindow opens a session for connID in a brand-new fyne.Window
@@ -1142,7 +1411,32 @@ func detachCurrentTab(a fyne.App, sessions *sessionRegistry) {
 	}
 
 	st.transferring = true
-	sessions.tabs.Remove(st.tabItem)
+	// If the source tab hosts another session in a split, peel off
+	// just this session and rebuild the tab around the remaining
+	// member; otherwise remove the whole tab.
+	sessions.mu.Lock()
+	g := sessions.groups[st.tabItem]
+	keepTab := false
+	if g != nil {
+		out := g.members[:0]
+		for _, m := range g.members {
+			if m != st {
+				out = append(out, m)
+			}
+		}
+		g.members = out
+		if len(g.members) > 0 {
+			keepTab = true
+		} else {
+			delete(sessions.groups, st.tabItem)
+		}
+	}
+	sessions.mu.Unlock()
+	if keepTab {
+		g.rebuildLayout()
+	} else {
+		sessions.tabs.Remove(st.tabItem)
+	}
 	st.tabItem = nil
 
 	win := a.NewWindow("goremote — " + label)
@@ -1194,6 +1488,9 @@ func reattachToMain(sessions *sessionRegistry, st *sessionTab) {
 
 	tabItem := container.NewTabItem(label, contentObj)
 	st.tabItem = tabItem
+	sessions.mu.Lock()
+	sessions.groups[tabItem] = &paneGroup{tabItem: tabItem, members: []*sessionTab{st}}
+	sessions.mu.Unlock()
 	sessions.tabs.Append(tabItem)
 	sessions.tabs.Select(tabItem)
 	st.transferring = false
@@ -2409,6 +2706,16 @@ host := n.Host
 port := n.Port
 connectItem := fyne.NewMenuItem("Connect", func() { openSession(w, b, sessions, connID) })
 newWinItem := fyne.NewMenuItem("Open in new window…", func() { openSessionInWindow(w, a, b, sessions, connID) })
+splitRightItem := fyne.NewMenuItem("Open in split right", func() { openSessionInSplit(w, b, sessions, connID, "h") })
+splitBelowItem := fyne.NewMenuItem("Open in split below", func() { openSessionInSplit(w, b, sessions, connID, "v") })
+canSplit := false
+if sel := sessions.tabs.Selected(); sel != nil {
+if g := sessions.groupFor(sel); g != nil && len(g.members) == 1 {
+canSplit = true
+}
+}
+splitRightItem.Disabled = !canSplit
+splitBelowItem.Disabled = !canSplit
 copyHost := fyne.NewMenuItem("Copy host", func() { a.Clipboard().SetContent(host) })
 copyHost.Disabled = host == ""
 copyHostPort := fyne.NewMenuItem("Copy host:port", func() {
@@ -2422,6 +2729,8 @@ copyHostPort.Disabled = host == ""
 items = append(items,
 connectItem,
 newWinItem,
+splitRightItem,
+splitBelowItem,
 fyne.NewMenuItemSeparator(),
 fyne.NewMenuItem("Edit…", func() { editSelectedNode(w, b, tree) }),
 fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }),
