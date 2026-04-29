@@ -191,6 +191,7 @@ jobs:
     env:
       PFX_B64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
       CERT_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      UPGRADE_CODE: ${{ vars.WINDOWS_UPGRADE_CODE }}
     steps:
       - uses: actions/checkout@v6
 
@@ -216,16 +217,22 @@ jobs:
           & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
             /f "$env:RUNNER_TEMP\cert.pfx" /p $env:CERT_PW $exe.FullName
 
+      - name: Report MSI packaging disabled
+        if: ${{ env.UPGRADE_CODE == '' }}
+        shell: pwsh
+        run: |
+          Write-Warning "WINDOWS_UPGRADE_CODE is not set; skipping MSI packaging and publishing the signed EXE only."
+
       - name: Install WiX
+        if: ${{ env.UPGRADE_CODE != '' }}
         run: dotnet tool install --global wix
 
       - name: Build MSI
+        if: ${{ env.UPGRADE_CODE != '' }}
         env:
           VERSION: ${{ needs.prepare.outputs.app_version }}
-          UPGRADE_CODE: ${{ vars.WINDOWS_UPGRADE_CODE }}
         shell: pwsh
         run: |
-          if (-not $env:UPGRADE_CODE) { throw "WINDOWS_UPGRADE_CODE variable is not set" }
           $exe = "dist\goremote-windows-amd64.exe"
           if (-not (Test-Path "installers\windows\license.rtf")) {
             "{\rtf1\ansi goremote - see LICENSE in source repository.}" | Out-File -Encoding ascii installers\windows\license.rtf
@@ -240,7 +247,7 @@ jobs:
             -o "dist\goremote-amd64-$env:VERSION.msi"
 
       - name: Authenticode-sign MSI
-        if: ${{ env.PFX_B64 != '' }}
+        if: ${{ env.PFX_B64 != '' && env.UPGRADE_CODE != '' }}
         shell: pwsh
         run: |
           $msi = Get-ChildItem "dist\goremote-amd64-${{ needs.prepare.outputs.app_version }}.msi" | Select-Object -First 1
@@ -341,7 +348,9 @@ jobs:
           cp dist/goremote-darwin-amd64/goremote-darwin-amd64 "release-assets/goremote-${RELEASE_TAG}-darwin-amd64"
           cp dist/goremote-darwin-arm64/goremote-darwin-arm64 "release-assets/goremote-${RELEASE_TAG}-darwin-arm64"
           cp dist/goremote-windows-amd64-signed/goremote-windows-amd64.exe "release-assets/goremote-${RELEASE_TAG}-windows-amd64.exe"
-          cp dist/goremote-windows-amd64-signed/goremote-amd64-${APP_VERSION}.msi "release-assets/goremote-${RELEASE_TAG}-windows-amd64.msi"
+          if [ -f "dist/goremote-windows-amd64-signed/goremote-amd64-${APP_VERSION}.msi" ]; then
+            cp dist/goremote-windows-amd64-signed/goremote-amd64-${APP_VERSION}.msi "release-assets/goremote-${RELEASE_TAG}-windows-amd64.msi"
+          fi
           cp dist/update-manifest/update.json "release-assets/update-${RELEASE_TAG}.json"
           ls -l release-assets
 

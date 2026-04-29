@@ -25,6 +25,10 @@ the `Release` workflow:
 - **MSI UpgradeCode**: replace the `PUT-A-STABLE-GUID-HERE` placeholder in
   the workflow's `-d UpgradeCode=` argument with a real GUID and never
   change it. Changing it breaks in-place upgrade for existing installs.
+- **Release workflow behaviour without UpgradeCode**: if
+  `WINDOWS_UPGRADE_CODE` is not configured, the release workflow now skips MSI
+  creation and still publishes the signed Windows `.exe` so the rest of the
+  release can complete.
 - **Ed25519 release key**: the *public* half is shipped to users as the
   `Settings.AutoUpdatePublicKey` value (stored in their profile). Rotate
   by issuing a new app version that ships an updated default public key
