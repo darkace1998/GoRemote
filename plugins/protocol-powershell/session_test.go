@@ -227,14 +227,17 @@ func TestOpenInvalidBinaryByName(t *testing.T) {
 }
 
 // TestEnvAndCWDPlumbed asserts that the resolved openConfig values reach the
-// child via a fake pwsh that prints PWD and a known env var on stdin EOF.
+// child via a fake pwsh that records cwd and a known env var before entering
+// its stdin loop.
 func TestEnvAndCWDPlumbed(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "fake-pwsh")
+	pwdFile := filepath.Join(dir, "pwd.txt")
+	envFile := filepath.Join(dir, "env.txt")
 	body := "#!/usr/bin/env bash\n" +
-		"# Print pwd and GOREMOTE_TEST then loop echoing stdin.\n" +
-		"printf 'PWD=%s\\n' \"$PWD\"\n" +
-		"printf 'ENV=%s\\n' \"$GOREMOTE_TEST\"\n" +
+		"# Record cwd and GOREMOTE_TEST then loop echoing stdin.\n" +
+		"pwd > " + shellQuote(pwdFile) + "\n" +
+		"printf '%s' \"$GOREMOTE_TEST\" > " + shellQuote(envFile) + "\n" +
 		"while IFS= read -r line; do printf '%s\\n' \"$line\"; done\n"
 	if err := os.WriteFile(bin, []byte(body), 0o755); err != nil {
 		t.Fatalf("write fake pwsh: %v", err)
@@ -266,32 +269,33 @@ func TestEnvAndCWDPlumbed(t *testing.T) {
 	go func() { startDone <- sess.Start(ctx, nil, stdout) }()
 
 	deadline := time.Now().Add(3 * time.Second)
-	var sawPWD, sawEnv bool
+	var gotPWD, gotEnv string
 	for time.Now().Before(deadline) {
-		bufMu.Lock()
-		s := buf.String()
-		bufMu.Unlock()
-		if strings.Contains(s, "PWD="+cwd) {
-			sawPWD = true
+		if data, err := os.ReadFile(pwdFile); err == nil {
+			gotPWD = strings.TrimSpace(string(data))
 		}
-		if strings.Contains(s, "ENV=abc123") {
-			sawEnv = true
+		if data, err := os.ReadFile(envFile); err == nil {
+			gotEnv = strings.TrimSpace(string(data))
 		}
-		if sawPWD && sawEnv {
+		if gotPWD == cwd && gotEnv == "abc123" {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if !sawPWD {
+	if gotPWD != cwd {
 		bufMu.Lock()
-		t.Fatalf("did not see PWD=%s in output: %q", cwd, buf.String())
+		t.Fatalf("child cwd mismatch: got %q want %q (pty output %q)", gotPWD, cwd, buf.String())
 	}
-	if !sawEnv {
+	if gotEnv != "abc123" {
 		bufMu.Lock()
-		t.Fatalf("did not see ENV=abc123 in output: %q", buf.String())
+		t.Fatalf("child env mismatch: got %q want %q (pty output %q)", gotEnv, "abc123", buf.String())
 	}
 	_ = sess.Close()
 	<-startDone
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 type lockedWriter struct {
