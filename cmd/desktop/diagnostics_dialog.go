@@ -17,6 +17,7 @@ import (
 	"github.com/darkace1998/GoRemote/app/diagnostics"
 	"github.com/darkace1998/GoRemote/app/settings"
 	"github.com/darkace1998/GoRemote/app/workspace"
+	"github.com/darkace1998/GoRemote/cmd/desktop/tooltip"
 )
 
 // showDiagnosticsDialog asks the user where to save a support bundle,
@@ -120,7 +121,11 @@ func showLogViewerDialog(w fyne.Window, b *Bindings) {
 	pathLabel.Wrapping = fyne.TextWrapBreak
 
 	body := container.NewBorder(
-		container.NewVBox(pathLabel, container.NewHBox(refreshBtn, copyBtn, openFolderBtn)),
+		container.NewVBox(pathLabel, container.NewHBox(
+			tooltip.WrapButton(refreshBtn, "Reload the tail of the log file"),
+			tooltip.WrapButton(copyBtn, "Copy the visible log to the clipboard"),
+			tooltip.WrapButton(openFolderBtn, "Open the log folder in your file manager"),
+		)),
 		nil, nil, nil,
 		container.NewStack(textArea),
 	)
