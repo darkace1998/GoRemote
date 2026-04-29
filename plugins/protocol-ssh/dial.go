@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Dial performs the full SSH connection setup — auth method construction,

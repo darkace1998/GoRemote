@@ -23,7 +23,7 @@ import (
 
 	"crypto/ed25519"
 
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // EntryStatus is the user-visible health/disposition of a discovered plugin.

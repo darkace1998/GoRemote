@@ -5,7 +5,7 @@
 // graphical protocols like RDP and VNC are handled.
 package mosh
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in MOSH protocol
 // plugin. Hosts validate it via [plugin.Manifest.Validate] before

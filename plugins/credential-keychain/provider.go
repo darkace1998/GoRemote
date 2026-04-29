@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goremote/goremote/internal/domain"
-	"github.com/goremote/goremote/internal/platform"
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/platform"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // probeAccount is the keychain account name used to verify the backend

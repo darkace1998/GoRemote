@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 var _ protocol.Module = (*Module)(nil)

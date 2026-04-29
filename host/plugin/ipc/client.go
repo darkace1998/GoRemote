@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	pluginv1 "github.com/goremote/goremote/proto/plugin/v1"
+	pluginv1 "github.com/darkace1998/GoRemote/proto/plugin/v1"
 )
 
 // DialOption configures a client dial. The option set is intentionally small

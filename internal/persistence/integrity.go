@@ -3,7 +3,7 @@ package persistence
 import (
 	"fmt"
 
-	"github.com/goremote/goremote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
 // Severity classifies the impact of an integrity issue.

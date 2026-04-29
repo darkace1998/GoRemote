@@ -28,8 +28,8 @@
 
     <Icon Id="AppIcon" SourceFile="$(SourceExe)" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/goremote/goremote" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/goremote/goremote" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/darkace1998/GoRemote" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/darkace1998/GoRemote" />
 
     <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLDIR" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui" />

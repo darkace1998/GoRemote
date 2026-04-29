@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	pluginhost "github.com/goremote/goremote/host/plugin"
-	"github.com/goremote/goremote/sdk/credential"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	pluginhost "github.com/darkace1998/GoRemote/host/plugin"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // Errors returned by the credential host.

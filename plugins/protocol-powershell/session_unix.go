@@ -14,7 +14,7 @@ import (
 
 	"github.com/creack/pty"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is a live PowerShell PTY session. It is safe for the caller to

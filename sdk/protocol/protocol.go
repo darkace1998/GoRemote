@@ -17,7 +17,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // RenderMode tells the host how the session should be presented.

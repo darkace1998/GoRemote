@@ -7,7 +7,7 @@
 // file (mode 0600), depending on the password_via setting.
 package vnc
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in VNC protocol
 // plugin. Hosts validate it via [plugin.Manifest.Validate] before

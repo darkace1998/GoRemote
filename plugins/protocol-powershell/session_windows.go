@@ -15,7 +15,7 @@ import (
 
 	"github.com/ActiveState/termtest/conpty"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is a live PowerShell session backed by the Windows ConPTY API

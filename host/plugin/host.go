@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goremote/goremote/internal/eventbus"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/internal/eventbus"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // EventKind classifies plugin-host events published on the event bus.

@@ -13,8 +13,8 @@ import (
 
 	terminal "github.com/fyne-io/terminal"
 
-	iapp "github.com/goremote/goremote/internal/app"
-	"github.com/goremote/goremote/internal/domain"
+	iapp "github.com/darkace1998/GoRemote/internal/app"
+	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
 // sessionTab represents a single open session displayed in the AppTabs

@@ -1,8 +1,8 @@
 package domain
 
 import (
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Field identifies a ConnectionNode field that participates in inheritance.

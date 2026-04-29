@@ -14,9 +14,9 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/goremote/goremote/app/extplugin"
-	"github.com/goremote/goremote/app/marketplace"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/app/extplugin"
+	"github.com/darkace1998/GoRemote/app/marketplace"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // showPluginsDialog opens the Plugins management UI: discovered plugins,

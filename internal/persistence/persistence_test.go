@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/internal/domain"
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // sampleSnapshot returns a non-trivial snapshot: two folders, two

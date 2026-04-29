@@ -7,7 +7,7 @@
 // proto/plugin/v1 and is built from cmd/external-example.
 package externalexample
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // PluginID is the canonical id for the demonstration external plugin.
 const PluginID = "io.goremote.example.external"

@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	pluginv1 "github.com/goremote/goremote/proto/plugin/v1"
+	pluginv1 "github.com/darkace1998/GoRemote/proto/plugin/v1"
 )
 
 // ErrSocketInUse is returned by ListenUnix if another process appears to be

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 
 	"golang.org/x/crypto/ssh"
 )

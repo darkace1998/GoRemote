@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goremote/goremote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
 // protocolMap maps a mRemoteNG Protocol attribute value to a goremote

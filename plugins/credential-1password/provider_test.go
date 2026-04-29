@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/goremote/goremote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/credential"
 )
 
 // fakeCall records one invocation made by the provider against the

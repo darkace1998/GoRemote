@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goremote/goremote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/credential"
 )
 
 // fakeCall captures one observed invocation against the Runner.

@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/goremote/goremote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
 // NodeView is a JSON-friendly projection of a folder or connection node. UI

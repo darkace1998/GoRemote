@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // sessionConfig is the immutable parameter bundle a [Session] is built with.

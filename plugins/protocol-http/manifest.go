@@ -9,7 +9,7 @@
 // stdout sink.
 package http
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in HTTP/HTTPS
 // launcher plugin. Hosts validate it via [plugin.Manifest.Validate] before

@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/goremote/goremote/internal/extlaunch"
-	"github.com/goremote/goremote/sdk/plugin"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/internal/extlaunch"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Setting keys exposed by the TN5250 plugin.

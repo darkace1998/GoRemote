@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 func TestModuleManifest(t *testing.T) {

@@ -23,12 +23,12 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	appsettings "github.com/goremote/goremote/app/settings"
-	appworkspace "github.com/goremote/goremote/app/workspace"
-	iapp "github.com/goremote/goremote/internal/app"
-	"github.com/goremote/goremote/internal/domain"
-	"github.com/goremote/goremote/internal/logging"
-	"github.com/goremote/goremote/sdk/protocol"
+	appsettings "github.com/darkace1998/GoRemote/app/settings"
+	appworkspace "github.com/darkace1998/GoRemote/app/workspace"
+	iapp "github.com/darkace1998/GoRemote/internal/app"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/logging"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Build-time variables.

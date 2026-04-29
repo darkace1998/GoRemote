@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/goremote/goremote/internal/extlaunch"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/internal/extlaunch"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is a single TN5250 launcher session. It owns one external client

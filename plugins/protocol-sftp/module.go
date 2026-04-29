@@ -7,9 +7,9 @@ import (
 
 	pkgsftp "github.com/pkg/sftp"
 
-	protossh "github.com/goremote/goremote/plugins/protocol-ssh"
-	"github.com/goremote/goremote/sdk/plugin"
-	"github.com/goremote/goremote/sdk/protocol"
+	protossh "github.com/darkace1998/GoRemote/plugins/protocol-ssh"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // SFTP reuses every SSH connection setting (host, port, username,

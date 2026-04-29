@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/goremote/goremote/internal/extlaunch"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/internal/extlaunch"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is one live MOSH session backed by an external client process.

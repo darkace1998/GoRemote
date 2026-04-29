@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is a live Telnet session. It is created by Module.Open and driven

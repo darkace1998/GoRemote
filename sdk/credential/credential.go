@@ -13,7 +13,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // Reference identifies a credential within a specific provider.

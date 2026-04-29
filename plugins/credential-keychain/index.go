@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/goremote/goremote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/credential"
 )
 
 // indexFileName is the filename used for the on-disk index inside the

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goremote/goremote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
 func openFixture(t *testing.T, name string) *os.File {

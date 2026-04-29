@@ -14,9 +14,9 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/goremote/goremote/app/diagnostics"
-	"github.com/goremote/goremote/app/settings"
-	"github.com/goremote/goremote/app/workspace"
+	"github.com/darkace1998/GoRemote/app/diagnostics"
+	"github.com/darkace1998/GoRemote/app/settings"
+	"github.com/darkace1998/GoRemote/app/workspace"
 )
 
 // showDiagnosticsDialog asks the user where to save a support bundle,

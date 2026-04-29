@@ -2,7 +2,7 @@
 
 GO ?= go
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
-DESKTOP_PACKAGE := github.com/goremote/goremote/cmd/desktop
+DESKTOP_PACKAGE := github.com/darkace1998/GoRemote/cmd/desktop
 NON_DESKTOP_PACKAGES := $(shell $(GO) list ./... | grep -v '^$(DESKTOP_PACKAGE)$$')
 LINUX_GUI_PKG_CONFIG_DEPS := gl x11 xcursor xrandr xinerama xi xxf86vm
 LINUX_GUI_DEPS_AVAILABLE := $(shell if [ "$$(uname -s)" != "Linux" ]; then echo 1; elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists $(LINUX_GUI_PKG_CONFIG_DEPS); then echo 1; else echo 0; fi)

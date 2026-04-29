@@ -9,16 +9,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	credhost "github.com/goremote/goremote/host/credential"
-	pluginhost "github.com/goremote/goremote/host/plugin"
-	protohost "github.com/goremote/goremote/host/protocol"
-	"github.com/goremote/goremote/internal/domain"
-	"github.com/goremote/goremote/internal/eventbus"
-	"github.com/goremote/goremote/internal/logging"
-	"github.com/goremote/goremote/internal/persistence"
-	"github.com/goremote/goremote/sdk/credential"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
-	"github.com/goremote/goremote/sdk/protocol"
+	credhost "github.com/darkace1998/GoRemote/host/credential"
+	pluginhost "github.com/darkace1998/GoRemote/host/plugin"
+	protohost "github.com/darkace1998/GoRemote/host/protocol"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/eventbus"
+	"github.com/darkace1998/GoRemote/internal/logging"
+	"github.com/darkace1998/GoRemote/internal/persistence"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // DefaultPersistInterval is the debounce interval used by the background

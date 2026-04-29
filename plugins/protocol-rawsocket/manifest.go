@@ -9,7 +9,7 @@
 // client (e.g. "telnet" without Telnet option negotiation).
 package rawsocket
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in Raw Socket
 // protocol plugin. Hosts validate it via [plugin.Manifest.Validate] before

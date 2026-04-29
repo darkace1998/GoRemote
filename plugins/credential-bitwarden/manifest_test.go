@@ -3,7 +3,7 @@ package bitwarden
 import (
 	"testing"
 
-	"github.com/goremote/goremote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/credential"
 )
 
 var _ credential.Provider = (*Provider)(nil)

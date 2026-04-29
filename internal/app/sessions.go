@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	protohost "github.com/goremote/goremote/host/protocol"
-	"github.com/goremote/goremote/internal/domain"
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/protocol"
+	protohost "github.com/darkace1998/GoRemote/host/protocol"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // SessionHandle uniquely identifies an open session. It is opaque to callers.

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 func writeManifest(t *testing.T, dir string, m sdkplugin.Manifest) {

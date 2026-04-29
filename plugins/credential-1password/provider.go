@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // opSessionExpiredExitCode is the exit code `op` returns when a previously

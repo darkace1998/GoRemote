@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/goremote/goremote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/credential"
 )
 
 func tempPath(t *testing.T) string {

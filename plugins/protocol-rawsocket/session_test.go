@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // startEchoServer starts an in-process TCP echo server on 127.0.0.1:0. The

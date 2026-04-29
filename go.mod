@@ -1,4 +1,4 @@
-module github.com/goremote/goremote
+module github.com/darkace1998/GoRemote
 
 go 1.26
 

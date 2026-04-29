@@ -15,7 +15,7 @@
 // this fact to the user before the session starts.
 package telnet
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static plugin manifest for the Telnet protocol plugin.
 var Manifest = plugin.Manifest{

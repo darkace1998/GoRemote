@@ -4,13 +4,12 @@ package ipc_test
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/host/plugin/ipc"
-	pluginv1 "github.com/goremote/goremote/proto/plugin/v1"
+	"github.com/darkace1998/GoRemote/host/plugin/ipc"
+	pluginv1 "github.com/darkace1998/GoRemote/proto/plugin/v1"
 )
 
 // blockingEcho.Ping waits on a per-call gate so the test can hold a
@@ -33,8 +32,7 @@ func (b *blockingEcho) Ping(ctx context.Context, req *pluginv1.PingRequest) (*pl
 // on the returned gate channel until the test releases it (or stop()).
 func startBlockingServer(t *testing.T) (sock string, stop func(), gate chan struct{}) {
 	t.Helper()
-	dir := t.TempDir()
-	sock = filepath.Join(dir, "ipc.sock")
+	sock = testSocketPath(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ln, err := ipc.ListenUnix(ctx, sock)

@@ -3,8 +3,8 @@ package powershell
 import (
 	"testing"
 
-	"github.com/goremote/goremote/sdk/plugin"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Compile-time check: Module satisfies the protocol.Module contract.

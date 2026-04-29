@@ -8,7 +8,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is a live Raw Socket session. It is safe for the caller to invoke

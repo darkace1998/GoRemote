@@ -7,7 +7,7 @@ syntax = "proto3";
 
 package goremote.plugin.v1;
 
-option go_package = "github.com/goremote/goremote/proto/plugin/v1;pluginv1";
+option go_package = "github.com/darkace1998/GoRemote/proto/plugin/v1;pluginv1";
 
 // PluginHandshake is the very first service the host calls after connecting
 // to a plugin process. It allows the plugin to declare its identity and

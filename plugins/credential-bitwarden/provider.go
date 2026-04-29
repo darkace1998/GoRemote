@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // Runner abstracts process execution so tests can inject a fake `bw`.

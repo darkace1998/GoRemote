@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	pluginhost "github.com/goremote/goremote/host/plugin"
-	"github.com/goremote/goremote/internal/eventbus"
-	"github.com/goremote/goremote/sdk/credential"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	pluginhost "github.com/darkace1998/GoRemote/host/plugin"
+	"github.com/darkace1998/GoRemote/internal/eventbus"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 type stubProvider struct {

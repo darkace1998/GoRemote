@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	pluginhost "github.com/goremote/goremote/host/plugin"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
-	"github.com/goremote/goremote/sdk/protocol"
+	pluginhost "github.com/darkace1998/GoRemote/host/plugin"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Errors returned by the protocol host.

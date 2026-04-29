@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	appworkspace "github.com/goremote/goremote/app/workspace"
+	appworkspace "github.com/darkace1998/GoRemote/app/workspace"
 )
 
 // paneGroup tree operations are pure data manipulation — they do not

@@ -3,8 +3,8 @@ package app
 import (
 	"time"
 
-	"github.com/goremote/goremote/internal/domain"
-	"github.com/goremote/goremote/internal/eventbus"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/eventbus"
 )
 
 // EventKind enumerates the kinds of lifecycle events the app publishes on its

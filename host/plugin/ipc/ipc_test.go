@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/host/plugin/ipc"
-	pluginv1 "github.com/goremote/goremote/proto/plugin/v1"
+	"github.com/darkace1998/GoRemote/host/plugin/ipc"
+	pluginv1 "github.com/darkace1998/GoRemote/proto/plugin/v1"
 )
 
 // helloImpl is a minimal PluginHandshakeServer used by tests.
@@ -41,8 +40,7 @@ func (echoImpl) Ping(_ context.Context, req *pluginv1.PingRequest) (*pluginv1.Pi
 // for Serve to return, and asserts no error.
 func startTestServer(t *testing.T) (string, func()) {
 	t.Helper()
-	dir := t.TempDir()
-	sock := filepath.Join(dir, "ipc.sock")
+	sock := testSocketPath(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ln, err := ipc.ListenUnix(ctx, sock)

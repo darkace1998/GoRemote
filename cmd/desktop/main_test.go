@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	credhost "github.com/goremote/goremote/host/credential"
-	pluginhost "github.com/goremote/goremote/host/plugin"
-	protohost "github.com/goremote/goremote/host/protocol"
-	iapp "github.com/goremote/goremote/internal/app"
-	"github.com/goremote/goremote/internal/eventbus"
-	"github.com/goremote/goremote/internal/logging"
-	"github.com/goremote/goremote/internal/persistence"
+	credhost "github.com/darkace1998/GoRemote/host/credential"
+	pluginhost "github.com/darkace1998/GoRemote/host/plugin"
+	protohost "github.com/darkace1998/GoRemote/host/protocol"
+	iapp "github.com/darkace1998/GoRemote/internal/app"
+	"github.com/darkace1998/GoRemote/internal/eventbus"
+	"github.com/darkace1998/GoRemote/internal/logging"
+	"github.com/darkace1998/GoRemote/internal/persistence"
 )
 
 func TestNewAppWithRecovery_RecoversFromCorruptSnapshot(t *testing.T) {

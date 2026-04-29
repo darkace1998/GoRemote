@@ -11,7 +11,7 @@
 // graphical file-browser widget.
 package sftp
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in SFTP plugin.
 var Manifest = plugin.Manifest{

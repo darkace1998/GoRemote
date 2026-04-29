@@ -22,8 +22,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/goremote/goremote/host/plugin/ipc"
-	pluginv1 "github.com/goremote/goremote/proto/plugin/v1"
+	"github.com/darkace1998/GoRemote/host/plugin/ipc"
+	pluginv1 "github.com/darkace1998/GoRemote/proto/plugin/v1"
 )
 
 const (

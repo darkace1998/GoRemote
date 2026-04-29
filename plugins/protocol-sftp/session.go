@@ -18,7 +18,7 @@ import (
 	pkgsftp "github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Session is a live SFTP browser session. The user interacts with a

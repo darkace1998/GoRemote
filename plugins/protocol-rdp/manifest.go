@@ -7,10 +7,10 @@
 // native client owns its own window.
 //
 // Binary discovery and process supervision are delegated to the shared
-// helper at [github.com/goremote/goremote/internal/extlaunch].
+// helper at [github.com/darkace1998/GoRemote/internal/extlaunch].
 package rdp
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in RDP protocol
 // plugin. Hosts validate it via [plugin.Manifest.Validate] before

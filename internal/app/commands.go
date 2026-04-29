@@ -9,10 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/goremote/goremote/internal/domain"
-	mremoteng "github.com/goremote/goremote/internal/import/mremoteng"
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/internal/domain"
+	mremoteng "github.com/darkace1998/GoRemote/internal/import/mremoteng"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // FolderOpts is the input payload for CreateFolder.

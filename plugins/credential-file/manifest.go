@@ -6,8 +6,8 @@
 package credentialfile
 
 import (
-	"github.com/goremote/goremote/sdk/credential"
-	"github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/sdk/credential"
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // ManifestID is the reverse-DNS identifier of the built-in encrypted-file

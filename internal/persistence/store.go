@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goremote/goremote/internal/domain"
+	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
 // BackupsDirName is the sub-directory (under Store.Dir()) where zip backups

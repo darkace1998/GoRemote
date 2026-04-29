@@ -8,7 +8,7 @@
 // user's identity); no network is involved.
 package powershell
 
-import "github.com/goremote/goremote/sdk/plugin"
+import "github.com/darkace1998/GoRemote/sdk/plugin"
 
 // Manifest is the static manifest published by the built-in PowerShell
 // protocol plugin. Hosts validate it via [plugin.Manifest.Validate] before

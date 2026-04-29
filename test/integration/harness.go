@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/app/settings"
-	"github.com/goremote/goremote/app/workspace"
-	"github.com/goremote/goremote/internal/app"
-	sdkplugin "github.com/goremote/goremote/sdk/plugin"
+	"github.com/darkace1998/GoRemote/app/settings"
+	"github.com/darkace1998/GoRemote/app/workspace"
+	"github.com/darkace1998/GoRemote/internal/app"
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 
-	"github.com/goremote/goremote/test/integration/fakes/fakecred"
-	"github.com/goremote/goremote/test/integration/fakes/fakeprotocol"
+	"github.com/darkace1998/GoRemote/test/integration/fakes/fakecred"
+	"github.com/darkace1998/GoRemote/test/integration/fakes/fakeprotocol"
 )
 
 // Recorder bundles per-fake recorders so tests can reach them without

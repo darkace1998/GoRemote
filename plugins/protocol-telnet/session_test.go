@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // fakeServer is a minimal in-process Telnet server used for integration

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // writeFakePwsh writes a tiny POSIX shell script that mimics enough of pwsh
@@ -240,16 +240,13 @@ func TestEnvAndCWDPlumbed(t *testing.T) {
 
 	var buf bytes.Buffer
 	var bufMu sync.Mutex
-	pr, pw := io.Pipe()
-	go func() {
-		_, _ = io.Copy(io.MultiWriter(&lockedWriter{w: &buf, mu: &bufMu}), pr)
-	}()
+	stdout := &lockedWriter{w: &buf, mu: &bufMu}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	startDone := make(chan error, 1)
-	go func() { startDone <- sess.Start(ctx, nil, pw) }()
+	go func() { startDone <- sess.Start(ctx, nil, stdout) }()
 
 	deadline := time.Now().Add(3 * time.Second)
 	var sawPWD, sawEnv bool
@@ -277,8 +274,6 @@ func TestEnvAndCWDPlumbed(t *testing.T) {
 		t.Fatalf("did not see ENV=abc123 in output: %q", buf.String())
 	}
 	_ = sess.Close()
-	_ = pw.Close()
-	_ = pr.Close()
 	<-startDone
 }
 

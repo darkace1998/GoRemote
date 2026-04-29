@@ -7,8 +7,8 @@ import (
 
 	keyring "github.com/zalando/go-keyring"
 
-	"github.com/goremote/goremote/internal/platform"
-	"github.com/goremote/goremote/sdk/credential"
+	"github.com/darkace1998/GoRemote/internal/platform"
+	"github.com/darkace1998/GoRemote/sdk/credential"
 )
 
 // fakePaths is a minimal platform.Paths implementation whose DataDir is

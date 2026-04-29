@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goremote/goremote/sdk/protocol"
+	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 func TestSessionCloseIdempotent(t *testing.T) {
