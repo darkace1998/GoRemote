@@ -141,7 +141,7 @@ func (s *Store) Save(ctx context.Context, snap *Snapshot) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("persistence: mkdir %s: %w", s.dir, err)
 	}
 

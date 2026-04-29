@@ -82,6 +82,7 @@ func (p *Provider) Unlock(ctx context.Context, passphrase string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// #nosec G304 -- p.path is the configured vault file path for this provider.
 	data, err := os.ReadFile(p.path)
 	if errors.Is(err, os.ErrNotExist) {
 		// Bootstrap: remember the passphrase-derived key for the first save.
@@ -298,6 +299,7 @@ func atomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("mkdir parent: %w", err)
 	}
 	tmp := path + ".tmp"
+	// #nosec G304 -- tmp is derived from the provider-controlled destination path.
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return fmt.Errorf("open tmp: %w", err)

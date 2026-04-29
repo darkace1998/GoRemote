@@ -88,6 +88,7 @@ func (s *fileStore) Get(ctx context.Context) (Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// #nosec G304 -- s.path is the configured settings file path for this store.
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

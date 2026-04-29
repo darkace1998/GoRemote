@@ -24,7 +24,7 @@ import (
 // file left behind by a failed write is cleaned up before returning.
 func WriteAtomic(path string, data []byte) (err error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("persistence: mkdir %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, ".tmp-"+filepath.Base(path)+"-*")
@@ -73,6 +73,7 @@ func WriteAtomicJSON(path string, v any) error {
 // metadata is durable on disk. On platforms where directory fsync is not
 // supported, the error is swallowed.
 func fsyncDir(dir string) error {
+	// #nosec G304 -- dir is derived from a store-managed destination path.
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
@@ -92,6 +93,7 @@ func fsyncDir(dir string) error {
 // readFileIfExists reads path and returns its contents, or (nil, false, nil)
 // if the file does not exist. Any other error is returned.
 func readFileIfExists(path string) ([]byte, bool, error) {
+	// #nosec G304 -- callers join a store-managed root with a fixed filename set.
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

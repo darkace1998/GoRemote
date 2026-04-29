@@ -41,7 +41,7 @@ func (s *Store) Backup(ctx context.Context) (string, error) {
 // then prunes according to DefaultBackupRetention.
 func (s *Store) backupLocked(ctx context.Context) (string, error) {
 	backupsDir := filepath.Join(s.dir, BackupsDirName)
-	if err := os.MkdirAll(backupsDir, 0o755); err != nil {
+	if err := os.MkdirAll(backupsDir, 0o700); err != nil {
 		return "", fmt.Errorf("persistence: mkdir backups: %w", err)
 	}
 
@@ -73,7 +73,8 @@ func (s *Store) backupLocked(ctx context.Context) (string, error) {
 // BackupsDirName directory) to outPath as a zip archive. Paths inside the
 // zip are relative to dir and use forward slashes.
 func zipStoreDir(ctx context.Context, dir, outPath string) error {
-	out, err := os.Create(outPath)
+	// #nosec G304 -- outPath is generated under the store-managed backups directory.
+	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("persistence: create backup: %w", err)
 	}
@@ -119,6 +120,7 @@ func zipStoreDir(ctx context.Context, dir, outPath string) error {
 		if zerr != nil {
 			return zerr
 		}
+		// #nosec G304 -- path comes directly from filepath.Walk over the store root.
 		f, ferr := os.Open(path)
 		if ferr != nil {
 			return ferr
@@ -203,6 +205,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	}
 
 	// Validate archive before touching the existing files.
+	// #nosec G304 -- backupPath is an explicit user-selected restore source.
 	zr, err := zip.OpenReader(backupPath)
 	if err != nil {
 		return fmt.Errorf("persistence: open backup %s: %w", backupPath, err)
@@ -254,8 +257,7 @@ func sanitizeRestorePath(name string) (string, error) {
 }
 
 // extractZipEntry extracts a single zip entry relative to root. Directories
-// are created with 0o755 and files with the mode recorded in the header
-// masked to 0o644 minimum for readability.
+// are created with 0o700 and files with 0o600 permissions.
 func extractZipEntry(f *zip.File, root string) error {
 	clean, err := sanitizeRestorePath(f.Name)
 	if err != nil {
@@ -266,9 +268,9 @@ func extractZipEntry(f *zip.File, root string) error {
 		return fmt.Errorf("persistence: backup contains unsafe path %q", f.Name)
 	}
 	if f.FileInfo().IsDir() {
-		return os.MkdirAll(dest, 0o755)
+		return os.MkdirAll(dest, 0o700)
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
 		return err
 	}
 	rc, err := f.Open()
@@ -276,7 +278,8 @@ func extractZipEntry(f *zip.File, root string) error {
 		return err
 	}
 	defer rc.Close()
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	// #nosec G304 -- dest is constrained to root by safeJoinWithinRoot.
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

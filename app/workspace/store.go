@@ -77,6 +77,7 @@ func (s *fileStore) Load(ctx context.Context) (Workspace, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// #nosec G304 -- s.path is the configured workspace file path for this store.
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

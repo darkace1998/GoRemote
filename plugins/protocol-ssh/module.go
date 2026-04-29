@@ -480,6 +480,7 @@ func buildHostKeyCallback(strict, knownHostsPath string) (ssh.HostKeyCallback, s
 		return nil, nil, fmt.Errorf("known_hosts: stat: %w", err)
 	}
 
+	// #nosec G304 -- path is the configured known_hosts file location.
 	base, err := knownhosts.New(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("known_hosts: load: %w", err)
@@ -517,6 +518,7 @@ func appendKnownHost(path, hostname string, remote net.Addr, key ssh.PublicKey) 
 		}
 	}
 	line := knownhosts.Line(addrs, key)
+	// #nosec G304 -- path is the configured known_hosts file location.
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("known_hosts: open: %w", err)

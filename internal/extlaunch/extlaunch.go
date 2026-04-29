@@ -180,6 +180,7 @@ func Start(ctx context.Context, spec Spec) (*Process, error) {
 	if spec.Binary == "" {
 		return nil, errors.New("extlaunch: Spec.Binary is empty")
 	}
+	// #nosec G204 -- the caller provides a resolved binary path and argv is passed directly, not through a shell.
 	cmd := exec.Command(spec.Binary, spec.Args...)
 	if spec.Env != nil {
 		cmd.Env = spec.Env

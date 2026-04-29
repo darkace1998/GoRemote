@@ -155,7 +155,8 @@ func (g *GitSync) locate() (string, error) {
 }
 
 func (g *GitSync) run(ctx context.Context, args ...string) (string, error) {
-	if _, err := g.locate(); err != nil {
+	gitPath, err := g.locate()
+	if err != nil {
 		return "", err
 	}
 	if _, ok := ctx.Deadline(); !ok {
@@ -163,7 +164,8 @@ func (g *GitSync) run(ctx context.Context, args ...string) (string, error) {
 		ctx, cancel = context.WithTimeout(ctx, defaultTimeout)
 		defer cancel()
 	}
-	cmd := exec.CommandContext(ctx, "git", args...)
+	// #nosec G204 -- gitPath is resolved via LookPath and args are passed directly, not through a shell.
+	cmd := exec.CommandContext(ctx, gitPath, args...)
 	cmd.Dir = g.dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

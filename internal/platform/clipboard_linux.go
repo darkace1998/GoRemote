@@ -26,6 +26,7 @@ var writeCmds = [][]string{
 
 func (clipboardImpl) ReadText() (string, error) {
 	for _, args := range readCmds {
+		// #nosec G204 -- args come from a fixed in-package allowlist of clipboard commands.
 		out, err := exec.Command(args[0], args[1:]...).Output()
 		if err == nil {
 			return string(out), nil
@@ -36,6 +37,7 @@ func (clipboardImpl) ReadText() (string, error) {
 
 func (clipboardImpl) WriteText(s string) error {
 	for _, args := range writeCmds {
+		// #nosec G204 -- args come from a fixed in-package allowlist of clipboard commands.
 		cmd := exec.Command(args[0], args[1:]...)
 		cmd.Stdin = strings.NewReader(s)
 		if err := cmd.Run(); err == nil {

@@ -35,6 +35,7 @@ type indexFile struct {
 // loadIndex reads and decodes the index file at path. A missing file is
 // not an error; it returns an empty map.
 func loadIndex(path string) (map[string]indexEntry, error) {
+	// #nosec G304 -- path is the provider-managed keychain index location.
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return map[string]indexEntry{}, nil
@@ -65,6 +66,7 @@ func saveIndex(path string, entries map[string]indexEntry) error {
 		return fmt.Errorf("mkdir parent: %w", err)
 	}
 	tmp := path + ".tmp"
+	// #nosec G304 -- tmp is derived from the provider-managed index path.
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("open tmp: %w", err)

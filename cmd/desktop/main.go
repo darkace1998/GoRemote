@@ -457,6 +457,7 @@ func (b *Bindings) ListSessions() []app.SessionInfo { return b.app.ListSessions(
 
 // ImportMRemoteNGFile imports from a file on disk.
 func (b *Bindings) ImportMRemoteNGFile(ctx context.Context, format, path string) (app.ImportResult, error) {
+	// #nosec G304 -- path is an explicit user-selected import source.
 	f, err := os.Open(path)
 	if err != nil {
 		return app.ImportResult{}, err
