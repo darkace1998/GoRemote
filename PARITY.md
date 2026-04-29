@@ -85,7 +85,7 @@ See the protocols table above. All required first-class protocols are available;
 | Lookup by metadata / user selection / fallback         | ✅ **Ready**    | `host/credential` resolver chain |
 | Username / password / domain / private key / OTP / per-protocol secrets | ✅ **Ready** | `credential.Material` shape |
 | Unlock / refresh / cache / revocation                  | ✅ **Ready**    | Provider lifecycle + `Material.Zeroize` |
-| Out-of-process isolation                               | ✅ **Ready**    | IPC contract defined and reference-implemented (`host/plugin/ipc/`); 1Password / Bitwarden today shell out to vendor CLIs which already isolate process-side; IPC now fully functional on Windows (Unix domain sockets, Win10 RS1+). |
+| Out-of-process isolation                               | ✅ **Ready**    | IPC contract defined and reference-implemented (`host/plugin/ipc/`); 1Password / Bitwarden today shell out to vendor CLIs which already isolate process-side; the IPC reference transport (length-prefixed JSON over Unix domain sockets) works on Linux, macOS, and Windows 10 1809+. |
 | Capability discovery / version negotiation             | ✅ **Ready**    | `plugin.Manifest` + `plugin.CurrentAPIVersion` |
 | Graceful failure on provider crash                     | ✅ **Ready**    | Host quarantine after repeated failures |
 
@@ -163,4 +163,4 @@ Trade-off: embedded-tab UX is replaced by a separate OS window. This is document
 
 ### IPC reference implementation
 
-External plugins are expected to communicate over the IPC contract at `host/plugin/ipc/` (gRPC/Connect over named pipes or Unix sockets), not Go's native `plugin` package. The reference implementation is exercised by `plugins/external-example` and tested in `host/plugin/ipc`.
+External plugins are expected to communicate over the IPC contract at `host/plugin/ipc/` (length-prefixed JSON frames over Unix domain sockets — supported on Linux, macOS, and Windows 10 1809+), not Go's native `plugin` package. The reference implementation is exercised by `plugins/external-example` and tested in `host/plugin/ipc` (including a chaos test for crash / cancellation behavior).

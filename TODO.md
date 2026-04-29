@@ -210,8 +210,9 @@ to close.
   out of `dist-linux`).
 - [ ] Bump `Version` injection — there's drift between `1.11.0`, `1.11.1`
   and the tagless main commit. Tag a release after the next P0/P1 batch.
-- [ ] Trim `webui/` (archived React shell) into its own historical branch so
-  the main tree stops carrying the dead JS/TS toolchain.
+- [x] Trim `webui/` (archived React shell) — done; the directory has been
+  removed from the main tree (the only remaining reference is a stale
+  comment in `cmd/desktop/main.go`).
 
 ---
 

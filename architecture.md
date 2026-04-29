@@ -32,23 +32,24 @@ Use a **Go monorepo with a shared `go.work`** and a thin desktop shell backed by
 
 ## 3. Suggested Repository Layout
 - `cmd/desktop` — Fyne desktop entry point (main, bindings, GUI, session bridge)
+- `cmd/sign-manifest` — release helper that signs auto-update manifests (Ed25519)
 - `internal/app` — application core (commands, events, sessions, views)
-- `internal/appcore` — boot/lifecycle helpers shared by `cmd/desktop`
 - `internal/domain` — connection / folder / template / inheritance types
 - `internal/persistence` — versioned config, secret blob, migrations, backups
 - `internal/import/mremoteng` — XML/CSV importer with per-row warnings
-- `internal/extlaunch` — generic external-process launcher (RDP/VNC/HTTP/PowerShell/MOSH)
+- `internal/extlaunch` — generic external-process launcher (RDP/VNC/TN5250/MOSH/PowerShell)
 - `internal/eventbus` — typed pub/sub used by hosts and app core
-- `internal/logging` — structured-logger wrapper with secret redaction
+- `internal/logging` — structured-logger wrapper with secret redaction (file sink + rotation)
 - `internal/platform` — paths, keychain abstraction, clipboard, notifications
-- `internal/session` — session-descriptor helpers used by the app core
 - `app/settings`, `app/workspace` — persisted UI documents (settings, open tabs)
+- `app/update`, `app/diagnostics`, `app/marketplace`, `app/extplugin`, `app/sync` — app-level features (auto-update, diagnostic bundle, plugin marketplace, external-plugin loader, git-sync)
 - `sdk/plugin`, `sdk/protocol`, `sdk/credential` — versioned plugin contracts
 - `host/plugin`, `host/protocol`, `host/credential` — in-process plugin hosts
-- `host/plugin/ipc/` + `proto/plugin/v1/` — out-of-process IPC contract
-- `plugins/protocol-{ssh,telnet,rlogin,rawsocket,tn5250,rdp,vnc,http,powershell,mosh}` — built-in protocols
+- `host/plugin/ipc/` + `proto/plugin/v1/` — out-of-process IPC contract (length-prefixed JSON over Unix domain sockets)
+- `plugins/protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial,tn5250,rdp,vnc,http,powershell,mosh}` — built-in protocols
 - `plugins/credential-{file,keychain,1password,bitwarden}` — built-in providers
 - `plugins/external-example` — reference out-of-process plugin
+- `installers/` — Windows WiX MSI sources (and platform packaging stubs)
 - `test/integration` — fake-plugin integration harness
 
 ## 4. UI Architecture
