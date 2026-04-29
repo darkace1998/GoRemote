@@ -531,7 +531,7 @@ func (b *Bindings) SaveWorkspace(ctx context.Context, w workspace.Workspace) err
 	if err := b.workspace.Save(ctx, w); err != nil {
 		return err
 	}
-	go b.maybeGitSync("workspace updated")
+	go b.maybeGitSync(ctx, "workspace updated")
 	return nil
 }
 
@@ -539,11 +539,11 @@ func (b *Bindings) SaveWorkspace(ctx context.Context, w workspace.Workspace) err
 // Best-effort: any failure is logged but never propagates. Runs on its
 // own context with a fresh timeout so it does not extend the caller's
 // save deadline.
-func (b *Bindings) maybeGitSync(msg string) {
+func (b *Bindings) maybeGitSync(parent context.Context, msg string) {
 	if b.stateDir == "" || b.settings == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 60*time.Second)
 	defer cancel()
 	s, err := b.settings.Get(ctx)
 	if err != nil || !s.GitSyncEnabled {

@@ -418,6 +418,7 @@ func buildAuthMethods(method protocol.AuthMethod, secret protocol.CredentialMate
 		if sock == "" {
 			return nil, nil, errors.New("agent: SSH_AUTH_SOCK is not set")
 		}
+		// #nosec G107 -- this dials a local Unix-domain SSH agent socket, not a network endpoint.
 		conn, err := net.Dial("unix", sock)
 		if err != nil {
 			return nil, nil, fmt.Errorf("agent: dial: %w", err)
@@ -455,6 +456,7 @@ type sessionCloser interface {
 // use the strict path.
 func buildHostKeyCallback(strict, knownHostsPath string) (ssh.HostKeyCallback, sessionCloser, error) {
 	if strict == StrictOff {
+		// #nosec G106 -- StrictOff is an explicit user-selected policy that disables host-key verification.
 		return ssh.InsecureIgnoreHostKey(), nil, nil //nolint:gosec // explicitly requested by user
 	}
 

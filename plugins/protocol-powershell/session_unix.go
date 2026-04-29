@@ -41,6 +41,7 @@ func openSession(ctx context.Context, cfg openConfig) (*Session, error) {
 	}
 
 	args := append([]string{"-NoLogo", "-NoProfile", "-Interactive"}, cfg.args...)
+	// #nosec G204 -- bin is resolved by discoverBinary and args are passed directly without a shell.
 	cmd := exec.CommandContext(ctx, bin, args...)
 	if cfg.cwd != "" {
 		cmd.Dir = cfg.cwd
@@ -53,6 +54,7 @@ func openSession(ctx context.Context, cfg openConfig) (*Session, error) {
 		cmd.Env = env
 	}
 
+	// #nosec G115 -- resolveConfig bounds cols and rows to uint16 before openSession is called.
 	ws := &pty.Winsize{Cols: uint16(cfg.cols), Rows: uint16(cfg.rows)}
 	ptmx, err := pty.StartWithSize(cmd, ws)
 	if err != nil {

@@ -254,6 +254,7 @@ func (p *Provider) Put(ctx context.Context, mat credential.Material) (credential
 		OTP:        mat.OTP,
 		Extra:      copyStringMap(mat.Extra),
 	}
+	// #nosec G101 -- this intentionally serializes secrets into an OS keychain entry, not a regular file or log.
 	payload, err := json.Marshal(s)
 	if err != nil {
 		return credential.Reference{}, fmt.Errorf("encode stored secret: %w", err)

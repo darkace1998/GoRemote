@@ -89,6 +89,7 @@ func saveIndex(path string, entries map[string]indexEntry) error {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("rename: %w", err)
 	}
+	// #nosec G304 -- dir is derived from the provider-managed index path.
 	if d, err := os.Open(dir); err == nil {
 		_ = d.Sync()
 		_ = d.Close()

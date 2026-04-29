@@ -323,6 +323,7 @@ func atomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("rename: %w", err)
 	}
 	// Sync the directory so the rename is durable across crashes.
+	// #nosec G304 -- dir is derived from the provider-controlled destination path.
 	if d, err := os.Open(dir); err == nil {
 		_ = d.Sync()
 		_ = d.Close()

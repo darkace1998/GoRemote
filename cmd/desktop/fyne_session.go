@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -125,11 +126,11 @@ func (st *sessionTab) forwardResize(ch <-chan terminal.Config) {
 			if !ok {
 				return
 			}
-			cols := uint16(cfg.Columns)
-			rows := uint16(cfg.Rows)
-			if cols == 0 || rows == 0 {
+			if cfg.Columns <= 0 || cfg.Rows <= 0 || cfg.Columns > math.MaxUint16 || cfg.Rows > math.MaxUint16 {
 				continue
 			}
+			cols := uint16(cfg.Columns)
+			rows := uint16(cfg.Rows)
 			if cols == lastCols && rows == lastRows {
 				continue
 			}

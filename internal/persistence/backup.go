@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +18,18 @@ import (
 // retains under <dir>/backups/. Older backups beyond this count are pruned
 // (oldest first) after each new backup is written.
 const DefaultBackupRetention = 10
+
+const (
+	defaultMaxRestoreEntries   = 256
+	defaultMaxRestoreBytes     = 64 << 20
+	defaultMaxRestoreFileBytes = 16 << 20
+)
+
+var (
+	maxRestoreEntries   = defaultMaxRestoreEntries
+	maxRestoreBytes     uint64 = defaultMaxRestoreBytes
+	maxRestoreFileBytes uint64 = defaultMaxRestoreFileBytes
+)
 
 // backupTimestampLayout is the filename timestamp format used for backups.
 // It sorts lexicographically in the same order as chronologically.
@@ -80,36 +93,42 @@ func zipStoreDir(ctx context.Context, dir, outPath string) error {
 	}
 	defer out.Close()
 
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("persistence: open root: %w", err)
+	}
+	defer root.Close()
+
 	zw := zip.NewWriter(out)
-	walkErr := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
+	walkErr := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, werr error) error {
 		if werr != nil {
 			return werr
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		rel, rerr := filepath.Rel(dir, path)
-		if rerr != nil {
-			return rerr
-		}
-		if rel == "." {
+		if path == "." {
 			return nil
 		}
 		// Skip the backups subtree.
-		first := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
+		first := strings.SplitN(filepath.ToSlash(path), "/", 2)[0]
 		if first == BackupsDirName {
-			if info.IsDir() {
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			return nil
+		}
+		info, ierr := d.Info()
+		if ierr != nil {
+			return ierr
 		}
 		if !info.Mode().IsRegular() {
 			return nil
 		}
-		zipName := filepath.ToSlash(rel)
+		zipName := filepath.ToSlash(path)
 		hdr, hErr := zip.FileInfoHeader(info)
 		if hErr != nil {
 			return hErr
@@ -120,8 +139,7 @@ func zipStoreDir(ctx context.Context, dir, outPath string) error {
 		if zerr != nil {
 			return zerr
 		}
-		// #nosec G304 -- path comes directly from filepath.Walk over the store root.
-		f, ferr := os.Open(path)
+		f, ferr := root.Open(path)
 		if ferr != nil {
 			return ferr
 		}
@@ -212,6 +230,10 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	}
 	defer func() { _ = zr.Close() }()
 
+	if err := validateRestoreArchive(zr.File); err != nil {
+		return err
+	}
+
 	for _, f := range zr.File {
 		clean, err := sanitizeRestorePath(f.Name)
 		if err != nil {
@@ -241,6 +263,26 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		if err := extractZipEntry(f, s.dir); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validateRestoreArchive(files []*zip.File) error {
+	if len(files) > maxRestoreEntries {
+		return fmt.Errorf("persistence: backup contains too many entries (%d > %d)", len(files), maxRestoreEntries)
+	}
+	var total uint64
+	for _, f := range files {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		if f.UncompressedSize64 > maxRestoreFileBytes {
+			return fmt.Errorf("persistence: backup entry %q exceeds size limit", f.Name)
+		}
+		if total > maxRestoreBytes-f.UncompressedSize64 {
+			return fmt.Errorf("persistence: backup exceeds total size limit")
+		}
+		total += f.UncompressedSize64
 	}
 	return nil
 }
@@ -283,7 +325,7 @@ func extractZipEntry(f *zip.File, root string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, rc); err != nil {
+	if _, err := copyZipEntry(out, rc, maxRestoreFileBytes); err != nil {
 		_ = out.Close()
 		return err
 	}
@@ -292,6 +334,18 @@ func extractZipEntry(f *zip.File, root string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func copyZipEntry(dst io.Writer, src io.Reader, maxBytes uint64) (int64, error) {
+	lr := &io.LimitedReader{R: src, N: int64(maxBytes) + 1}
+	n, err := io.Copy(dst, lr)
+	if n > int64(maxBytes) {
+		return n, errors.New("persistence: backup entry exceeds size limit")
+	}
+	if err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
 func safeJoinWithinRoot(root, rel string) (string, error) {

@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -156,7 +157,7 @@ func TestWriteAtomic_NoPartialFile(t *testing.T) {
 	// Force a deterministic cross-platform failure: create a directory at the
 	// target path so replacing it with a regular file fails.
 	blocker := filepath.Join(dir, "blocker")
-	if err := os.Mkdir(blocker, 0o755); err != nil {
+	if err := os.Mkdir(blocker, 0o700); err != nil {
 		t.Fatalf("mkdir blocker: %v", err)
 	}
 	err := WriteAtomic(blocker, []byte("boom"))
@@ -271,6 +272,44 @@ func TestMigrator_AlreadyAtCurrent(t *testing.T) {
 	}
 	if !reflect.DeepEqual(out, files) {
 		t.Errorf("files changed unnecessarily")
+	}
+}
+
+func TestRestoreRejectsOversizedArchive(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir)
+	if err := s.Save(context.Background(), sampleSnapshot(t)); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	oldEntries, oldBytes, oldFileBytes := maxRestoreEntries, maxRestoreBytes, maxRestoreFileBytes
+	maxRestoreEntries, maxRestoreBytes, maxRestoreFileBytes = 8, 64, 32
+	defer func() {
+		maxRestoreEntries, maxRestoreBytes, maxRestoreFileBytes = oldEntries, oldBytes, oldFileBytes
+	}()
+
+	bad := filepath.Join(dir, "oversized.zip")
+	f, err := os.OpenFile(bad, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("inventory.json")
+	if err != nil {
+		t.Fatalf("create entry: %v", err)
+	}
+	if _, err := w.Write(bytes.Repeat([]byte("x"), 128)); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	if err := s.Restore(context.Background(), bad); err == nil {
+		t.Fatal("expected restore to reject oversized archive")
 	}
 }
 

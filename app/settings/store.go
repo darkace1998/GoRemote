@@ -170,6 +170,7 @@ func writeAtomic(path string, data []byte, mode os.FileMode) (err error) {
 	if rerr := os.Rename(tmpPath, path); rerr != nil {
 		return fmt.Errorf("settings: rename: %w", rerr)
 	}
+	// #nosec G304 -- dir is derived from the configured settings file path.
 	if d, derr := os.Open(dir); derr == nil {
 		_ = d.Sync()
 		_ = d.Close()

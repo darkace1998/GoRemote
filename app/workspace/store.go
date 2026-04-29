@@ -172,6 +172,7 @@ func writeAtomic(path string, data []byte, mode os.FileMode) (err error) {
 	if rerr := os.Rename(tmpPath, path); rerr != nil {
 		return fmt.Errorf("workspace: rename: %w", rerr)
 	}
+	// #nosec G304 -- dir is derived from the configured workspace file path.
 	if d, derr := os.Open(dir); derr == nil {
 		_ = d.Sync()
 		_ = d.Close()

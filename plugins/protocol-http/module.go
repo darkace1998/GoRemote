@@ -216,6 +216,7 @@ func (defaultLauncher) resolve(_ context.Context, browserOverride string) (strin
 }
 
 func (defaultLauncher) run(ctx context.Context, path string, args []string) error {
+	// #nosec G204 -- path is a resolved browser launcher and args are passed directly without a shell.
 	cmd := exec.CommandContext(ctx, path, args...)
 	// Detach: we don't want the browser process to keep the goremote
 	// process attached to its lifetime, and we don't capture its output.

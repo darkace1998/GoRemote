@@ -28,6 +28,7 @@ type execRunner struct{}
 
 // Run implements Runner using os/exec.
 func (execRunner) Run(ctx context.Context, name string, args []string, stdin []byte, env []string) ([]byte, []byte, int, error) {
+	// #nosec G204 -- name is a resolved CLI path and args are passed directly without a shell.
 	cmd := exec.CommandContext(ctx, name, args...)
 	if env != nil {
 		cmd.Env = env

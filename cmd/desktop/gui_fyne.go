@@ -1254,9 +1254,9 @@ func (ct *connTree) startDragAnim(row *treeRow) {
 	primary := theme.Color(theme.ColorNamePrimary)
 	hover := theme.Color(theme.ColorNameHover)
 	pr, pg, pb, _ := primary.RGBA()
-	start := color.NRGBA{R: uint8(pr >> 8), G: uint8(pg >> 8), B: uint8(pb >> 8), A: 0x55}
+	start := color.NRGBA{R: rgba16To8(pr), G: rgba16To8(pg), B: rgba16To8(pb), A: 0x55}
 	hr, hg, hb, _ := hover.RGBA()
-	end := color.NRGBA{R: uint8(hr >> 8), G: uint8(hg >> 8), B: uint8(hb >> 8), A: 0xAA}
+	end := color.NRGBA{R: rgba16To8(hr), G: rgba16To8(hg), B: rgba16To8(hb), A: 0xAA}
 
 	row.hilite.FillColor = start
 	row.hilite.Refresh()
@@ -1270,6 +1270,13 @@ func (ct *connTree) startDragAnim(row *treeRow) {
 	anim.Start()
 	ct.dragAnim = anim
 	ct.dragAnimUID = row.uid
+}
+
+func rgba16To8(component uint32) uint8 {
+	if component > 0xFFFF {
+		component = 0xFFFF
+	}
+	return uint8(component / 0x101)
 }
 
 // stopDragAnim halts the source-row pulse animation, if any, and clears the

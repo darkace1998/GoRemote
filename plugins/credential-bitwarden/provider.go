@@ -26,6 +26,7 @@ type execRunner struct{}
 // child's standard input and returning its captured stdout/stderr,
 // exit code and any process-level error.
 func (execRunner) Run(ctx context.Context, name string, args []string, stdin []byte, env []string) ([]byte, []byte, int, error) {
+	// #nosec G204 -- name is a resolved CLI path and args are passed directly without a shell.
 	cmd := exec.CommandContext(ctx, name, args...)
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)
