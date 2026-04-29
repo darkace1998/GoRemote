@@ -28,6 +28,7 @@ func writeFakePwsh(t *testing.T) string {
 	path := filepath.Join(dir, "fake-pwsh")
 	body := "#!/usr/bin/env bash\n" +
 		"# Ignore the goremote-supplied flags (-NoLogo -NoProfile -Interactive ...).\n" +
+		"printf 'READY\\n'\n" +
 		"# Echo each line of stdin back to stdout until EOF.\n" +
 		"while IFS= read -r line; do\n" +
 		"  printf '%s\\n' \"$line\"\n" +
@@ -69,15 +70,31 @@ func TestOpenSendInputEcho(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- sess.Start(ctx, nil, stdoutW) }()
 
+	br := bufio.NewReader(stdoutR)
+	deadline := time.Now().Add(5 * time.Second)
+	var sawReady bool
+	for time.Now().Before(deadline) {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read startup output: %v (got %q)", err, line)
+		}
+		clean := strings.TrimRight(line, "\r\n")
+		if clean == "READY" {
+			sawReady = true
+			break
+		}
+	}
+	if !sawReady {
+		t.Fatalf("did not observe startup readiness marker")
+	}
+
 	if err := sess.SendInput(ctx, []byte("hello\n")); err != nil {
 		t.Fatalf("SendInput: %v", err)
 	}
 
-	br := bufio.NewReader(stdoutR)
-
 	// PTYs typically echo the input themselves and the fake pwsh prints it
 	// once more. Scan up to a few lines until we see "hello".
-	deadline := time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(5 * time.Second)
 	var saw bool
 	for time.Now().Before(deadline) {
 		line, err := br.ReadString('\n')
