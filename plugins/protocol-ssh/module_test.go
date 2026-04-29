@@ -218,3 +218,22 @@ func TestResolveAgentSocketPathAcceptsUnixSocket(t *testing.T) {
 		t.Fatalf("got %q want %q", got, path)
 	}
 }
+
+func TestResolveAgentSocketPathRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "agent.sock")
+	link := filepath.Join(dir, "agent.link")
+
+	ln, err := net.Listen("unix", target)
+	if err != nil {
+		t.Skipf("unix sockets unavailable: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	if _, err := resolveAgentSocketPath(link); err == nil {
+		t.Fatal("expected symlink path to be rejected")
+	}
+}

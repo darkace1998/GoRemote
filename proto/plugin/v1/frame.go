@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 )
 
@@ -72,7 +73,13 @@ func checkedFrameLen(size uint32) (int, error) {
 }
 
 func checkedFrameSize(size int) (uint32, error) {
+	if size < 0 {
+		return 0, fmt.Errorf("pluginv1: frame too large (%d bytes)", size)
+	}
 	if size > maxFrameSize {
+		return 0, fmt.Errorf("pluginv1: frame too large (%d bytes)", size)
+	}
+	if size > math.MaxUint32 {
 		return 0, fmt.Errorf("pluginv1: frame too large (%d bytes)", size)
 	}
 	return uint32(size), nil

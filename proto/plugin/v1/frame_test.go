@@ -30,3 +30,10 @@ func TestCheckedFrameLenRejectsPlatformOverflow(t *testing.T) {
 		t.Fatal("expected large frame length to fail when beyond configured max")
 	}
 }
+
+func TestCheckedFrameSizeRejectsNegative(t *testing.T) {
+	_, err := checkedFrameSize(-1)
+	if err == nil {
+		t.Fatal("expected negative frame size to fail")
+	}
+}

@@ -313,9 +313,9 @@ func TestRestoreRejectsOversizedArchive(t *testing.T) {
 	}
 }
 
-func TestCheckedLimitedReaderNRejectsOverflow(t *testing.T) {
+func TestCheckedCopyLimitsRejectsOverflow(t *testing.T) {
 	maxInt64 := int64(^uint64(0) >> 1)
-	_, err := checkedLimitedReaderN(uint64(maxInt64))
+	_, _, err := checkedCopyLimits(uint64(maxInt64))
 	if err == nil {
 		t.Fatal("expected oversized limit to fail")
 	}

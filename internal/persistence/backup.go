@@ -346,13 +346,13 @@ func extractZipEntry(f *zip.File, root string) error {
 }
 
 func copyZipEntry(dst io.Writer, src io.Reader, maxBytes uint64) (int64, error) {
-	limit, err := checkedLimitedReaderN(maxBytes)
+	maxCopyBytes, limit, err := checkedCopyLimits(maxBytes)
 	if err != nil {
 		return 0, err
 	}
 	lr := &io.LimitedReader{R: src, N: limit}
 	n, err := io.Copy(dst, lr)
-	if uint64(n) > maxBytes {
+	if n > maxCopyBytes {
 		return n, errors.New("persistence: backup entry exceeds size limit")
 	}
 	if err != nil {
@@ -361,11 +361,12 @@ func copyZipEntry(dst io.Writer, src io.Reader, maxBytes uint64) (int64, error) 
 	return n, nil
 }
 
-func checkedLimitedReaderN(maxBytes uint64) (int64, error) {
+func checkedCopyLimits(maxBytes uint64) (int64, int64, error) {
 	if maxBytes >= uint64(math.MaxInt64) {
-		return 0, errors.New("persistence: backup entry size limit exceeds platform maximum")
+		return 0, 0, errors.New("persistence: backup entry size limit exceeds platform maximum")
 	}
-	return int64(maxBytes) + 1, nil
+	maxCopyBytes := int64(maxBytes)
+	return maxCopyBytes, maxCopyBytes + 1, nil
 }
 
 func safeJoinWithinRoot(root, rel string) (string, error) {

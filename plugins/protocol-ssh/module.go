@@ -418,8 +418,7 @@ func buildAuthMethods(method protocol.AuthMethod, secret protocol.CredentialMate
 		if err != nil {
 			return nil, nil, err
 		}
-		// #nosec G107 -- this dials a local Unix-domain SSH agent socket, not a network endpoint.
-		conn, err := net.Dial("unix", sock)
+		conn, err := dialAgentSocket(sock)
 		if err != nil {
 			return nil, nil, fmt.Errorf("agent: dial: %w", err)
 		}
@@ -555,14 +554,23 @@ func resolveAgentSocketPath(path string) (string, error) {
 		return "", errors.New("agent: SSH_AUTH_SOCK must be an absolute path")
 	}
 	clean := filepath.Clean(path)
-	info, err := os.Stat(clean)
+	info, err := os.Lstat(clean)
 	if err != nil {
 		return "", fmt.Errorf("agent: stat: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("agent: SSH_AUTH_SOCK must not be a symlink")
 	}
 	if info.Mode()&os.ModeSocket == 0 {
 		return "", errors.New("agent: SSH_AUTH_SOCK is not a Unix socket")
 	}
 	return clean, nil
+}
+
+func dialAgentSocket(path string) (net.Conn, error) {
+	addr := &net.UnixAddr{Name: path, Net: "unix"}
+	// #nosec G107 -- path is a validated absolute Unix-domain socket, not a network endpoint.
+	return net.DialUnix("unix", nil, addr)
 }
 
 func resolveKnownHostsPath(path string) (string, error) {
