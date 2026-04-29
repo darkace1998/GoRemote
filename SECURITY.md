@@ -50,7 +50,7 @@ Out of scope:
 ## Dependency policy
 
 - Direct dependencies are pinned in `go.mod` and checked into `go.sum`.
-- CI verifies `go mod verify` and runs `golangci-lint`. Supply-chain scanning (govulncheck) will be added before the first tagged release.
+- CI verifies `go mod verify`, runs `golangci-lint`, and runs `govulncheck` on every push/PR (see `security.yml`).
 
 ## Coordinated disclosure
 
@@ -62,12 +62,12 @@ The repository ships a security-tooling baseline that runs both locally and in C
 
 - **CI workflows** (`.github/workflows/`):
   - `ci.yml` — Go build/test/vet on Linux, macOS and Windows (Go 1.26.2).
-  - `webui-ci.yml` — typecheck, test, build for the React/Vite frontend.
   - `lint.yml` — `golangci-lint` (config in `.golangci.yml`).
-  - `security.yml` — `govulncheck`, `gosec` (SARIF), `gitleaks`, `trivy fs`, and `npm audit`. Scheduled weekly in addition to push/PR.
+  - `security.yml` — `govulncheck`, `gosec` (SARIF), `gitleaks`, and `trivy fs`. Scheduled weekly in addition to push/PR.
   - `codeql.yml` — CodeQL analysis for `go` and GitHub Actions.
-- **Make targets**: `build`, `test`, `lint`, `vuln`, `sec`, `audit` (= lint + vuln + sec), `webui-build`, `webui-test`, `all`.
-- **Dependabot** (`.github/dependabot.yml`) covers `gomod`, `github-actions`, and the `webui` npm tree on a weekly cadence.
+  - `release.yml` — produces release artifacts and (when secrets are configured) Authenticode-signs the Windows `.exe` and WiX MSI.
+- **Make targets**: `build`, `build-desktop`, `test`, `test-desktop`, `vet`, `lint`, `vuln`, `sec`, `audit` (= lint + vuln + sec), `all` (= build + test + audit), `tidy`, `clean`, plus `dist-{linux,darwin,darwin-arm64,windows}`.
+- **Dependabot** (`.github/dependabot.yml`) covers `gomod` and `github-actions` on a weekly cadence.
 
 Findings reported by these tools must not be silenced by default; suppressions require an explicit `//nolint:<rule>` (Go) or `# trivy:ignore` comment with rationale.
 

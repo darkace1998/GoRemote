@@ -44,7 +44,7 @@ The stable plugin contracts live in `sdk/`:
 - `sdk/protocol` — `Module` and `Session` interfaces for protocol plugins.
 - `sdk/credential` — `Provider` / `Writer` interfaces and the `Material` type with `Zeroize`.
 
-External (out-of-process) plugins must use the IPC reference implementation at `host/plugin/ipc/` (gRPC/Connect over named pipes or Unix sockets). Do **not** depend on Go's native `plugin` package — see the rationale in `architecture.md`. A worked example is in `plugins/external-example/`.
+External (out-of-process) plugins must use the IPC reference implementation at `host/plugin/ipc/` (length-prefixed JSON frames over Unix domain sockets — supported on Linux, macOS, and Windows 10 1809+). Do **not** depend on Go's native `plugin` package — see the rationale in `architecture.md`. A worked example is in `plugins/external-example/`.
 
 ## Adding a new protocol plugin
 

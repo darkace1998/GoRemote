@@ -7,7 +7,7 @@ A Go-based, cross-platform successor to **mRemoteNG**: a modern multi-protocol r
 ## Highlights
 
 - 🖥️ **Cross-platform desktop** — Windows, Linux, macOS via **Fyne v2** (pure-Go, OpenGL-rendered native UI; no browser runtime required).
-- 🔌 **Modular protocols** — SSH, Telnet, Rlogin, Raw socket, PowerShell, HTTP, plus RDP / VNC / TN5250 via the external-launcher model. See `plugins/`.
+- 🔌 **Modular protocols** — SSH, SFTP, Telnet, Rlogin, Raw socket, PowerShell, HTTP, Serial / COM, plus RDP / VNC / TN5250 / MOSH via the external-launcher model. See `plugins/`.
 - 🔐 **Pluggable credentials** — OS keychain, encrypted file vault (AES-256-GCM + Argon2id), 1Password (`op`), Bitwarden (`bw`).
 - 📥 **Trustworthy migration** — streaming XML + CSV importer for mRemoteNG data with explicit warnings instead of silent drops.
 - 🧱 **Stable plugin contract** — versioned SDK in `sdk/`; out-of-process plugin reference implementation in `host/plugin/ipc/`.
@@ -20,25 +20,26 @@ sdk/                    Stable public contracts for plugins (plugin, protocol, c
 host/                   Plugin / protocol / credential hosts (lifecycle, capability enforcement, IPC)
 internal/
   app/                  Application core: command dispatcher, session manager, debounced persister
-  appcore/              Higher-level orchestration helpers
   domain/               Connection / folder tree, inheritance resolver, search
   persistence/          Atomic store, migrator, integrity validator, zip backup/restore
   eventbus/             Generic context-scoped Bus[T]
   platform/             OS-specific paths, keychain, clipboard, notifier
-  logging/              slog wrapper with secret redaction
+  logging/              slog wrapper with secret redaction (file sink + rotation)
   import/mremoteng/     XML + CSV importer with warnings
-  extlaunch/            External-launcher session helper (RDP / VNC / TN5250)
-  session/              Session lifecycle primitives
-app/                    App-level features (settings, workspace persistence)
+  extlaunch/            External-launcher session helper (RDP / VNC / TN5250 / MOSH)
+app/                    App-level features: settings, workspace persistence, update,
+                        diagnostics, marketplace, extplugin loader, git-sync
 plugins/
-  protocol-{ssh,telnet,rlogin,rawsocket}/         Real terminal protocols
-  protocol-{powershell,http}/                     Real launcher / browser protocols
-  protocol-{rdp,vnc,tn5250}/                      External-launcher protocols
-  credential-{file,keychain,1password,bitwarden}/ Credential providers
-  external-example/                               Reference out-of-process plugin
-proto/plugin/v1/        gRPC / Connect IDL for the IPC plugin transport
+  protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial}/   Real terminal protocols
+  protocol-{powershell,http}/                           Real launcher / browser protocols
+  protocol-{rdp,vnc,tn5250,mosh}/                       External-launcher protocols
+  credential-{file,keychain,1password,bitwarden}/       Credential providers
+  external-example/                                     Reference out-of-process plugin
+proto/plugin/v1/        Length-prefixed JSON IPC frame + message types for the
+                        out-of-process plugin transport
 cmd/desktop/            Fyne v2 entry point (gui_fyne.go + fyne_session.go)
-webui/                  Archived React/TypeScript UI (not active; kept for reference)
+cmd/sign-manifest/      Release helper that signs auto-update manifests (Ed25519)
+installers/             Windows WiX MSI sources (and platform packaging stubs)
 test/integration/       Cross-cutting harness
 docs/screenshots/       Reserved for screenshots once the UI stabilizes
 .github/workflows/      CI matrix (linux/macos/windows) + supply-chain checks
