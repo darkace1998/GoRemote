@@ -150,6 +150,15 @@ func TestResizeRejectsNonPositive(t *testing.T) {
 	}
 }
 
+func TestResizeRejectsOversize(t *testing.T) {
+	sess := openTestSession(t, nil)
+	defer sess.Close()
+
+	if err := sess.Resize(context.Background(), protocol.Size{Cols: 0x10000, Rows: 24}); err == nil {
+		t.Fatalf("expected error for oversized cols")
+	}
+}
+
 func TestCloseIdempotent(t *testing.T) {
 	sess := openTestSession(t, nil)
 

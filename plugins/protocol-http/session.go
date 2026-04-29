@@ -127,7 +127,8 @@ func (s *Session) Close() error {
 // launch.
 func defaultProbe(ctx context.Context, rawURL string, verifyTLS bool) string {
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS}, //nolint:gosec // user-controlled
+		// #nosec G402 -- verifyTLS=false is an explicit user opt-out; SECURITY.md documents the risk and the default remains true.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS},
 	}
 	client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
 

@@ -10,11 +10,12 @@ type Field string
 
 // Inheritable fields.
 const (
-	FieldProtocolID    Field = "protocol_id"
-	FieldHost          Field = "host"
-	FieldPort          Field = "port"
-	FieldUsername      Field = "username"
-	FieldAuthMethod    Field = "auth_method"
+	FieldProtocolID Field = "protocol_id"
+	FieldHost       Field = "host"
+	FieldPort       Field = "port"
+	FieldUsername   Field = "username"
+	FieldAuthMethod Field = "auth_method"
+	// #nosec G101 -- Field names describe schema keys; this is not embedded credential data.
 	FieldCredentialRef Field = "credential_ref"
 	FieldSettings      Field = "settings"
 	FieldTags          Field = "tags"

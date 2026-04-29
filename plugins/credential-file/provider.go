@@ -305,30 +305,58 @@ func atomicWrite(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("open tmp: %w", err)
 	}
 	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("write tmp: %w", err)
+		return cleanupAtomicWriteFailure(fmt.Errorf("write tmp: %w", err), f, tmp)
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("sync tmp: %w", err)
+		return cleanupAtomicWriteFailure(fmt.Errorf("sync tmp: %w", err), f, tmp)
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("close tmp: %w", err)
+		return cleanupAtomicWriteFailure(fmt.Errorf("close tmp: %w", err), nil, tmp)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename: %w", err)
+		return cleanupAtomicWriteFailure(fmt.Errorf("rename: %w", err), nil, tmp)
 	}
 	// Sync the directory so the rename is durable across crashes.
-	// #nosec G304 -- dir is derived from the provider-controlled destination path.
-	if d, err := os.Open(dir); err == nil {
-		_ = d.Sync()
-		_ = d.Close()
+	if err := syncDir(dir); err != nil {
+		return err
 	}
 	return nil
+}
+
+func cleanupAtomicWriteFailure(base error, f *os.File, tmp string) error {
+	if f != nil {
+		if err := f.Close(); err != nil {
+			base = errors.Join(base, fmt.Errorf("close tmp: %w", err))
+		}
+	}
+	if err := removeAtomicWriteTemp(tmp); err != nil {
+		base = errors.Join(base, fmt.Errorf("remove tmp: %w", err))
+	}
+	return base
+}
+
+func removeAtomicWriteTemp(path string) error {
+	err := os.Remove(path)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func syncDir(dir string) error {
+	// #nosec G304 -- dir is derived from the provider-controlled destination path.
+	d, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open parent dir: %w", err)
+	}
+	var joined error
+	if err := d.Sync(); err != nil {
+		joined = errors.Join(joined, fmt.Errorf("sync parent dir: %w", err))
+	}
+	if err := d.Close(); err != nil {
+		joined = errors.Join(joined, fmt.Errorf("close parent dir: %w", err))
+	}
+	return joined
 }
 
 // zeroKeyLocked wipes the in-memory AES key. Caller must hold p.mu.

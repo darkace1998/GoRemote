@@ -31,6 +31,8 @@ type Session struct {
 	closeErr  error
 }
 
+const maxPTYDimension = 0xFFFF
+
 // openSession resolves the binary, builds the command, sizes the PTY, and
 // spawns the child. It is the unix implementation of the openSession hook
 // declared in module.go.
@@ -54,8 +56,10 @@ func openSession(ctx context.Context, cfg openConfig) (*Session, error) {
 		cmd.Env = env
 	}
 
-	// #nosec G115 -- resolveConfig bounds cols and rows to uint16 before openSession is called.
-	ws := &pty.Winsize{Cols: uint16(cfg.cols), Rows: uint16(cfg.rows)}
+	ws, err := winsizeFromInts(cfg.cols, cfg.rows)
+	if err != nil {
+		return nil, err
+	}
 	ptmx, err := pty.StartWithSize(cmd, ws)
 	if err != nil {
 		return nil, fmt.Errorf("powershell: pty start %s: %w", bin, err)
@@ -133,7 +137,11 @@ func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 	if s.closed {
 		return errors.New("powershell: resize on closed session")
 	}
-	return pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(size.Cols), Rows: uint16(size.Rows)})
+	ws, err := winsizeFromInts(size.Cols, size.Rows)
+	if err != nil {
+		return err
+	}
+	return pty.Setsize(s.ptmx, ws)
 }
 
 // SendInput writes data verbatim to the PTY master. PowerShell receives it
@@ -184,4 +192,14 @@ func (s *Session) killProcess() {
 		return
 	}
 	_ = s.cmd.Process.Kill()
+}
+
+func winsizeFromInts(cols, rows int) (*pty.Winsize, error) {
+	if cols <= 0 || rows <= 0 {
+		return nil, fmt.Errorf("powershell: cols/rows must be positive (got cols=%d rows=%d)", cols, rows)
+	}
+	if cols > maxPTYDimension || rows > maxPTYDimension {
+		return nil, fmt.Errorf("powershell: cols/rows out of range (cols=%d rows=%d)", cols, rows)
+	}
+	return &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)}, nil
 }

@@ -14,12 +14,13 @@ type EventKind string
 
 // Event kinds.
 const (
-	EventNodeCreated        EventKind = "node_created"
-	EventNodeUpdated        EventKind = "node_updated"
-	EventNodeMoved          EventKind = "node_moved"
-	EventNodeDeleted        EventKind = "node_deleted"
-	EventSessionOpened      EventKind = "session_opened"
-	EventSessionClosed      EventKind = "session_closed"
+	EventNodeCreated   EventKind = "node_created"
+	EventNodeUpdated   EventKind = "node_updated"
+	EventNodeMoved     EventKind = "node_moved"
+	EventNodeDeleted   EventKind = "node_deleted"
+	EventSessionOpened EventKind = "session_opened"
+	EventSessionClosed EventKind = "session_closed"
+	// #nosec G101 -- Event kind names may mention credentials but contain no secret material.
 	EventCredentialUnlocked EventKind = "credential_unlocked"
 	EventError              EventKind = "error"
 )

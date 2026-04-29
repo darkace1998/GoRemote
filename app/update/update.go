@@ -162,9 +162,11 @@ func Download(ctx context.Context, t *ManifestTarget, destDir string) (string, e
 	}
 	hasher := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(tmp, hasher), resp.Body); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmp.Name())
-		return "", fmt.Errorf("update: copy: %w", err)
+		return "", joinCleanupError(
+			fmt.Errorf("update: copy: %w", err),
+			tmp.Close(),
+			removeIfExists(tmp.Name()),
+		)
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmp.Name())
@@ -312,8 +314,25 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
+		return joinCleanupError(err, out.Close())
 	}
 	return out.Close()
+}
+
+func joinCleanupError(base error, errs ...error) error {
+	joined := base
+	for _, err := range errs {
+		if err != nil {
+			joined = errors.Join(joined, err)
+		}
+	}
+	return joined
+}
+
+func removeIfExists(path string) error {
+	err := os.Remove(path)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }

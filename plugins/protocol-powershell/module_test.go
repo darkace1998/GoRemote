@@ -93,6 +93,15 @@ func TestResolveConfigInitialSizeOverrides(t *testing.T) {
 	}
 }
 
+func TestResolveConfigRejectsOversizedInitialSize(t *testing.T) {
+	_, err := resolveConfig(protocol.OpenRequest{
+		InitialSize: protocol.Size{Cols: 0x10000, Rows: 24},
+	})
+	if err == nil {
+		t.Fatalf("expected oversized initial size to fail")
+	}
+}
+
 func TestDiscoverBinaryOverrideAbsolute(t *testing.T) {
 	got, err := discoverBinary("/tmp/nope/fake-pwsh")
 	if err != nil {

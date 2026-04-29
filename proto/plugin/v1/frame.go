@@ -23,11 +23,12 @@ func WriteFrame(w io.Writer, f Frame) error {
 	if err != nil {
 		return fmt.Errorf("pluginv1: marshal frame: %w", err)
 	}
-	if len(data) > maxFrameSize {
-		return fmt.Errorf("pluginv1: frame too large (%d bytes)", len(data))
+	frameSize, err := checkedFrameSize(len(data))
+	if err != nil {
+		return err
 	}
 	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(data)))
+	binary.BigEndian.PutUint32(hdr[:], frameSize)
 	if _, err := w.Write(hdr[:]); err != nil {
 		return fmt.Errorf("pluginv1: write header: %w", err)
 	}
@@ -56,4 +57,11 @@ func ReadFrame(r io.Reader) (Frame, error) {
 		return Frame{}, fmt.Errorf("pluginv1: unmarshal frame: %w", err)
 	}
 	return f, nil
+}
+
+func checkedFrameSize(size int) (uint32, error) {
+	if size > maxFrameSize {
+		return 0, fmt.Errorf("pluginv1: frame too large (%d bytes)", size)
+	}
+	return uint32(size), nil
 }
