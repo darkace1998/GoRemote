@@ -216,9 +216,10 @@ func (s *fakeSession) SendInput(ctx context.Context, data []byte) error {
 		return errors.New("fakeprotocol: session closed")
 	}
 	s.rec.addInput(data)
-	echo := []byte{'>', ' '}
-	echo = append(echo, data...)
-	echo = append(echo, '\n')
+	echo, err := buildEchoLine(data)
+	if err != nil {
+		return err
+	}
 	select {
 	case s.out <- echo:
 	case <-s.done:
@@ -226,6 +227,18 @@ func (s *fakeSession) SendInput(ctx context.Context, data []byte) error {
 		return ctx.Err()
 	}
 	return nil
+}
+
+func buildEchoLine(data []byte) ([]byte, error) {
+	const maxInt = int(^uint(0) >> 1)
+	if len(data) > maxInt-3 {
+		return nil, errors.New("fakeprotocol: input too large")
+	}
+	echo := make([]byte, 0, len(data)+3)
+	echo = append(echo, '>', ' ')
+	echo = append(echo, data...)
+	echo = append(echo, '\n')
+	return echo, nil
 }
 
 // Resize records the new dimensions.

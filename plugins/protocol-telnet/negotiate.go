@@ -1,6 +1,7 @@
 package telnet
 
 import (
+	"errors"
 	"net"
 	"sync"
 )
@@ -211,7 +212,11 @@ func (s *negState) handleSB() []byte {
 		// RFC 1091: "IAC SB TTYPE SEND IAC SE" requests a TTYPE IS reply.
 		if len(s.sbBuf) >= 1 && s.sbBuf[0] == ttypeSEND {
 			out := []byte{IAC, SB, OptTTYPE, ttypeIS}
-			out = append(out, escapeIAC([]byte(s.termType))...)
+			escaped, err := escapeIAC([]byte(s.termType))
+			if err != nil {
+				return nil
+			}
+			out = append(out, escaped...)
 			out = append(out, IAC, SE)
 			return out
 		}
@@ -265,21 +270,17 @@ func parseNAWS(sb []byte) (int, int, bool) {
 
 // escapeIAC returns a copy of p with every 0xFF byte doubled, as required
 // inside subnegotiation payloads and on the main data channel.
-func escapeIAC(p []byte) []byte {
-	// Fast path: nothing to escape.
-	hasIAC := false
-	for _, b := range p {
-		if b == IAC {
-			hasIAC = true
-			break
-		}
+func escapeIAC(p []byte) ([]byte, error) {
+	capHint, hasIAC, err := escapedIACCapacity(p)
+	if err != nil {
+		return nil, err
 	}
 	if !hasIAC {
 		out := make([]byte, len(p))
 		copy(out, p)
-		return out
+		return out, nil
 	}
-	out := make([]byte, 0, len(p))
+	out := make([]byte, 0, capHint)
 	for _, b := range p {
 		if b == IAC {
 			out = append(out, IAC, IAC)
@@ -287,7 +288,24 @@ func escapeIAC(p []byte) []byte {
 			out = append(out, b)
 		}
 	}
-	return out
+	return out, nil
+}
+
+func escapedIACCapacity(p []byte) (int, bool, error) {
+	count := 0
+	for _, b := range p {
+		if b == IAC {
+			count++
+		}
+	}
+	if count == 0 {
+		return len(p), false, nil
+	}
+	const maxInt = int(^uint(0) >> 1)
+	if count > maxInt-len(p) {
+		return 0, false, errors.New("telnet: escaped payload too large")
+	}
+	return len(p) + count, true, nil
 }
 
 // Negotiator wraps a net.Conn and transparently handles Telnet option
@@ -359,7 +377,10 @@ func (n *Negotiator) Read(p []byte) (int, error) {
 // contract against the caller's view of the data), not the number of bytes
 // actually placed on the wire.
 func (n *Negotiator) Write(p []byte) (int, error) {
-	escaped := escapeIAC(p)
+	escaped, err := escapeIAC(p)
+	if err != nil {
+		return 0, err
+	}
 	if err := n.writeRaw(escaped); err != nil {
 		return 0, err
 	}

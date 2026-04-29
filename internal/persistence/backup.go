@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,7 +27,7 @@ const (
 )
 
 var (
-	maxRestoreEntries   = defaultMaxRestoreEntries
+	maxRestoreEntries          = defaultMaxRestoreEntries
 	maxRestoreBytes     uint64 = defaultMaxRestoreBytes
 	maxRestoreFileBytes uint64 = defaultMaxRestoreFileBytes
 )
@@ -361,8 +362,7 @@ func copyZipEntry(dst io.Writer, src io.Reader, maxBytes uint64) (int64, error) 
 }
 
 func checkedLimitedReaderN(maxBytes uint64) (int64, error) {
-	maxInt64 := int64(^uint64(0) >> 1)
-	if maxBytes >= uint64(maxInt64) {
+	if maxBytes >= uint64(math.MaxInt64) {
 		return 0, errors.New("persistence: backup entry size limit exceeds platform maximum")
 	}
 	return int64(maxBytes) + 1, nil

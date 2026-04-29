@@ -2,6 +2,7 @@ package credentialkeychain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -226,6 +227,46 @@ func TestStateUnlockedAfterInit(t *testing.T) {
 	}
 	if st := p.State(ctx); st != credential.StateUnlocked {
 		t.Fatalf("expected StateUnlocked, got %v", st)
+	}
+}
+
+func TestResolveAcceptsLegacyStoredPayload(t *testing.T) {
+	ctx := context.Background()
+	p, _ := newProviderForTest(t)
+	if err := p.Unlock(ctx, ""); err != nil {
+		t.Fatalf("unlock: %v", err)
+	}
+	legacy := map[string]any{
+		"username":    "alice",
+		"password":    "s3cret",
+		"domain":      "corp",
+		"private_key": []byte{1, 2, 3},
+		"passphrase":  "pass",
+		"otp":         "654321",
+		"extra":       map[string]string{"env": "prod"},
+	}
+	payload, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy payload: %v", err)
+	}
+	if err := p.kc.Set(KeychainService, "legacy-id", string(payload)); err != nil {
+		t.Fatalf("keychain set: %v", err)
+	}
+	mat, err := p.Resolve(ctx, credential.Reference{EntryID: "legacy-id"})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if mat.Username != "alice" || mat.Password != "s3cret" || mat.Domain != "corp" {
+		t.Fatalf("unexpected decoded material: %+v", mat)
+	}
+	if mat.Passphrase != "pass" || mat.OTP != "654321" {
+		t.Fatalf("unexpected decoded secrets: %+v", mat)
+	}
+	if string(mat.PrivateKey) != "\x01\x02\x03" {
+		t.Fatalf("private key mismatch: %v", mat.PrivateKey)
+	}
+	if mat.Extra["env"] != "prod" {
+		t.Fatalf("extra mismatch: %+v", mat.Extra)
 	}
 }
 

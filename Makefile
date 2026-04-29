@@ -2,8 +2,10 @@
 
 GO ?= go
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
+MODULE_PATH := github.com/darkace1998/GoRemote
 DESKTOP_PACKAGE := github.com/darkace1998/GoRemote/cmd/desktop
 NON_DESKTOP_PACKAGES := $(shell $(GO) list ./... | grep -v '^$(DESKTOP_PACKAGE)$$')
+NON_DESKTOP_LINT_TARGETS := $(subst $(MODULE_PATH),.,$(NON_DESKTOP_PACKAGES))
 LINUX_GUI_PKG_CONFIG_DEPS := gl x11 xcursor xrandr xinerama xi xxf86vm
 LINUX_GUI_DEPS_AVAILABLE := $(shell if [ "$$(uname -s)" != "Linux" ]; then echo 1; elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists $(LINUX_GUI_PKG_CONFIG_DEPS); then echo 1; else echo 0; fi)
 
@@ -44,7 +46,12 @@ vet:
 
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	@PATH="$(GOBIN):$$PATH" golangci-lint run ./...
+	$(maybe_skip_desktop)
+	@if [ "$(LINUX_GUI_DEPS_AVAILABLE)" = "1" ]; then \
+		PATH="$(GOBIN):$$PATH" golangci-lint run ./...; \
+	else \
+		PATH="$(GOBIN):$$PATH" golangci-lint run $(NON_DESKTOP_LINT_TARGETS); \
+	fi
 
 vuln:
 	@command -v govulncheck >/dev/null 2>&1 || $(GO) install golang.org/x/vuln/cmd/govulncheck@latest

@@ -214,10 +214,17 @@ func TestParseNAWS_RoundTrip(t *testing.T) {
 }
 
 func TestEscapeIAC(t *testing.T) {
-	if got := escapeIAC([]byte("abc")); !bytes.Equal(got, []byte("abc")) {
+	got, err := escapeIAC([]byte("abc"))
+	if err != nil {
+		t.Fatalf("escapeIAC fast path: %v", err)
+	}
+	if !bytes.Equal(got, []byte("abc")) {
 		t.Fatalf("fast path: got % x", got)
 	}
-	got := escapeIAC([]byte{'a', 0xFF, 'b', 0xFF, 0xFF})
+	got, err = escapeIAC([]byte{'a', 0xFF, 'b', 0xFF, 0xFF})
+	if err != nil {
+		t.Fatalf("escapeIAC escaped path: %v", err)
+	}
 	want := []byte{'a', 0xFF, 0xFF, 'b', 0xFF, 0xFF, 0xFF, 0xFF}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("got % x want % x", got, want)

@@ -414,9 +414,9 @@ func buildAuthMethods(method protocol.AuthMethod, secret protocol.CredentialMate
 		return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil, nil
 
 	case protocol.AuthAgent:
-		sock := os.Getenv("SSH_AUTH_SOCK")
-		if sock == "" {
-			return nil, nil, errors.New("agent: SSH_AUTH_SOCK is not set")
+		sock, err := resolveAgentSocketPath(os.Getenv("SSH_AUTH_SOCK"))
+		if err != nil {
+			return nil, nil, err
 		}
 		// #nosec G107 -- this dials a local Unix-domain SSH agent socket, not a network endpoint.
 		conn, err := net.Dial("unix", sock)
@@ -460,13 +460,9 @@ func buildHostKeyCallback(strict, knownHostsPath string) (ssh.HostKeyCallback, s
 		return ssh.InsecureIgnoreHostKey(), nil, nil //nolint:gosec // explicitly requested by user
 	}
 
-	path := knownHostsPath
-	if path == "" {
-		p, err := defaultKnownHostsPath()
-		if err != nil {
-			return nil, nil, err
-		}
-		path = p
+	path, err := resolveKnownHostsPath(knownHostsPath)
+	if err != nil {
+		return nil, nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, nil, fmt.Errorf("known_hosts: mkdir: %w", err)
@@ -549,6 +545,56 @@ func defaultKnownHostsPath() (string, error) {
 		return "", fmt.Errorf("known_hosts: resolve home: %w", err)
 	}
 	return filepath.Join(u.HomeDir, ".ssh", "known_hosts"), nil
+}
+
+func resolveAgentSocketPath(path string) (string, error) {
+	if path == "" {
+		return "", errors.New("agent: SSH_AUTH_SOCK is not set")
+	}
+	if !filepath.IsAbs(path) {
+		return "", errors.New("agent: SSH_AUTH_SOCK must be an absolute path")
+	}
+	clean := filepath.Clean(path)
+	info, err := os.Stat(clean)
+	if err != nil {
+		return "", fmt.Errorf("agent: stat: %w", err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return "", errors.New("agent: SSH_AUTH_SOCK is not a Unix socket")
+	}
+	return clean, nil
+}
+
+func resolveKnownHostsPath(path string) (string, error) {
+	if path == "" {
+		p, err := defaultKnownHostsPath()
+		if err != nil {
+			return "", err
+		}
+		path = p
+	}
+	if !filepath.IsAbs(path) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("known_hosts: abs: %w", err)
+		}
+		path = abs
+	}
+	path = filepath.Clean(path)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return path, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("known_hosts: stat: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("known_hosts: symlink path is not allowed")
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("known_hosts: path must be a regular file")
+	}
+	return path, nil
 }
 
 // dialContext performs a ctx-aware TCP dial followed by the SSH client

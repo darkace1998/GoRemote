@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 const maxFrameSize = 4 << 20 // 4 MB
@@ -64,8 +65,7 @@ func checkedFrameLen(size uint32) (int, error) {
 	if size > maxFrameSize {
 		return 0, fmt.Errorf("pluginv1: frame size %d exceeds limit", size)
 	}
-	maxInt := int(^uint(0) >> 1)
-	if uint64(size) > uint64(maxInt) {
+	if strconv.IntSize == 32 && size > 1<<31-1 {
 		return 0, fmt.Errorf("pluginv1: frame size %d exceeds platform limit", size)
 	}
 	return int(size), nil

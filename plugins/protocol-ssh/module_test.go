@@ -2,6 +2,9 @@ package ssh
 
 import (
 	"context"
+	"net"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -160,5 +163,58 @@ func TestOpenUnsupportedAuthMethod(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected auth method error")
+	}
+}
+
+func TestResolveKnownHostsPathReturnsAbsolutePath(t *testing.T) {
+	got, err := resolveKnownHostsPath(filepath.Join(".", "known_hosts.test"))
+	if err != nil {
+		t.Fatalf("resolveKnownHostsPath: %v", err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Fatalf("expected absolute path, got %q", got)
+	}
+}
+
+func TestResolveKnownHostsPathRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "known_hosts")
+	if err := os.WriteFile(target, []byte("host key"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	link := filepath.Join(dir, "known_hosts.link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	if _, err := resolveKnownHostsPath(link); err == nil {
+		t.Fatal("expected symlink path to be rejected")
+	}
+}
+
+func TestResolveAgentSocketPathRequiresSocket(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "not-a-socket")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write regular file: %v", err)
+	}
+	if _, err := resolveAgentSocketPath(path); err == nil {
+		t.Fatal("expected regular file to be rejected")
+	}
+}
+
+func TestResolveAgentSocketPathAcceptsUnixSocket(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agent.sock")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Skipf("unix sockets unavailable: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	got, err := resolveAgentSocketPath(path)
+	if err != nil {
+		t.Fatalf("resolveAgentSocketPath: %v", err)
+	}
+	if got != path {
+		t.Fatalf("got %q want %q", got, path)
 	}
 }
