@@ -357,14 +357,16 @@ jobs:
       - name: Create or update release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
           APP_VERSION: ${{ needs.prepare.outputs.app_version }}
         run: |
           set -euo pipefail
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          if ! gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
+              --repo "$GH_REPO" \
               --title "$RELEASE_TAG" \
               --notes "Release $RELEASE_TAG" \
               --target "${GITHUB_SHA}"
           fi
-          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          gh release upload "$RELEASE_TAG" release-assets/* --repo "$GH_REPO" --clobber
