@@ -282,3 +282,10 @@ func TestManifestAndCapabilities(t *testing.T) {
 		t.Fatalf("expected 2 supported kinds, got %v", caps.SupportedKinds)
 	}
 }
+
+func TestSealedCapacityRejectsOverflow(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	if _, err := sealedCapacity(maxInt, 16); err == nil {
+		t.Fatal("expected overflow error")
+	}
+}

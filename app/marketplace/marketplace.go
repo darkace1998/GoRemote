@@ -248,7 +248,7 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 	if err := c.checkScheme(u.Scheme); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return err
 	}
 	stage, err := os.MkdirTemp(destDir, ".install-"+l.ID+"-")
@@ -275,8 +275,12 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 		return fmt.Errorf("marketplace: download %q: HTTP %d", l.DownloadURL, resp.StatusCode)
 	}
 
-	payloadPath := filepath.Join(stage, "payload")
-	pf, err := os.Create(payloadPath)
+	payloadPath, err := safeStagePath(stage, "payload")
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- payload is written to an application-created staging directory.
+	pf, err := os.OpenFile(payloadPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -299,8 +303,11 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 	}
 
 	if len(l.Manifest) > 0 {
-		mp := filepath.Join(stage, "manifest.json")
-		if err := os.WriteFile(mp, []byte(l.Manifest), 0o644); err != nil {
+		mp, err := safeStagePath(stage, "manifest.json")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(mp, []byte(l.Manifest), 0o600); err != nil {
 			return err
 		}
 	}
@@ -326,4 +333,23 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 	cleanup = false
 	_ = os.RemoveAll(old)
 	return nil
+}
+
+func safeStagePath(stage, name string) (string, error) {
+	if name == "" {
+		return "", errors.New("marketplace: empty stage path")
+	}
+	clean := filepath.Clean(name)
+	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("marketplace: unsafe stage path %q", name)
+	}
+	full := filepath.Join(stage, clean)
+	rel, err := filepath.Rel(stage, full)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("marketplace: unsafe stage path %q", name)
+	}
+	return full, nil
 }

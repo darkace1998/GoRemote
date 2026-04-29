@@ -140,6 +140,7 @@ func filenameDir(p string) string {
 }
 
 func readTail(path string, maxBytes int64) ([]byte, error) {
+	// #nosec G304 -- the log path comes from the configured file sink and is read directly for the viewer.
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err

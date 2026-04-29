@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"crypto/ed25519"
@@ -91,7 +92,7 @@ func Open(root string) (*Registry, error) {
 	if root == "" {
 		return nil, errors.New("extplugin: empty root")
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := os.MkdirAll(root, 0o750); err != nil {
 		return nil, fmt.Errorf("extplugin: mkdir %q: %w", root, err)
 	}
 	r := &Registry{
@@ -273,7 +274,10 @@ func (r *Registry) Forget(id string) error {
 		return err
 	}
 	r.mu.Unlock()
-	dir := filepath.Join(r.root, id)
+	dir, err := r.pluginDirPath(id)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("extplugin: remove %q: %w", dir, err)
 	}
@@ -298,8 +302,15 @@ func (r *Registry) refreshLocked() error {
 		if !d.IsDir() {
 			continue
 		}
-		pluginDir := filepath.Join(r.root, d.Name())
-		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		pluginDir, err := r.pluginDirPath(d.Name())
+		if err != nil {
+			continue
+		}
+		manifestPath, err := safeJoinWithinRoot(pluginDir, "manifest.json")
+		if err != nil {
+			continue
+		}
+		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
 		if err != nil {
 			continue
@@ -361,7 +372,11 @@ func (r *Registry) verifierLocked() *sdkplugin.Verifier {
 }
 
 func (r *Registry) loadState() error {
-	path := filepath.Join(r.root, stateFile)
+	path, err := safeJoinWithinRoot(r.root, stateFile)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- state.json is a fixed file under the registry root.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -381,12 +396,19 @@ func (r *Registry) loadState() error {
 }
 
 func (r *Registry) saveStateLocked() error {
-	path := filepath.Join(r.root, stateFile)
+	path, err := safeJoinWithinRoot(r.root, stateFile)
+	if err != nil {
+		return err
+	}
 	return writeJSONAtomic(path, r.state)
 }
 
 func (r *Registry) loadTrust() error {
-	path := filepath.Join(r.root, trustFile)
+	path, err := safeJoinWithinRoot(r.root, trustFile)
+	if err != nil {
+		return err
+	}
+	// #nosec G304 -- trusted_keys.json is a fixed file under the registry root.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -409,8 +431,42 @@ func (r *Registry) loadTrust() error {
 }
 
 func (r *Registry) saveTrustLocked() error {
-	path := filepath.Join(r.root, trustFile)
+	path, err := safeJoinWithinRoot(r.root, trustFile)
+	if err != nil {
+		return err
+	}
 	return writeJSONAtomic(path, r.trust)
+}
+
+func (r *Registry) pluginDirPath(id string) (string, error) {
+	if id == "" {
+		return "", errors.New("extplugin: empty id")
+	}
+	if filepath.Base(id) != id || strings.ContainsAny(id, `/\\`) {
+		return "", fmt.Errorf("extplugin: invalid plugin id %q", id)
+	}
+	return safeJoinWithinRoot(r.root, id)
+}
+
+func safeJoinWithinRoot(root string, elems ...string) (string, error) {
+	base, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	parts := append([]string{base}, elems...)
+	dest := filepath.Join(parts...)
+	dest, err = filepath.Abs(dest)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(base, dest)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("extplugin: path escapes root: %s", dest)
+	}
+	return dest, nil
 }
 
 // writeJSONAtomic writes v as pretty JSON to path via a temp file + rename.

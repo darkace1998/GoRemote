@@ -285,10 +285,7 @@ func (s *Session) lcdCmd(args []string) {
 		}
 		return
 	}
-	target := args[0]
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(s.localCWD, target)
-	}
+	target := s.resolveLocal(args[0])
 	st, err := os.Stat(target)
 	if err != nil {
 		_ = s.writeLine("lcd: " + err.Error())
@@ -326,10 +323,7 @@ func (s *Session) lsCmd(args []string) {
 func (s *Session) llsCmd(args []string) {
 	target := s.localCWD
 	if len(args) > 0 {
-		target = args[0]
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(s.localCWD, target)
-		}
+		target = s.resolveLocal(args[0])
 	}
 	entries, err := os.ReadDir(target)
 	if err != nil {
@@ -423,9 +417,7 @@ func (s *Session) getCmd(ctx context.Context, args []string) {
 	if len(args) > 1 {
 		local = args[1]
 	}
-	if !filepath.IsAbs(local) {
-		local = filepath.Join(s.localCWD, local)
-	}
+	local = s.resolveLocal(local)
 
 	rf, err := s.sc.Open(remote)
 	if err != nil {
@@ -434,7 +426,8 @@ func (s *Session) getCmd(ctx context.Context, args []string) {
 	}
 	defer func() { _ = rf.Close() }()
 
-	lf, err := os.Create(local)
+	// #nosec G304 -- the interactive user explicitly selected the local destination path.
+	lf, err := os.OpenFile(local, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		_ = s.writeLine("get: create local: " + err.Error())
 		return
@@ -454,16 +447,14 @@ func (s *Session) putCmd(ctx context.Context, args []string) {
 		_ = s.writeLine("put: missing local path")
 		return
 	}
-	local := args[0]
-	if !filepath.IsAbs(local) {
-		local = filepath.Join(s.localCWD, local)
-	}
+	local := s.resolveLocal(args[0])
 	remote := path.Base(local)
 	if len(args) > 1 {
 		remote = args[1]
 	}
 	remote = s.resolveRemote(remote)
 
+	// #nosec G304 -- the interactive user explicitly selected the local source path.
 	lf, err := os.Open(local)
 	if err != nil {
 		_ = s.writeLine("put: open local: " + err.Error())
@@ -520,6 +511,13 @@ func (s *Session) resolveRemote(p string) string {
 		return path.Clean(p)
 	}
 	return path.Clean(path.Join(s.remoteCWD, p))
+}
+
+func (s *Session) resolveLocal(p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(filepath.Join(s.localCWD, p))
 }
 
 // Resize is a no-op — the SFTP REPL doesn't depend on a terminal grid

@@ -140,7 +140,7 @@ func Download(ctx context.Context, t *ManifestTarget, destDir string) (string, e
 	if t == nil {
 		return "", errors.New("update: nil target")
 	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return "", err
 	}
 	client := &http.Client{Timeout: 10 * time.Minute}
@@ -263,12 +263,13 @@ func SwapInPlace(downloaded string) error {
 		}
 	}
 	// Make sure the new file is executable (Unix permissions).
+	mode := installedExecutableMode(dst)
 	if runtime.GOOS != "windows" {
-		_ = os.Chmod(downloaded, 0o755)
+		_ = os.Chmod(downloaded, mode)
 	}
 	if err := os.Rename(downloaded, dst); err != nil {
 		// Try a copy+remove if rename across filesystems failed.
-		if cerr := copyFile(downloaded, dst); cerr != nil {
+		if cerr := copyFile(downloaded, dst, mode); cerr != nil {
 			return fmt.Errorf("update: install: %w", cerr)
 		}
 		_ = os.Remove(downloaded)
@@ -289,13 +290,24 @@ func CleanupOld() {
 	_ = os.Remove(dst + ".old")
 }
 
-func copyFile(src, dst string) error {
+func installedExecutableMode(path string) os.FileMode {
+	if st, err := os.Stat(path); err == nil {
+		if perm := st.Mode().Perm(); perm != 0 {
+			return perm
+		}
+	}
+	return 0o700
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	// #nosec G304 -- src is a temp update payload and dst is the current executable path.
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	// #nosec G304 -- src is a temp update payload and dst is the current executable path.
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}

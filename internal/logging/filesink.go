@@ -37,9 +37,11 @@ func OpenFileSink(path string, maxBytes int64) (*FileSink, error) {
 	if path == "" {
 		return nil, errors.New("logging: empty file sink path")
 	}
+	path = filepath.Clean(path)
 	if err := os.MkdirAll(filepath.Dir(path), logDirPerm); err != nil {
 		return nil, err
 	}
+	// #nosec G304 -- the log path is application-configured and opened directly without shell evaluation.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, logFilePerm)
 	if err != nil {
 		return nil, err
@@ -85,6 +87,7 @@ func (s *FileSink) rotateLocked() error {
 	_ = os.Remove(rotated)
 	if err := os.Rename(s.path, rotated); err != nil {
 		// Try to recover: reopen original even if rename failed.
+		// #nosec G304 -- the log path is application-configured and opened directly without shell evaluation.
 		f, oerr := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, logFilePerm)
 		if oerr == nil {
 			s.f = f
@@ -95,6 +98,7 @@ func (s *FileSink) rotateLocked() error {
 		}
 		return err
 	}
+	// #nosec G304 -- the log path is application-configured and opened directly without shell evaluation.
 	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, logFilePerm)
 	if err != nil {
 		return err

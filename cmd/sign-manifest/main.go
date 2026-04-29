@@ -95,7 +95,7 @@ func main() {
 	if err != nil {
 		fail("marshal: %v", err)
 	}
-	if err := os.WriteFile(*out, enc, 0o644); err != nil {
+	if err := os.WriteFile(*out, enc, 0o600); err != nil {
 		fail("write: %v", err)
 	}
 	fmt.Fprintf(os.Stderr, "signed %d target(s) -> %s\n", len(m.Targets), *out)

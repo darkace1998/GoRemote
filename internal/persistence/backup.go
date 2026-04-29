@@ -210,8 +210,8 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	defer func() { _ = zr.Close() }()
 
 	for _, f := range zr.File {
-		clean := filepath.ToSlash(filepath.Clean(f.Name))
-		if strings.HasPrefix(clean, "../") || strings.Contains(clean, "/../") || strings.HasPrefix(clean, "/") {
+		clean, err := sanitizeRestorePath(f.Name)
+		if err != nil {
 			return fmt.Errorf("persistence: backup contains unsafe path %q", f.Name)
 		}
 		if strings.HasPrefix(clean, BackupsDirName+"/") || clean == BackupsDirName {
@@ -242,12 +242,29 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	return nil
 }
 
+func sanitizeRestorePath(name string) (string, error) {
+	clean := filepath.ToSlash(filepath.Clean(name))
+	if clean == "." || clean == "" || clean == "/" {
+		return "", errors.New("empty restore path")
+	}
+	if strings.HasPrefix(clean, "../") || strings.Contains(clean, "/../") || strings.HasPrefix(clean, "/") {
+		return "", errors.New("path escapes root")
+	}
+	return clean, nil
+}
+
 // extractZipEntry extracts a single zip entry relative to root. Directories
 // are created with 0o755 and files with the mode recorded in the header
 // masked to 0o644 minimum for readability.
 func extractZipEntry(f *zip.File, root string) error {
-	clean := filepath.FromSlash(filepath.Clean(f.Name))
-	dest := filepath.Join(root, clean)
+	clean, err := sanitizeRestorePath(f.Name)
+	if err != nil {
+		return fmt.Errorf("persistence: backup contains unsafe path %q", f.Name)
+	}
+	dest, err := safeJoinWithinRoot(root, filepath.FromSlash(clean))
+	if err != nil {
+		return fmt.Errorf("persistence: backup contains unsafe path %q", f.Name)
+	}
 	if f.FileInfo().IsDir() {
 		return os.MkdirAll(dest, 0o755)
 	}
@@ -272,4 +289,24 @@ func extractZipEntry(f *zip.File, root string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func safeJoinWithinRoot(root, rel string) (string, error) {
+	base, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	dest := filepath.Join(base, rel)
+	dest, err = filepath.Abs(dest)
+	if err != nil {
+		return "", err
+	}
+	relToRoot, err := filepath.Rel(base, dest)
+	if err != nil {
+		return "", err
+	}
+	if relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
+		return "", errors.New("path escapes root")
+	}
+	return dest, nil
 }

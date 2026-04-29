@@ -107,7 +107,7 @@ func writeBundleManifest(zw *zip.Writer, in Inputs) error {
 }
 
 func copyFile(zw *zip.Writer, src, dst string) error {
-	f, err := os.Open(src)
+	f, err := openRegularFile(src)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ var SecretKeys = []string{
 const redactedPlaceholder = "[REDACTED]"
 
 func writeRedactedWorkspace(zw *zip.Writer, src string) error {
-	raw, err := os.ReadFile(src)
+	raw, err := readRegularFile(src)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func redactValue(v any, keys map[string]struct{}) any {
 }
 
 func copyLogTail(zw *zip.Writer, path string, maxBytes int64) error {
-	f, err := os.Open(path)
+	f, err := openRegularFile(path)
 	if err != nil {
 		return err
 	}
@@ -202,6 +202,34 @@ func copyLogTail(zw *zip.Writer, path string, maxBytes int64) error {
 	}
 	_, err = io.Copy(w, f)
 	return err
+}
+
+func openRegularFile(path string) (*os.File, error) {
+	clean := filepath.Clean(path)
+	// #nosec G304 -- diagnostics reads local files chosen by the application and restricts them to regular files.
+	f, err := os.Open(clean)
+	if err != nil {
+		return nil, err
+	}
+	st, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if !st.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("not a regular file: %s", clean)
+	}
+	return f, nil
+}
+
+func readRegularFile(path string) ([]byte, error) {
+	f, err := openRegularFile(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 func copyPluginManifests(zw *zip.Writer, root string) error {

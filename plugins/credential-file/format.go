@@ -114,7 +114,11 @@ func sealWith(key, salt, nonce, plaintext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("gcm: %w", err)
 	}
 
-	out := make([]byte, 0, headerLen+len(plaintext)+aead.Overhead())
+	capHint, err := sealedCapacity(len(plaintext), aead.Overhead())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]byte, 0, capHint)
 	out = append(out, magic...)
 	out = append(out, version1)
 	out = append(out, salt...)
@@ -125,6 +129,17 @@ func sealWith(key, salt, nonce, plaintext []byte) ([]byte, error) {
 	aad := append([]byte(nil), out...)
 	out = aead.Seal(out, nonce, plaintext, aad)
 	return out, nil
+}
+
+func sealedCapacity(plaintextLen, overhead int) (int, error) {
+	maxInt := int(^uint(0) >> 1)
+	if plaintextLen < 0 || overhead < 0 {
+		return 0, errors.New("credential-file: negative size")
+	}
+	if plaintextLen > maxInt-headerLen-overhead {
+		return 0, errors.New("credential-file: plaintext too large")
+	}
+	return headerLen + plaintextLen + overhead, nil
 }
 
 // decodeFile parses a file payload and decrypts the vault. It returns the

@@ -37,6 +37,7 @@ func dumpCrashIfPanicking() {
 	}
 	stamp := time.Now().UTC().Format("20060102T150405Z")
 	path := filepath.Join(crashDir, "crash-"+stamp+".log")
+	// #nosec G304 -- crash log path is derived from the configured crash directory and a fixed filename pattern.
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crash dump: open: %v\n", err)

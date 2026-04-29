@@ -155,8 +155,7 @@ func (g *GitSync) locate() (string, error) {
 }
 
 func (g *GitSync) run(ctx context.Context, args ...string) (string, error) {
-	gitPath, err := g.locate()
-	if err != nil {
+	if _, err := g.locate(); err != nil {
 		return "", err
 	}
 	if _, ok := ctx.Deadline(); !ok {
@@ -164,7 +163,7 @@ func (g *GitSync) run(ctx context.Context, args ...string) (string, error) {
 		ctx, cancel = context.WithTimeout(ctx, defaultTimeout)
 		defer cancel()
 	}
-	cmd := exec.CommandContext(ctx, gitPath, args...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = g.dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

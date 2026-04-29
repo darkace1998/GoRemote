@@ -328,10 +328,13 @@ func openPath(p string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
+		// #nosec G204 -- the command is fixed and receives a single path argument without shell expansion.
 		cmd = exec.Command("open", p)
 	case "windows":
+		// #nosec G204 -- the command is fixed and receives a single path argument without shell expansion.
 		cmd = exec.Command("explorer", p)
 	default:
+		// #nosec G204 -- the command is fixed and receives a single path argument without shell expansion.
 		cmd = exec.Command("xdg-open", p)
 	}
 	return cmd.Start()
