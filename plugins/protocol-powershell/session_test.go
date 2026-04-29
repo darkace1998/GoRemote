@@ -244,6 +244,7 @@ func TestEnvAndCWDPlumbed(t *testing.T) {
 	}
 
 	cwd := t.TempDir()
+	wantPWD := canonicalPath(t, cwd)
 	mod := New()
 	sess, err := mod.Open(context.Background(), protocol.OpenRequest{
 		AuthMethod: protocol.AuthNone,
@@ -272,19 +273,19 @@ func TestEnvAndCWDPlumbed(t *testing.T) {
 	var gotPWD, gotEnv string
 	for time.Now().Before(deadline) {
 		if data, err := os.ReadFile(pwdFile); err == nil {
-			gotPWD = strings.TrimSpace(string(data))
+			gotPWD = canonicalPath(t, strings.TrimSpace(string(data)))
 		}
 		if data, err := os.ReadFile(envFile); err == nil {
 			gotEnv = strings.TrimSpace(string(data))
 		}
-		if gotPWD == cwd && gotEnv == "abc123" {
+		if gotPWD == wantPWD && gotEnv == "abc123" {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if gotPWD != cwd {
+	if gotPWD != wantPWD {
 		bufMu.Lock()
-		t.Fatalf("child cwd mismatch: got %q want %q (pty output %q)", gotPWD, cwd, buf.String())
+		t.Fatalf("child cwd mismatch: got %q want %q (requested %q, pty output %q)", gotPWD, wantPWD, cwd, buf.String())
 	}
 	if gotEnv != "abc123" {
 		bufMu.Lock()
@@ -296,6 +297,21 @@ func TestEnvAndCWDPlumbed(t *testing.T) {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func canonicalPath(t *testing.T, p string) string {
+	t.Helper()
+	if p == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		t.Fatalf("Abs(%q): %v", p, err)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved
+	}
+	return abs
 }
 
 type lockedWriter struct {

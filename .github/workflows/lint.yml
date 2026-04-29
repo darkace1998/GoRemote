@@ -35,4 +35,7 @@ jobs:
         with:
           # The repository ships a v2-schema .golangci.yml; pin a v2 binary.
           version: v2.11.4
+          # config verify fetches the upstream JSON schema over the network.
+          # Disable it so transient schema-host timeouts do not fail CI.
+          verify: false
           args: --timeout=5m
