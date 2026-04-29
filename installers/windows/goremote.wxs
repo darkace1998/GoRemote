@@ -2,17 +2,17 @@
 <!--
   WiX 4.x source for the goremote MSI. Variables (-d switches) supplied
   by the release workflow:
-    Version    - product version, e.g. 1.13.0
+    Version    - product version, e.g. 0.9.0
     SourceExe  - path to the signed goremote.exe (already authenticode-signed)
     LicenseRtf - path to license RTF (defaults to bundled BSD-3 RTF)
     UpgradeCode- stable GUID identifying the product across versions
 
   Build:
-    wix build goremote.wxs -d Version=1.13.0 -d SourceExe=goremote.exe \
-        -d UpgradeCode=PUT-A-STABLE-GUID-HERE -o goremote-1.13.0.msi
+    wix build goremote.wxs -d Version=0.9.0 -d SourceExe=goremote.exe \
+        -d UpgradeCode=PUT-A-STABLE-GUID-HERE -o goremote-0.9.0.msi
   Sign:
     signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 \
-        /a goremote-1.13.0.msi
+        /a goremote-0.9.0.msi
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package

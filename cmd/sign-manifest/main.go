@@ -6,7 +6,7 @@
 // Input manifest format (JSON):
 //
 //	{
-//	  "version": "1.13.0",
+//	  "version": "0.9.0",
 //	  "notes":   "...",
 //	  "targets": [
 //	    {"os":"windows","arch":"amd64","url":"https://.../goremote-windows-amd64.exe","sha256":"deadbeef..."},

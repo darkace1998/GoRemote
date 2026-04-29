@@ -33,7 +33,7 @@ the `Release` workflow:
 ## Local manual build
 
 ```powershell
-$env:Version = "1.13.0"
+$env:Version = "0.9.0"
 wix build goremote.wxs -d Version=$env:Version -d SourceExe=path\to\goremote.exe `
     -d UpgradeCode=PUT-A-STABLE-GUID-HERE -d LicenseRtf=path\to\license.rtf `
     -o goremote-$env:Version.msi
