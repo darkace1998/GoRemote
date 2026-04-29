@@ -85,19 +85,27 @@ func (s *Store) backupLocked(ctx context.Context) (string, error) {
 // zipStoreDir writes every regular file under dir (excluding the top-level
 // BackupsDirName directory) to outPath as a zip archive. Paths inside the
 // zip are relative to dir and use forward slashes.
-func zipStoreDir(ctx context.Context, dir, outPath string) error {
+func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 	// #nosec G304 -- outPath is generated under the store-managed backups directory.
 	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("persistence: create backup: %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		if cerr := out.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
 
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return fmt.Errorf("persistence: open root: %w", err)
 	}
-	defer root.Close()
+	defer func() {
+		if cerr := root.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
 
 	zw := zip.NewWriter(out)
 	walkErr := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, werr error) error {
@@ -337,15 +345,27 @@ func extractZipEntry(f *zip.File, root string) error {
 }
 
 func copyZipEntry(dst io.Writer, src io.Reader, maxBytes uint64) (int64, error) {
-	lr := &io.LimitedReader{R: src, N: int64(maxBytes) + 1}
+	limit, err := checkedLimitedReaderN(maxBytes)
+	if err != nil {
+		return 0, err
+	}
+	lr := &io.LimitedReader{R: src, N: limit}
 	n, err := io.Copy(dst, lr)
-	if n > int64(maxBytes) {
+	if uint64(n) > maxBytes {
 		return n, errors.New("persistence: backup entry exceeds size limit")
 	}
 	if err != nil {
 		return n, err
 	}
 	return n, nil
+}
+
+func checkedLimitedReaderN(maxBytes uint64) (int64, error) {
+	maxInt64 := int64(^uint64(0) >> 1)
+	if maxBytes >= uint64(maxInt64) {
+		return 0, errors.New("persistence: backup entry size limit exceeds platform maximum")
+	}
+	return int64(maxBytes) + 1, nil
 }
 
 func safeJoinWithinRoot(root, rel string) (string, error) {

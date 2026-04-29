@@ -23,3 +23,10 @@ func TestReadFrameRejectsOversizeHeader(t *testing.T) {
 		t.Fatal("expected oversize header to fail")
 	}
 }
+
+func TestCheckedFrameLenRejectsPlatformOverflow(t *testing.T) {
+	_, err := checkedFrameLen(^uint32(0))
+	if err == nil {
+		t.Fatal("expected large frame length to fail when beyond configured max")
+	}
+}

@@ -351,7 +351,9 @@ func syncDir(dir string) error {
 	}
 	var joined error
 	if err := d.Sync(); err != nil {
-		joined = errors.Join(joined, fmt.Errorf("sync parent dir: %w", err))
+		if !errors.Is(err, os.ErrInvalid) && !errors.Is(err, os.ErrPermission) {
+			joined = errors.Join(joined, fmt.Errorf("sync parent dir: %w", err))
+		}
 	}
 	if err := d.Close(); err != nil {
 		joined = errors.Join(joined, fmt.Errorf("close parent dir: %w", err))

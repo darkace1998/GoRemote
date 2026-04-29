@@ -216,8 +216,7 @@ func (s *fakeSession) SendInput(ctx context.Context, data []byte) error {
 		return errors.New("fakeprotocol: session closed")
 	}
 	s.rec.addInput(data)
-	echo := make([]byte, 0, len(data)+3)
-	echo = append(echo, '>', ' ')
+	echo := []byte{'>', ' '}
 	echo = append(echo, data...)
 	echo = append(echo, '\n')
 	select {

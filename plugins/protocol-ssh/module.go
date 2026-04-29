@@ -473,6 +473,7 @@ func buildHostKeyCallback(strict, knownHostsPath string) (ssh.HostKeyCallback, s
 	}
 	// Ensure the file exists so knownhosts.New doesn't fail on first-run.
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		// #nosec G304 -- path is the configured known_hosts file location.
 		f, cErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600)
 		if cErr != nil {
 			return nil, nil, fmt.Errorf("known_hosts: create: %w", cErr)

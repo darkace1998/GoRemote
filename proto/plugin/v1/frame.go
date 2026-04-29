@@ -45,10 +45,11 @@ func ReadFrame(r io.Reader) (Frame, error) {
 		return Frame{}, fmt.Errorf("pluginv1: read header: %w", err)
 	}
 	n := binary.BigEndian.Uint32(hdr[:])
-	if n > maxFrameSize {
-		return Frame{}, fmt.Errorf("pluginv1: frame size %d exceeds limit", n)
+	frameLen, err := checkedFrameLen(n)
+	if err != nil {
+		return Frame{}, err
 	}
-	buf := make([]byte, n)
+	buf := make([]byte, frameLen)
 	if _, err := io.ReadFull(r, buf); err != nil {
 		return Frame{}, fmt.Errorf("pluginv1: read body: %w", err)
 	}
@@ -57,6 +58,17 @@ func ReadFrame(r io.Reader) (Frame, error) {
 		return Frame{}, fmt.Errorf("pluginv1: unmarshal frame: %w", err)
 	}
 	return f, nil
+}
+
+func checkedFrameLen(size uint32) (int, error) {
+	if size > maxFrameSize {
+		return 0, fmt.Errorf("pluginv1: frame size %d exceeds limit", size)
+	}
+	maxInt := int(^uint(0) >> 1)
+	if uint64(size) > uint64(maxInt) {
+		return 0, fmt.Errorf("pluginv1: frame size %d exceeds platform limit", size)
+	}
+	return int(size), nil
 }
 
 func checkedFrameSize(size int) (uint32, error) {

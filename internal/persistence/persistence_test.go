@@ -313,6 +313,14 @@ func TestRestoreRejectsOversizedArchive(t *testing.T) {
 	}
 }
 
+func TestCheckedLimitedReaderNRejectsOverflow(t *testing.T) {
+	maxInt64 := int64(^uint64(0) >> 1)
+	_, err := checkedLimitedReaderN(uint64(maxInt64))
+	if err == nil {
+		t.Fatal("expected oversized limit to fail")
+	}
+}
+
 func TestMigrator_NewerThanSupported(t *testing.T) {
 	mig := DefaultMigrator()
 	meta := &Meta{Version: CurrentVersion + 1}

@@ -279,7 +279,7 @@ func escapeIAC(p []byte) []byte {
 		copy(out, p)
 		return out
 	}
-	out := make([]byte, 0, len(p)+4)
+	out := make([]byte, 0, len(p))
 	for _, b := range p {
 		if b == IAC {
 			out = append(out, IAC, IAC)
