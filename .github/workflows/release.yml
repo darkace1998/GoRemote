@@ -28,22 +28,63 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.18.2)'
+        description: 'Release version (e.g. 0.9.0 or v0.9.0)'
         required: true
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   GO_VERSION: '1.26.2'
 
 jobs:
+  prepare:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.resolve.outputs.app_version }}
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+    steps:
+      - name: Resolve app version and tag
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          raw="$INPUT_VERSION"
+          if [ -z "$raw" ]; then
+            if [ "$EVENT_NAME" = "release" ]; then
+              raw="$RELEASE_TAG"
+            else
+              raw="$REF_NAME"
+            fi
+          fi
+          if [ -z "$raw" ]; then
+            echo "unable to determine release version" >&2
+            exit 1
+          fi
+          app_version="${raw#v}"
+          release_tag="$raw"
+          case "$release_tag" in
+            v*) ;;
+            *) release_tag="v$release_tag" ;;
+          esac
+          echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
   build-linux:
     name: Build linux/amd64
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -64,7 +105,7 @@ jobs:
       - name: Build cmd/desktop
         env:
           CGO_ENABLED: '1'
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.app_version }}
         run: |
           mkdir -p dist
           go build -trimpath \
@@ -79,6 +120,7 @@ jobs:
 
   build-darwin:
     name: Build darwin/${{ matrix.goarch }}
+    needs: prepare
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -97,7 +139,7 @@ jobs:
           CGO_ENABLED: '1'
           GOOS: darwin
           GOARCH: ${{ matrix.goarch }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.app_version }}
         run: |
           mkdir -p dist
           go build -trimpath \
@@ -112,6 +154,7 @@ jobs:
 
   build-windows:
     name: Build windows/amd64
+    needs: prepare
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -125,7 +168,7 @@ jobs:
         shell: pwsh
         env:
           CGO_ENABLED: '1'
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.app_version }}
         run: |
           mkdir dist | Out-Null
           go build -trimpath `
@@ -140,7 +183,7 @@ jobs:
 
   sign-windows:
     name: Sign Windows + build MSI
-    needs: build-windows
+    needs: [prepare, build-windows]
     runs-on: windows-latest
     # Surface signing-related secrets as env vars so step-level `if:`
     # guards can reference them — `secrets.*` is not available at that
@@ -178,7 +221,7 @@ jobs:
 
       - name: Build MSI
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.app_version }}
           UPGRADE_CODE: ${{ vars.WINDOWS_UPGRADE_CODE }}
         shell: pwsh
         run: |
@@ -200,7 +243,7 @@ jobs:
         if: ${{ env.PFX_B64 != '' }}
         shell: pwsh
         run: |
-          $msi = Get-ChildItem "dist\goremote-amd64-${{ inputs.version }}.msi" | Select-Object -First 1
+          $msi = Get-ChildItem "dist\goremote-amd64-${{ needs.prepare.outputs.app_version }}.msi" | Select-Object -First 1
           $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
                        Sort-Object FullName -Descending | Select-Object -First 1).FullName
           & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
@@ -214,7 +257,7 @@ jobs:
 
   manifest:
     name: Sign update manifest
-    needs: [build-linux, build-darwin, build-windows, sign-windows]
+    needs: [prepare, build-linux, build-darwin, build-windows, sign-windows]
     runs-on: ubuntu-latest
     env:
       RELEASE_KEY: ${{ secrets.GOREMOTE_RELEASE_KEY }}
@@ -233,24 +276,29 @@ jobs:
 
       - name: Compute SHA-256 sums and assemble manifest
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.app_version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
           BASE_URL: ${{ vars.UPDATE_BASE_URL }}
         run: |
           set -euo pipefail
-          : "${BASE_URL:=https://example.invalid/goremote}"
+          if [ -n "${BASE_URL}" ]; then
+            asset_base_url="${BASE_URL}/${VERSION}"
+          else
+            asset_base_url="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}"
+          fi
           targets='[]'
           add() {
             local file="$1" os="$2" arch="$3" url_name="$4"
             [ -f "$file" ] || { echo "skip: $file (not present)"; return 0; }
             local sum
             sum="$(sha256sum "$file" | cut -d' ' -f1)"
-            targets="$(jq --arg os "$os" --arg arch "$arch" --arg url "${BASE_URL}/${VERSION}/${url_name}" --arg sha "$sum" \
+            targets="$(jq --arg os "$os" --arg arch "$arch" --arg url "${asset_base_url}/${url_name}" --arg sha "$sum" \
               '. += [{os:$os,arch:$arch,url:$url,sha256:$sha}]' <<<"$targets")"
           }
-          add dist/goremote-linux-amd64/goremote-linux-amd64                 linux   amd64 goremote-linux-amd64
-          add dist/goremote-darwin-amd64/goremote-darwin-amd64               darwin  amd64 goremote-darwin-amd64
-          add dist/goremote-darwin-arm64/goremote-darwin-arm64               darwin  arm64 goremote-darwin-arm64
-          add dist/goremote-windows-amd64-signed/goremote-windows-amd64.exe  windows amd64 goremote-windows-amd64.exe
+          add dist/goremote-linux-amd64/goremote-linux-amd64                 linux   amd64 goremote-${RELEASE_TAG}-linux-amd64
+          add dist/goremote-darwin-amd64/goremote-darwin-amd64               darwin  amd64 goremote-${RELEASE_TAG}-darwin-amd64
+          add dist/goremote-darwin-arm64/goremote-darwin-arm64               darwin  arm64 goremote-${RELEASE_TAG}-darwin-arm64
+          add dist/goremote-windows-amd64-signed/goremote-windows-amd64.exe  windows amd64 goremote-${RELEASE_TAG}-windows-amd64.exe
           jq --arg v "$VERSION" --argjson t "$targets" \
             '{version:$v, notes:"", targets:$t}' \
             <<<'{}' > update.json
@@ -271,3 +319,43 @@ jobs:
           name: update-manifest
           path: update.json
           if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub release assets
+    needs: [prepare, manifest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Prepare release assets
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp dist/goremote-linux-amd64/goremote-linux-amd64 "release-assets/goremote-${RELEASE_TAG}-linux-amd64"
+          cp dist/goremote-darwin-amd64/goremote-darwin-amd64 "release-assets/goremote-${RELEASE_TAG}-darwin-amd64"
+          cp dist/goremote-darwin-arm64/goremote-darwin-arm64 "release-assets/goremote-${RELEASE_TAG}-darwin-arm64"
+          cp dist/goremote-windows-amd64-signed/goremote-windows-amd64.exe "release-assets/goremote-${RELEASE_TAG}-windows-amd64.exe"
+          cp dist/goremote-windows-amd64-signed/goremote-amd64-${APP_VERSION}.msi "release-assets/goremote-${RELEASE_TAG}-windows-amd64.msi"
+          cp dist/update-manifest/update.json "release-assets/update-${RELEASE_TAG}.json"
+          ls -l release-assets
+
+      - name: Create or update release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes "Release $RELEASE_TAG" \
+              --target "${GITHUB_SHA}"
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
