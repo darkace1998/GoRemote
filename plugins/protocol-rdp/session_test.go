@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -13,14 +16,46 @@ import (
 	"github.com/goremote/goremote/sdk/protocol"
 )
 
-// fakeShDiscover returns the absolute path /bin/sh, regardless of inputs.
-// Tests use it together with a session whose argv is set to run /bin/sh
-// against a known one-liner so we can exercise Start without needing an
-// actual RDP client installed.
+func helperSession(args ...string) *Session {
+	argv := append([]string{"-test.run=TestHelperProcess", "--"}, args...)
+	return newSession(os.Args[0], argv)
+}
+
+func TestHelperProcess(t *testing.T) {
+	sep := -1
+	for i, arg := range os.Args {
+		if arg == "--" {
+			sep = i
+			break
+		}
+	}
+	if sep < 0 || sep+1 >= len(os.Args) {
+		return
+	}
+
+	switch os.Args[sep+1] {
+	case "stdout":
+		if sep+2 < len(os.Args) {
+			fmt.Fprintln(os.Stdout, os.Args[sep+2])
+		}
+	case "stderr":
+		if sep+2 < len(os.Args) {
+			fmt.Fprintln(os.Stderr, os.Args[sep+2])
+		}
+	case "exit":
+		code := 0
+		if sep+2 < len(os.Args) {
+			code, _ = strconv.Atoi(os.Args[sep+2])
+		}
+		os.Exit(code)
+	case "sleep":
+		time.Sleep(30 * time.Second)
+	}
+	os.Exit(0)
+}
+
 func TestStart_LaunchesAndForwardsLine(t *testing.T) {
-	// Spawn /bin/sh -c "echo launched" via a Session built directly from
-	// newSession, mirroring what Module.Open would produce.
-	sess := newSession("/bin/sh", []string{"-c", "echo launched"})
+	sess := helperSession("stdout", "launched")
 
 	var out bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -39,7 +74,7 @@ func TestStart_LaunchesAndForwardsLine(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "goremote: launched /bin/sh pid=") {
+	if !strings.Contains(got, "goremote: launched "+os.Args[0]+" pid=") {
 		t.Fatalf("status line missing in output: %q", got)
 	}
 	if !strings.Contains(got, "launched\n") {
@@ -48,7 +83,7 @@ func TestStart_LaunchesAndForwardsLine(t *testing.T) {
 }
 
 func TestStart_ForwardsStderrLinePrefixed(t *testing.T) {
-	sess := newSession("/bin/sh", []string{"-c", "echo oops 1>&2"})
+	sess := helperSession("stderr", "oops")
 	var out bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -61,7 +96,7 @@ func TestStart_ForwardsStderrLinePrefixed(t *testing.T) {
 }
 
 func TestStart_NonZeroExitTreatedAsClean(t *testing.T) {
-	sess := newSession("/bin/sh", []string{"-c", "exit 7"})
+	sess := helperSession("exit", "7")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := sess.Start(ctx, nil, io.Discard); err != nil {
@@ -70,10 +105,7 @@ func TestStart_NonZeroExitTreatedAsClean(t *testing.T) {
 }
 
 func TestStart_ContextCancellationStops(t *testing.T) {
-	// Use `exec` so /bin/sh is replaced by sleep; otherwise SIGTERM kills
-	// sh while leaving sleep as an orphan holding the stdout pipe open,
-	// which makes exec.Cmd.Wait block on output draining.
-	sess := newSession("/bin/sh", []string{"-c", "exec sleep 30"})
+	sess := helperSession("sleep")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan error, 1)
@@ -93,7 +125,7 @@ func TestStart_ContextCancellationStops(t *testing.T) {
 }
 
 func TestCloseIdempotent(t *testing.T) {
-	sess := newSession("/bin/sh", []string{"-c", "exec sleep 30"})
+	sess := helperSession("sleep")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -127,7 +159,7 @@ func TestCloseIdempotent(t *testing.T) {
 }
 
 func TestSendInputAndResizeUnsupported(t *testing.T) {
-	sess := newSession("/bin/sh", []string{"-c", "true"})
+	sess := helperSession("stdout", "unused")
 	if err := sess.SendInput(context.Background(), []byte("x")); !errors.Is(err, protocol.ErrUnsupported) {
 		t.Fatalf("SendInput err = %v, want ErrUnsupported", err)
 	}
@@ -142,10 +174,10 @@ func TestSendInputAndResizeUnsupported(t *testing.T) {
 func TestOpen_WithInjectedDiscover(t *testing.T) {
 	mod := &Module{
 		discover: func(override string, candidates []string) (string, error) {
-			return "/bin/sh", nil
+			return os.Args[0], nil
 		},
 		argvFor: func(goos string, cfg *config) ([]string, error) {
-			return []string{"-c", "echo launched"}, nil
+			return []string{"-test.run=TestHelperProcess", "--", "stdout", "launched"}, nil
 		},
 	}
 	sess, err := mod.Open(context.Background(), protocol.OpenRequest{
@@ -167,7 +199,7 @@ func TestOpen_WithInjectedDiscover(t *testing.T) {
 	if err := sess.Start(ctx, nil, &out); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if !strings.Contains(out.String(), "goremote: launched /bin/sh pid=") {
+	if !strings.Contains(out.String(), "goremote: launched "+os.Args[0]+" pid=") {
 		t.Fatalf("missing status line in %q", out.String())
 	}
 	if !strings.Contains(out.String(), "launched\n") {

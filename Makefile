@@ -1,15 +1,41 @@
-.PHONY: all build test test-race vet lint vuln sec audit tidy clean dist dist-linux dist-darwin dist-darwin-arm64 dist-windows
+.PHONY: all build build-desktop test test-desktop test-race vet lint vuln sec audit tidy clean dist dist-linux dist-darwin dist-darwin-arm64 dist-windows
 
 GO ?= go
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
+DESKTOP_PACKAGE := github.com/goremote/goremote/cmd/desktop
+NON_DESKTOP_PACKAGES := $(shell $(GO) list ./... | grep -v '^$(DESKTOP_PACKAGE)$$')
+LINUX_GUI_PKG_CONFIG_DEPS := gl x11 xcursor xrandr xinerama xi xxf86vm
+LINUX_GUI_DEPS_AVAILABLE := $(shell if [ "$$(uname -s)" != "Linux" ]; then echo 1; elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists $(LINUX_GUI_PKG_CONFIG_DEPS); then echo 1; else echo 0; fi)
+
+define maybe_skip_desktop
+	@if [ "$(LINUX_GUI_DEPS_AVAILABLE)" != "1" ]; then \
+		echo "Skipping cmd/desktop: install libgl1-mesa-dev and xorg-dev to include the Fyne desktop target."; \
+	fi
+endef
 
 all: build test audit
 
 build:
-	$(GO) build ./...
+	$(maybe_skip_desktop)
+	@if [ "$(LINUX_GUI_DEPS_AVAILABLE)" = "1" ]; then \
+		$(GO) build ./...; \
+	else \
+		$(GO) build $(NON_DESKTOP_PACKAGES); \
+	fi
+
+build-desktop:
+	$(GO) build ./cmd/desktop
 
 test:
-	$(GO) test -race ./...
+	$(maybe_skip_desktop)
+	@if [ "$(LINUX_GUI_DEPS_AVAILABLE)" = "1" ]; then \
+		$(GO) test -race ./...; \
+	else \
+		$(GO) test -race $(NON_DESKTOP_PACKAGES); \
+	fi
+
+test-desktop:
+	$(GO) test -race ./cmd/desktop
 
 test-race: test
 
@@ -22,11 +48,21 @@ lint:
 
 vuln:
 	@command -v govulncheck >/dev/null 2>&1 || $(GO) install golang.org/x/vuln/cmd/govulncheck@latest
-	@PATH="$(GOBIN):$$PATH" govulncheck ./...
+	$(maybe_skip_desktop)
+	@if [ "$(LINUX_GUI_DEPS_AVAILABLE)" = "1" ]; then \
+		PATH="$(GOBIN):$$PATH" govulncheck ./...; \
+	else \
+		PATH="$(GOBIN):$$PATH" govulncheck $(NON_DESKTOP_PACKAGES); \
+	fi
 
 sec:
 	@command -v gosec >/dev/null 2>&1 || $(GO) install github.com/securego/gosec/v2/cmd/gosec@latest
-	@PATH="$(GOBIN):$$PATH" gosec ./...
+	$(maybe_skip_desktop)
+	@if [ "$(LINUX_GUI_DEPS_AVAILABLE)" = "1" ]; then \
+		PATH="$(GOBIN):$$PATH" gosec ./...; \
+	else \
+		PATH="$(GOBIN):$$PATH" gosec $(NON_DESKTOP_PACKAGES); \
+	fi
 
 audit: lint vuln sec
 

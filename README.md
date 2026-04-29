@@ -46,7 +46,7 @@ docs/screenshots/       Reserved for screenshots once the UI stabilizes
 
 ## Prerequisites
 
-- **Go 1.25+** (enforced by the `go.mod` toolchain directive).
+- **Go 1.26.2+** (pinned via the `go.mod` toolchain directive).
 - For desktop builds:
   - Linux: `libgl1-mesa-dev xorg-dev` (OpenGL + X11 headers for Fyne).
   - macOS: Xcode command-line tools.
@@ -59,15 +59,23 @@ docs/screenshots/       Reserved for screenshots once the UI stabilizes
 The repository ships a `Makefile` that wraps the canonical commands.
 
 ```bash
-# Build everything
-make build           # go build ./...
+# Build everything except the desktop GUI when Linux OpenGL/X11 headers are missing
+make build
 
-# Run the full test suite
-make test            # go test -race ./...
+# Build the desktop GUI explicitly (requires native desktop headers)
+make build-desktop
+
+# Run the test suite except cmd/desktop when Linux OpenGL/X11 headers are missing
+make test
+
+# Run the desktop package tests explicitly (requires native desktop headers)
+make test-desktop
 
 # Static checks and supply-chain audit
 make vet             # go vet ./...
 make lint            # golangci-lint run ./...
+make vuln            # govulncheck (skips cmd/desktop on Linux when GUI headers are missing)
+make sec             # gosec (same desktop-package skip behavior)
 make audit           # lint + govulncheck + gosec
 
 # Combined gauntlet (mirrors CI)
@@ -81,9 +89,11 @@ make clean           # remove bin / dist / build
 ### Quick demo
 
 ```bash
-make build
+make build-desktop
 go run ./cmd/desktop
 ```
+
+On Linux, `make build`, `make test`, `make vuln`, and `make sec` automatically skip `cmd/desktop` when `pkg-config` cannot find the Fyne native prerequisites (`libgl1-mesa-dev` and `xorg-dev`). Install those packages and use `make build-desktop` / `make test-desktop` to validate the GUI package directly.
 
 The Fyne window opens immediately — no separate frontend build step required.
 

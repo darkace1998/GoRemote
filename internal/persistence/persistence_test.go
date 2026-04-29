@@ -148,38 +148,27 @@ func TestStore_LoadEmptyDir(t *testing.T) {
 func TestWriteAtomic_NoPartialFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "inventory.json")
-	// Pre-existing content should remain if a write "fails" — simulate by
-	// pointing at a non-writable destination via an invalid directory.
+	// Pre-existing content should remain if a write fails.
 	if err := WriteAtomic(path, []byte("v1")); err != nil {
 		t.Fatalf("write v1: %v", err)
 	}
 
-	// Force a failure: create a directory at the target path so rename
-	// over it fails on most platforms.
+	// Force a deterministic cross-platform failure: create a directory at the
+	// target path so replacing it with a regular file fails.
 	blocker := filepath.Join(dir, "blocker")
-	if err := os.Mkdir(blocker, 0o555); err != nil {
+	if err := os.Mkdir(blocker, 0o755); err != nil {
 		t.Fatalf("mkdir blocker: %v", err)
 	}
-	// Make the store dir itself read-only on the temp dir to force a mkdir
-	// failure on the target. Instead, target a file inside a read-only
-	// parent: we can make "ro/" unwritable and try to write "ro/foo".
-	roParent := filepath.Join(dir, "ro")
-	if err := os.Mkdir(roParent, 0o555); err != nil {
-		t.Fatalf("mkdir ro: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(roParent, 0o755) })
-	target := filepath.Join(roParent, "child.json")
-	if os.Geteuid() == 0 {
-		t.Skip("running as root bypasses read-only parent; skipping failure sim")
-	}
-	err := WriteAtomic(target, []byte("boom"))
+	err := WriteAtomic(blocker, []byte("boom"))
 	if err == nil {
-		t.Fatalf("expected failure writing to read-only parent")
+		t.Fatalf("expected failure writing over directory")
 	}
-	// No temp file should be left behind in roParent.
-	entries, _ := os.ReadDir(roParent)
-	if len(entries) != 0 {
-		t.Errorf("temp files left behind: %v", entries)
+	// No temp file should be left behind in dir.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
 	}
 	// Original file untouched.
 	b, err := os.ReadFile(path)

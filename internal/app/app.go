@@ -78,6 +78,7 @@ type App struct {
 	rootCancel context.CancelFunc
 
 	// persister state
+	persistMu   sync.Mutex
 	dirty       atomic.Bool
 	persistSig  chan struct{}
 	persistDone chan struct{}
@@ -248,6 +249,13 @@ func (a *App) markDirty() {
 // flushNow writes the current snapshot to disk synchronously, regardless of
 // the dirty flag.
 func (a *App) flushNow(ctx context.Context) error {
+	a.persistMu.Lock()
+	defer a.persistMu.Unlock()
+	return a.flushNowLocked(ctx)
+}
+
+// flushNowLocked writes the current snapshot to disk. a.persistMu must be held.
+func (a *App) flushNowLocked(ctx context.Context) error {
 	a.treeMu.RLock()
 	snap := &persistence.Snapshot{
 		Tree:      a.tree,

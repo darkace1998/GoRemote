@@ -61,11 +61,11 @@ We will coordinate fixes and publish a GitHub Security Advisory once a patch is 
 The repository ships a security-tooling baseline that runs both locally and in CI.
 
 - **CI workflows** (`.github/workflows/`):
-  - `ci.yml` — Go build/test/vet on Linux, macOS and Windows (Go 1.25.x).
+  - `ci.yml` — Go build/test/vet on Linux, macOS and Windows (Go 1.26.2).
   - `webui-ci.yml` — typecheck, test, build for the React/Vite frontend.
   - `lint.yml` — `golangci-lint` (config in `.golangci.yml`).
   - `security.yml` — `govulncheck`, `gosec` (SARIF), `gitleaks`, `trivy fs`, and `npm audit`. Scheduled weekly in addition to push/PR.
-  - `codeql.yml` — CodeQL analysis for `go` and `javascript-typescript`.
+  - `codeql.yml` — CodeQL analysis for `go` and GitHub Actions.
 - **Make targets**: `build`, `test`, `lint`, `vuln`, `sec`, `audit` (= lint + vuln + sec), `webui-build`, `webui-test`, `all`.
 - **Dependabot** (`.github/dependabot.yml`) covers `gomod`, `github-actions`, and the `webui` npm tree on a weekly cadence.
 
@@ -79,7 +79,7 @@ The following review pass was conducted using ripgrep over the Go tree plus `gov
 
 ### Findings
 
-- [HIGH] toolchain — `govulncheck` reports the project is built against `go1.25.0` and is reachable on **17 standard-library vulnerabilities** (e.g. GO-2025-4007 quadratic name-constraint check in `crypto/x509`, GO-2025-4008 ALPN error leak in `crypto/tls`, GO-2025-4006 `encoding/pem`). _Remediation:_ bump the toolchain in `go.mod`/CI to ≥ go1.25.3 (or the latest patched 1.25.x).
+- [HIGH] toolchain — `govulncheck` reports the project is built against an out-of-date Go standard library and is reachable on standard-library vulnerabilities. _Remediation:_ keep the repository toolchain and CI pinned to the latest patched Go release in active use.
 - [HIGH] `plugins/protocol-http/session.go:130` (G402) — `tls.Config{InsecureSkipVerify: !verifyTLS}` is reachable when the user disables TLS verification on an HTTP probe. _Already annotated `//nolint:gosec`._ _Remediation:_ keep the existing UI warning, ensure verifyTLS defaults to `true`, and surface the relaxed mode in connection telemetry.
 - [HIGH] `plugins/protocol-ssh/module.go:444` (G106) — `ssh.InsecureIgnoreHostKey()` returned when `strict == StrictOff`. _Already annotated `//nolint:gosec` and gated by an explicit user setting (see `SECURITY.md` "Transport security")._ _Remediation:_ verify the UI never lets `StrictOff` be the default and add an event-bus warning every time it is selected.
 - [HIGH] `plugins/protocol-ssh/module.go:407` (G704) — SSH client config consumes user-tainted `KnownHostsPath` / identity paths. _Remediation:_ restrict to paths under the user config dir or explicitly chosen via the file picker; reject `..` traversal.
@@ -105,5 +105,5 @@ The following review pass was conducted using ripgrep over the Go tree plus `gov
 ### Summary
 
 - **Total gosec issues:** 52 (15 HIGH, 31 MEDIUM, 6 LOW; 10 of the HIGH are G115 integer-conversion warnings concentrated in generated `*.pb.go` and `syscall.SIGWINCH` plumbing — accepted as low risk).
-- **Total govulncheck issues:** 17 reachable stdlib advisories driven by the toolchain version; 6 unreachable in imported packages.
-- **Critical immediate action:** bump the Go toolchain to a patched 1.25.x release; the rest are tracked above for the protocol/persistence owners.
+- **Total govulncheck issues:** reachable stdlib advisories are driven by the Go toolchain version; additional unreachable findings may exist in imported packages.
+- **Critical immediate action:** keep the Go toolchain pinned to a patched release; the rest are tracked above for the protocol/persistence owners.

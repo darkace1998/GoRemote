@@ -18,7 +18,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.2'
           cache: true
 
       # Required for cmd/desktop (Fyne) to typecheck during linting.
@@ -31,7 +31,7 @@ jobs:
             libxxf86vm-dev libxkbcommon-dev
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           # The repository ships a v2-schema .golangci.yml; pin a v2 binary.
           version: v2.6.0

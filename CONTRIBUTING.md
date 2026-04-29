@@ -12,18 +12,22 @@ Thanks for your interest. goremote is a clean-slate Go successor to mRemoteNG fo
 
 ## Getting started
 
-1. Install Go 1.25+.
+1. Install Go 1.26.2+.
 2. Linux desktop builds additionally require `libgl1-mesa-dev xorg-dev` (Fyne/OpenGL).
 3. Clone the repo.
 4. The `Makefile` wraps the canonical dev workflow:
-   - `make build` — `go build ./...`
-   - `make test` — `go test -race ./...`
+   - `make build` — builds all packages, skipping `cmd/desktop` on Linux when Fyne native headers are unavailable
+   - `make build-desktop` — `go build ./cmd/desktop` (requires `libgl1-mesa-dev` and `xorg-dev` on Linux)
+   - `make test` — tests all packages, skipping `cmd/desktop` on Linux when Fyne native headers are unavailable
+   - `make test-desktop` — `go test -race ./cmd/desktop` (requires `libgl1-mesa-dev` and `xorg-dev` on Linux)
+   - `make vuln` — runs `govulncheck`, skipping `cmd/desktop` on Linux when Fyne native headers are unavailable
+   - `make sec` — runs `gosec`, skipping `cmd/desktop` on Linux when Fyne native headers are unavailable
    - `make vet` — `go vet ./...`
    - `make lint` — `golangci-lint run ./...`
    - `make audit` — lint + `govulncheck` + `gosec`
    - `make all` — full gauntlet (build, test, audit)
    - `make tidy` — `go mod tidy`
-5. All of `make build` and `make test` must pass before opening a PR.
+5. `make build` and `make test` must pass before opening a PR. On Linux systems without the Fyne native prerequisites, the default audit targets also skip `cmd/desktop`; run `make build-desktop` and `make test-desktop` once those headers are available or rely on CI for that package.
 
 ## Coding standards
 

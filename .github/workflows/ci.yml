@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 env:
-  # Pin once; matches go.mod's `go 1.25.9` directive.
-  GO_VERSION: '1.25.x'
+  # Pin once; matches the repository toolchain directive.
+  GO_VERSION: '1.26.2'
 
 jobs:
   # Fast feedback: vet + test + build on Ubuntu (covers the bulk of the

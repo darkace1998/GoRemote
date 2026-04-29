@@ -567,9 +567,14 @@ func (a *App) RestoreSnapshot(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	a.persistMu.Lock()
+	defer a.persistMu.Unlock()
+
 	// Flush first so the pre-restore safety backup (taken inside Store.Restore)
-	// reflects the latest in-memory state.
-	if err := a.flushNow(ctx); err != nil {
+	// reflects the latest in-memory state. Hold persistMu through reload so the
+	// background persister cannot overwrite the restored files with a stale
+	// pre-restore snapshot.
+	if err := a.flushNowLocked(ctx); err != nil {
 		return err
 	}
 	if err := a.store.Restore(ctx, path); err != nil {
