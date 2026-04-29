@@ -73,3 +73,14 @@ Use conventional commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore
 - [ ] No new direct dependency on a protocol-specific package from the UI or app core.
 - [ ] No credentials logged (the `internal/logging` wrapper redacts known keys — verify any new field names).
 - [ ] Public API changes are documented.
+
+## Documentation & screenshots
+
+User-facing how-to docs live under [`docs/howto/`](docs/howto/README.md).
+When you add or change a button, dialog, or workflow, update the
+matching how-to page so the tooltip text the page references stays in
+sync with the UI.
+
+Screenshots live in [`docs/screenshots/`](docs/screenshots/README.md).
+The capture conventions, filename slots, and scrubbing checklist are
+in [`docs/howto/contributing-screenshots.md`](docs/howto/contributing-screenshots.md).

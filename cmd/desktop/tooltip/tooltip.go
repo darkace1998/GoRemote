@@ -20,7 +20,9 @@ import (
 )
 
 // ShowDelay is the dwell time before a tooltip is displayed. It is a
-// variable so tests can shorten it without touching production timing.
+// variable rather than a constant so tests can shorten it without
+// touching production timing; production code should very rarely need
+// to change it.
 var ShowDelay = 600 * time.Millisecond
 
 // cursorOffset is how far below/right of the hover position the tooltip
