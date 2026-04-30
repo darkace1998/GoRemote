@@ -16,6 +16,7 @@ import (
 
 	"github.com/darkace1998/GoRemote/app/extplugin"
 	"github.com/darkace1998/GoRemote/app/marketplace"
+	"github.com/darkace1998/GoRemote/cmd/desktop/tooltip"
 	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
@@ -63,7 +64,10 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 			dialog.ShowError(err, w)
 		}
 	})
-	pluginsToolbar := container.NewHBox(refreshBtn, openFolderBtn)
+	pluginsToolbar := container.NewHBox(
+		tooltip.WrapButton(refreshBtn, "Re-scan the plugin folder for changes"),
+		tooltip.WrapButton(openFolderBtn, "Open the plugin folder in your file manager"),
+	)
 
 	entries := reg.Entries()
 	pluginRows := []fyne.CanvasObject{}
@@ -105,7 +109,7 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 			fp = fp[:16] + "…"
 		}
 		row := container.NewBorder(nil, nil, nil,
-			widget.NewButtonWithIcon("Remove", theme.DeleteIcon(), func() {
+			tooltip.WrapButton(widget.NewButtonWithIcon("Remove", theme.DeleteIcon(), func() {
 				dialog.ShowConfirm("Remove trusted key", "Remove key "+k.Label+"?", func(ok bool) {
 					if !ok {
 						return
@@ -116,7 +120,7 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 					}
 					onChange()
 				}, w)
-			}),
+			}), "Remove this trusted publisher key"),
 			widget.NewLabel(k.Label+"  "+fp),
 		)
 		keyRows = append(keyRows, row)
@@ -211,7 +215,10 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 	})
 
 	marketControls := container.NewBorder(nil, nil, nil,
-		container.NewHBox(saveURLBtn, fetchBtn), urlEntry)
+		container.NewHBox(
+			tooltip.WrapButton(saveURLBtn, "Save the marketplace URL to settings"),
+			tooltip.WrapButton(fetchBtn, "Fetch listings from the marketplace URL"),
+		), urlEntry)
 
 	return container.NewVBox(
 		pluginsHeader, pluginsToolbar,
@@ -220,7 +227,7 @@ func buildPluginsBody(w fyne.Window, b *Bindings, reg *extplugin.Registry, onCha
 		trustHeader,
 		container.NewBorder(nil, nil, widget.NewLabel("Policy:"), nil, policySel),
 		container.NewVBox(keyRows...),
-		addKeyBtn,
+		tooltip.WrapButton(addKeyBtn, "Add a trusted publisher's ed25519 public key"),
 		widget.NewSeparator(),
 		marketHeader,
 		marketControls,
@@ -278,7 +285,12 @@ func buildPluginRow(w fyne.Window, reg *extplugin.Registry, e extplugin.Entry, o
 		enable.Disable()
 	}
 
-	actions := container.NewHBox(enable, disable, quarantine, forget)
+	actions := container.NewHBox(
+		tooltip.WrapButton(enable, "Enable this plugin"),
+		tooltip.WrapButton(disable, "Disable this plugin"),
+		tooltip.WrapButton(quarantine, "Quarantine this plugin (block it pending review)"),
+		tooltip.WrapButton(forget, "Forget this plugin (remove from registry; folder kept)"),
+	)
 	return container.NewVBox(header, sub, actions, widget.NewSeparator())
 }
 
@@ -315,7 +327,7 @@ func buildListingRow(w fyne.Window, reg *extplugin.Registry, l marketplace.Listi
 			}, w)
 	})
 
-	return container.NewVBox(header, desc, install, widget.NewSeparator())
+	return container.NewVBox(header, desc, tooltip.WrapButton(install, "Download and install this plugin"), widget.NewSeparator())
 }
 
 // openPath asks the OS to reveal a directory in the native file manager.

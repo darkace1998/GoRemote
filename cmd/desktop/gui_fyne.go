@@ -25,6 +25,7 @@ import (
 
 	appsettings "github.com/darkace1998/GoRemote/app/settings"
 	appworkspace "github.com/darkace1998/GoRemote/app/workspace"
+	"github.com/darkace1998/GoRemote/cmd/desktop/tooltip"
 	iapp "github.com/darkace1998/GoRemote/internal/app"
 	"github.com/darkace1998/GoRemote/internal/domain"
 	"github.com/darkace1998/GoRemote/internal/logging"
@@ -157,22 +158,22 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		})
 	}
 	treeActions := widget.NewToolbar(
-		widget.NewToolbarAction(theme.DocumentCreateIcon(), func() {
+		tooltip.NewAction(theme.DocumentCreateIcon(), "Edit selected connection…", func() {
 			editSelectedNode(w, b, tree)
 		}),
-		widget.NewToolbarAction(theme.ContentCopyIcon(), func() {
+		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected connection", func() {
 			duplicateSelectedNode(w, b, tree)
 		}),
-		widget.NewToolbarAction(theme.DeleteIcon(), func() {
+		tooltip.NewAction(theme.DeleteIcon(), "Delete selected", func() {
 			deleteSelectedNode(w, b, tree, sessions)
 		}),
 		widget.NewToolbarSeparator(),
-		widget.NewToolbarAction(theme.ConfirmIcon(), func() { tree.multiAddSelected() }),
-		widget.NewToolbarAction(theme.CancelIcon(), func() { tree.multiClear() }),
-		widget.NewToolbarAction(theme.MoveDownIcon(), func() { bulkMoveSelected(w, b, tree) }),
-		widget.NewToolbarAction(theme.ContentClearIcon(), func() { bulkDeleteSelected(w, b, tree, sessions) }),
+		tooltip.NewAction(theme.ConfirmIcon(), "Add selection to multi-select", func() { tree.multiAddSelected() }),
+		tooltip.NewAction(theme.CancelIcon(), "Clear multi-select", func() { tree.multiClear() }),
+		tooltip.NewAction(theme.MoveDownIcon(), "Move selected to folder…", func() { bulkMoveSelected(w, b, tree) }),
+		tooltip.NewAction(theme.ContentClearIcon(), "Bulk delete selected", func() { bulkDeleteSelected(w, b, tree, sessions) }),
 		widget.NewToolbarSeparator(),
-		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() {
+		tooltip.NewAction(theme.ViewRefreshIcon(), "Reload from disk", func() {
 			tree.refresh()
 		}),
 	)
@@ -529,7 +530,7 @@ func (g *paneGroup) buildLeaf(node *paneNode) fyne.CanvasObject {
 	} else {
 		node.titleBtn.Importance = widget.MediumImportance
 	}
-	header := container.NewBorder(nil, nil, nil, node.closeBtn, node.titleBtn)
+	header := container.NewBorder(nil, nil, nil, tooltip.WrapButton(node.closeBtn, "Close tab"), node.titleBtn)
 	return container.NewBorder(header, nil, nil, nil, st.content())
 }
 
@@ -1549,10 +1550,10 @@ func protocolIcon(proto string) fyne.Resource {
 
 func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionRegistry, a fyne.App) *widget.Toolbar {
 	return widget.NewToolbar(
-		widget.NewToolbarAction(theme.FolderNewIcon(), func() { showNewFolderDialog(w, b, tree) }),
-		widget.NewToolbarAction(theme.ContentAddIcon(), func() { showNewConnectionDialog(w, b, tree) }),
+		tooltip.NewAction(theme.FolderNewIcon(), "New folder…", func() { showNewFolderDialog(w, b, tree) }),
+		tooltip.NewAction(theme.ContentAddIcon(), "New connection…", func() { showNewConnectionDialog(w, b, tree) }),
 		widget.NewToolbarSeparator(),
-		widget.NewToolbarAction(theme.MediaPlayIcon(), func() {
+		tooltip.NewAction(theme.MediaPlayIcon(), "Connect (open selected)", func() {
 			id := tree.selected()
 			if id == "" {
 				dialog.ShowInformation("No selection", "Select a connection to open.", w)
@@ -1560,23 +1561,23 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 			}
 			openSession(w, b, sessions, id)
 		}),
-		widget.NewToolbarAction(theme.MediaStopIcon(), func() { closeCurrentSession(sessions) }),
-		widget.NewToolbarAction(theme.WindowMaximizeIcon(), func() { detachCurrentTab(a, sessions) }),
-		widget.NewToolbarAction(theme.HistoryIcon(), func() { showRecentsMenu(w, b, sessions) }),
-		widget.NewToolbarAction(theme.SearchIcon(), func() { showFavoritesPicker(w, b, sessions) }),
+		tooltip.NewAction(theme.MediaStopIcon(), "Disconnect current session", func() { closeCurrentSession(sessions) }),
+		tooltip.NewAction(theme.WindowMaximizeIcon(), "Detach current tab to its own window", func() { detachCurrentTab(a, sessions) }),
+		tooltip.NewAction(theme.HistoryIcon(), "Recent connections", func() { showRecentsMenu(w, b, sessions) }),
+		tooltip.NewAction(theme.SearchIcon(), "Open a favorite…", func() { showFavoritesPicker(w, b, sessions) }),
 		widget.NewToolbarSeparator(),
-		widget.NewToolbarAction(theme.DocumentIcon(), func() { showImportDialog(w, b, tree) }),
-		widget.NewToolbarAction(theme.DownloadIcon(), func() { showBackupDialog(w, b) }),
-		widget.NewToolbarAction(theme.UploadIcon(), func() { showRestoreDialog(w, b, tree) }),
+		tooltip.NewAction(theme.DocumentIcon(), "Import from mRemoteNG (XML/CSV)…", func() { showImportDialog(w, b, tree) }),
+		tooltip.NewAction(theme.DownloadIcon(), "Backup connections to a zip…", func() { showBackupDialog(w, b) }),
+		tooltip.NewAction(theme.UploadIcon(), "Restore from a zip…", func() { showRestoreDialog(w, b, tree) }),
 		widget.NewToolbarSeparator(),
-		widget.NewToolbarAction(theme.LoginIcon(), func() { showCredentialsDialog(w, b) }),
-		widget.NewToolbarAction(theme.SettingsIcon(), func() { showSettingsDialog(w, b, a) }),
-		widget.NewToolbarAction(theme.ListIcon(), func() { showPluginsDialog(w, b) }),
-		widget.NewToolbarAction(theme.DocumentPrintIcon(), func() { showLogViewerDialog(w, b) }),
-		widget.NewToolbarAction(theme.HelpIcon(), func() { showDiagnosticsDialog(w, b) }),
-		widget.NewToolbarAction(theme.StorageIcon(), func() { runSyncNow(w, b) }),
-		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() { runUpdateCheck(w, b) }),
-		widget.NewToolbarAction(theme.InfoIcon(), func() { showAboutDialog(w) }),
+		tooltip.NewAction(theme.LoginIcon(), "Manage credentials…", func() { showCredentialsDialog(w, b) }),
+		tooltip.NewAction(theme.SettingsIcon(), "Settings…", func() { showSettingsDialog(w, b, a) }),
+		tooltip.NewAction(theme.ListIcon(), "Plugins…", func() { showPluginsDialog(w, b) }),
+		tooltip.NewAction(theme.DocumentPrintIcon(), "View logs…", func() { showLogViewerDialog(w, b) }),
+		tooltip.NewAction(theme.HelpIcon(), "Diagnostics", func() { showDiagnosticsDialog(w, b) }),
+		tooltip.NewAction(theme.StorageIcon(), "Sync now (commit & push to Git)", func() { runSyncNow(w, b) }),
+		tooltip.NewAction(theme.ViewRefreshIcon(), "Check for updates", func() { runUpdateCheck(w, b) }),
+		tooltip.NewAction(theme.InfoIcon(), "About GoRemote", func() { showAboutDialog(w) }),
 	)
 }
 
@@ -2095,7 +2096,7 @@ func attachSessionInWindow(a fyne.App, b *Bindings, sessions *sessionRegistry, c
 	reattachBtn := widget.NewButtonWithIcon("Reattach to main", theme.NavigateBackIcon(), func() {
 		reattachToMain(sessions, st)
 	})
-	reattachBar := container.NewHBox(reattachBtn)
+	reattachBar := container.NewHBox(tooltip.WrapButton(reattachBtn, "Move this tab back into the main window"))
 	winRoot := container.NewBorder(reattachBar, nil, nil, nil, st.content())
 	win.SetContent(winRoot)
 
@@ -2174,7 +2175,7 @@ func detachCurrentTab(a fyne.App, sessions *sessionRegistry) {
 	reattachBtn := widget.NewButtonWithIcon("Reattach to main", theme.NavigateBackIcon(), func() {
 		reattachToMain(sessions, st)
 	})
-	reattachBar := container.NewHBox(reattachBtn)
+	reattachBar := container.NewHBox(tooltip.WrapButton(reattachBtn, "Move this tab back into the main window"))
 	winRoot := container.NewBorder(reattachBar, nil, nil, nil, contentObj)
 	win.SetContent(winRoot)
 
@@ -3863,7 +3864,7 @@ func buildCredentialRow(w fyne.Window, b *Bindings, p CredentialProviderInfo, on
 	var actions []fyne.CanvasObject
 	switch p.State {
 	case "locked":
-		actions = append(actions, widget.NewButtonWithIcon("Unlock", theme.LoginIcon(), func() {
+		unlockBtn := widget.NewButtonWithIcon("Unlock", theme.LoginIcon(), func() {
 			pwEntry := widget.NewPasswordEntry()
 			pwEntry.SetPlaceHolder("master password")
 			form := dialog.NewForm("Unlock "+p.Name, "Unlock", "Cancel",
@@ -3882,9 +3883,10 @@ func buildCredentialRow(w fyne.Window, b *Bindings, p CredentialProviderInfo, on
 				}, w)
 			form.Resize(fyne.NewSize(360, 160))
 			form.Show()
-		}))
+		})
+		actions = append(actions, tooltip.WrapButton(unlockBtn, "Unlock credential vault"))
 	case "unlocked":
-		actions = append(actions, widget.NewButtonWithIcon("Lock", theme.LogoutIcon(), func() {
+		lockBtn := widget.NewButtonWithIcon("Lock", theme.LogoutIcon(), func() {
 			if err := b.LockCredentialProvider(context.Background(), p.ID); err != nil {
 				dialog.ShowError(err, w)
 				return
@@ -3892,7 +3894,8 @@ func buildCredentialRow(w fyne.Window, b *Bindings, p CredentialProviderInfo, on
 			if onChange != nil {
 				onChange()
 			}
-		}))
+		})
+		actions = append(actions, tooltip.WrapButton(lockBtn, "Lock credential vault"))
 	case "unavailable":
 		hint := widget.NewLabel("Provider unavailable.")
 		hint.TextStyle = fyne.TextStyle{Italic: true}

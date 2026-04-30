@@ -115,6 +115,7 @@ make dist-windows         # uses CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc interna
 
 ## Documentation
 
+- **[How-to guides](docs/howto/README.md)** — task-oriented walkthroughs (getting started, git sync, mRemoteNG import, credentials, plugins, backup/restore, updates, logs).
 - **[PARITY.md](PARITY.md)** — feature parity matrix vs mRemoteNG, including the external-launcher model for RDP / VNC / TN5250.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — dev workflow, plugin contracts, code review checklist.
 - **[SECURITY.md](SECURITY.md)** — threat model, credential handling guarantees, vulnerability reporting.
