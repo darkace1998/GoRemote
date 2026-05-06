@@ -158,6 +158,14 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		})
 	}
 	treeActions := widget.NewToolbar(
+		tooltip.NewAction(theme.MediaPlayIcon(), "Connect selected connection", func() {
+			if id := tree.selectedConnection(); id != "" {
+				openSession(w, b, sessions, id)
+				return
+			}
+			dialog.ShowInformation("No selection", "Select a connection to open.", w)
+		}),
+		widget.NewToolbarSeparator(),
 		tooltip.NewAction(theme.DocumentCreateIcon(), "Edit selected connection…", func() {
 			editSelectedNode(w, b, tree)
 		}),
@@ -179,7 +187,9 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	)
 	treeActionRow := container.NewBorder(nil, nil, nil, multiCount, treeActions)
 
-	leftHeader := container.NewBorder(envSelect, treeActionRow, nil, nil, searchEntry)
+	openHint := widget.NewLabelWithStyle("Double-click a connection to connect; right-click for actions.", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	openHint.Truncation = fyne.TextTruncateEllipsis
+	leftHeader := container.NewBorder(envSelect, treeActionRow, nil, nil, container.NewVBox(searchEntry, openHint))
 	left := container.NewBorder(leftHeader, nil, nil, nil, tree.tree)
 
 	toolbar := buildToolbar(w, b, tree, sessions, a)
@@ -213,7 +223,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		KeyName:  fyne.KeyBackslash,
 		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
 	}, func(_ fyne.Shortcut) {
-		if id := tree.selected(); id != "" {
+		if id := tree.selectedConnection(); id != "" {
 			openSessionInSplit(w, b, sessions, id, "h")
 		}
 	})
@@ -221,7 +231,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		KeyName:  fyne.KeyMinus,
 		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
 	}, func(_ fyne.Shortcut) {
-		if id := tree.selected(); id != "" {
+		if id := tree.selectedConnection(); id != "" {
 			openSessionInSplit(w, b, sessions, id, "v")
 		}
 	})
@@ -905,9 +915,6 @@ func newConnTree(b *Bindings, onOpen func(string)) *connTree {
 	}
 	ct.tree.OnBranchOpened = func(_ widget.TreeNodeID) {}
 	ct.tree.OnBranchClosed = func(_ widget.TreeNodeID) {}
-	// Double-click / activate to open a connection.
-	// Fyne's tree doesn't expose double-tap; we treat selection on a leaf
-	// as the open action when paired with the "Open" toolbar button.
 
 	return ct
 }
@@ -1077,22 +1084,29 @@ func (ct *connTree) updateItem(uid widget.TreeNodeID, obj fyne.CanvasObject) {
 	if n == nil {
 		row.icon.SetResource(theme.QuestionIcon())
 		row.label.SetText("")
+		row.label.TextStyle = fyne.TextStyle{}
+		row.detail.SetText("")
+		row.detail.Hide()
+		row.star.Hide()
 		return
 	}
 	if n.Kind == "folder" {
 		row.icon.SetResource(theme.FolderIcon())
 		row.label.SetText(n.Name)
+		row.label.TextStyle = fyne.TextStyle{}
+		row.detail.SetText("")
+		row.detail.Hide()
 		row.star.Hide()
 	} else {
 		row.icon.SetResource(protocolIcon(n.Protocol))
-		port := n.Port
-		switch {
-		case n.Host == "":
-			row.label.SetText(n.Name)
-		case port == 0:
-			row.label.SetText(fmt.Sprintf("%s (%s)", n.Name, n.Host))
-		default:
-			row.label.SetText(fmt.Sprintf("%s (%s:%d)", n.Name, n.Host, port))
+		row.label.SetText(n.Name)
+		row.label.TextStyle = fyne.TextStyle{Bold: true}
+		detail := connectionDetailText(n)
+		row.detail.SetText(detail)
+		if detail == "" {
+			row.detail.Hide()
+		} else {
+			row.detail.Show()
 		}
 		if n.Favorite {
 			row.star.Show()
@@ -1114,6 +1128,7 @@ type treeRow struct {
 	star   *canvas.Text
 	check  *widget.Icon
 	label  *widget.Label
+	detail *widget.Label
 	hilite *canvas.Rectangle
 }
 
@@ -1123,12 +1138,18 @@ func newTreeRow(ct *connTree) *treeRow {
 	star.Hide()
 	check := widget.NewIcon(theme.ConfirmIcon())
 	check.Hide()
+	label := widget.NewLabel("")
+	label.Truncation = fyne.TextTruncateEllipsis
+	detail := widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	detail.Truncation = fyne.TextTruncateEllipsis
+	detail.Hide()
 	r := &treeRow{
 		ct:     ct,
 		icon:   widget.NewIcon(theme.FolderIcon()),
 		star:   star,
 		check:  check,
-		label:  widget.NewLabel(""),
+		label:  label,
+		detail: detail,
 		hilite: canvas.NewRectangle(color.Transparent),
 	}
 	r.ExtendBaseWidget(r)
@@ -1139,9 +1160,17 @@ func newTreeRow(ct *connTree) *treeRow {
 }
 
 func (r *treeRow) CreateRenderer() fyne.WidgetRenderer {
-	content := container.NewHBox(r.check, r.icon, r.label, r.star)
+	text := container.NewVBox(r.label, r.detail)
+	content := container.NewHBox(r.check, r.icon, text, r.star)
 	stack := container.NewStack(r.hilite, content)
 	return widget.NewSimpleRenderer(stack)
+}
+
+func (r *treeRow) DoubleTapped(_ *fyne.PointEvent) {
+	if r.uid == "" || r.ct == nil {
+		return
+	}
+	r.ct.activateUID(r.uid)
 }
 
 // Dragged is called repeatedly while the user drags this row. We track the
@@ -1171,6 +1200,28 @@ func (r *treeRow) TappedSecondary(e *fyne.PointEvent) {
 	r.ct.tree.Select(r.uid)
 	if r.ct.onContextMenu != nil {
 		r.ct.onContextMenu(r.uid, e.AbsolutePosition)
+	}
+}
+
+func (ct *connTree) activateUID(uid string) {
+	ct.mu.RLock()
+	n := ct.findNode(ct.view.Root, uid)
+	ct.mu.RUnlock()
+	if n == nil {
+		return
+	}
+	if ct.tree != nil {
+		ct.tree.Select(uid)
+	}
+	switch n.Kind {
+	case "connection":
+		if ct.onOpen != nil {
+			ct.onOpen(uid)
+		}
+	case "folder":
+		if ct.tree != nil {
+			ct.tree.ToggleBranch(uid)
+		}
 	}
 }
 
@@ -1417,6 +1468,27 @@ func sameColor(a, b color.Color) bool {
 	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
+func connectionDetailText(n *iapp.NodeView) string {
+	if n == nil || n.Kind != "connection" {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	if n.Protocol != "" {
+		parts = append(parts, strings.ToUpper(n.Protocol))
+	}
+	endpoint := n.Host
+	if endpoint != "" && n.Port > 0 {
+		endpoint = fmt.Sprintf("%s:%d", endpoint, n.Port)
+	}
+	if endpoint != "" {
+		parts = append(parts, endpoint)
+	}
+	if n.Environment != "" {
+		parts = append(parts, n.Environment)
+	}
+	return strings.Join(parts, " | ")
+}
+
 func (ct *connTree) findNode(root *iapp.NodeView, uid string) *iapp.NodeView {
 	if root == nil {
 		return nil
@@ -1459,6 +1531,14 @@ func (ct *connTree) selectedNode() *iapp.NodeView {
 		return nil
 	}
 	return ct.findNode(root, id)
+}
+
+func (ct *connTree) selectedConnection() string {
+	n := ct.selectedNode()
+	if n == nil || n.Kind != "connection" {
+		return ""
+	}
+	return n.ID
 }
 
 func (ct *connTree) selectedFolder() string {
@@ -1554,7 +1634,7 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		tooltip.NewAction(theme.ContentAddIcon(), "New connection…", func() { showNewConnectionDialog(w, b, tree) }),
 		widget.NewToolbarSeparator(),
 		tooltip.NewAction(theme.MediaPlayIcon(), "Connect (open selected)", func() {
-			id := tree.selected()
+			id := tree.selectedConnection()
 			if id == "" {
 				dialog.ShowInformation("No selection", "Select a connection to open.", w)
 				return
