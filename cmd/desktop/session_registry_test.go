@@ -35,8 +35,11 @@ func TestSessionRegistryAddedHookHandshake(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			st := &sessionTab{connID: "c" + string(rune('0'+i))}
-			// Mimic the call site at the tail of add().
-			if h := r.addedHook; h != nil {
+			// Mimic the call site at the tail of add(): capture hook under lock.
+			r.mu.Lock()
+			h := r.addedHook
+			r.mu.Unlock()
+			if h != nil {
 				h(st)
 			}
 		}(i)

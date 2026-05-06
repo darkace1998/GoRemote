@@ -699,6 +699,7 @@ func (r *sessionRegistry) add(st *sessionTab) {
 			}
 		}
 	}
+	hook := r.addedHook // capture under lock before releasing
 	r.mu.Unlock()
 	if st.tabItem != nil && g != nil {
 		g.rebuildLayout()
@@ -709,7 +710,7 @@ func (r *sessionRegistry) add(st *sessionTab) {
 	}
 	r.setStatus(fmt.Sprintf("Connected: %s", st.cv.Name))
 	r.setSessionCount(count)
-	if hook := r.addedHook; hook != nil {
+	if hook != nil {
 		hook(st)
 	}
 }
@@ -1558,7 +1559,10 @@ func (ct *connTree) selectedFolder() string {
 func (ct *connTree) multiAddSelected() int {
 	id := ct.selected()
 	if id == "" {
-		return len(ct.multi)
+		ct.mu.RLock()
+		n := len(ct.multi)
+		ct.mu.RUnlock()
+		return n
 	}
 	ct.mu.Lock()
 	if ct.multi == nil {
@@ -1804,11 +1808,27 @@ func showFavoritesPicker(w fyne.Window, b *Bindings, sessions *sessionRegistry) 
 
 // --- Session management ---------------------------------------------------
 
+// focusExistingSession switches focus to an already-open session for connID.
+// It selects the tab if the session is docked, or raises the standalone window
+// if the session was detached. Returns true when a session was found (and the
+// caller should not open a new one), false when no session exists for connID.
+func focusExistingSession(sessions *sessionRegistry, connID string) bool {
+	st := sessions.findByConnection(connID)
+	if st == nil {
+		return false
+	}
+	if st.tabItem != nil {
+		sessions.tabs.Select(st.tabItem)
+	} else if st.window != nil {
+		st.window.RequestFocus()
+	}
+	return true
+}
+
 func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID string) {
 	if !sessions.reserveConn(connID) {
 		// Switch to the existing tab instead of opening a duplicate.
-		if st := sessions.findByConnection(connID); st != nil {
-			sessions.tabs.Select(st.tabItem)
+		if focusExistingSession(sessions, connID) {
 			return
 		}
 		dialog.ShowInformation("Already Open", "A session for this connection is already active.", w)
@@ -2604,6 +2624,13 @@ func closeSession(sessions *sessionRegistry, st *sessionTab) {
 	if sessions == nil || st == nil {
 		return
 	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := st.b.CloseSession(ctx, st.handle); err != nil {
+			slog.Warn("close session", "handle", st.handle, "err", err)
+		}
+	}()
 	sessions.remove(st.hid)
 }
 
@@ -3689,6 +3716,7 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 	}
 
 	done := make(chan struct{}, len(expected))
+	sessions.mu.Lock()
 	prev := sessions.addedHook
 	sessions.addedHook = func(st *sessionTab) {
 		if prev != nil {
@@ -3702,6 +3730,7 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 			done <- struct{}{}
 		}
 	}
+	sessions.mu.Unlock()
 
 	go func() {
 		want := len(expected)
@@ -3709,7 +3738,8 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 			if t.ConnectionID == "" {
 				continue
 			}
-			openSession(w, b, sessions, t.ConnectionID)
+			connID := t.ConnectionID
+			fyne.Do(func() { openSession(w, b, sessions, connID) })
 		}
 		// Wait for every reopened session's add() to land, with a
 		// per-session timeout so a session that fails to open never
@@ -3730,7 +3760,9 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 		}
 		// Drop the hook before queueing the layout pass so subsequent
 		// user-driven session opens don't churn through the closure.
+		sessions.mu.Lock()
 		sessions.addedHook = prev
+		sessions.mu.Unlock()
 		if len(ws.PaneLayouts) > 0 {
 			fyne.Do(func() { restorePaneLayouts(sessions, ws.PaneLayouts) })
 		}

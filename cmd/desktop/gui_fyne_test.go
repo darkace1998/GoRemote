@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 
+	"github.com/darkace1998/GoRemote/internal/domain"
 	iapp "github.com/darkace1998/GoRemote/internal/app"
 )
 
@@ -138,5 +140,53 @@ func TestUpdateItemClearsConnectionDetailsWhenNodeMissing(t *testing.T) {
 	}
 	if row.star.Visible() {
 		t.Fatalf("missing node should hide stale favorite star")
+	}
+}
+
+// TestFocusExistingSession_DetachedWindow verifies that focusExistingSession
+// does not panic and returns true when the session's tabItem is nil (detached
+// to a standalone window).
+func TestFocusExistingSession_DetachedWindow(t *testing.T) {
+	a := test.NewApp()
+	defer a.Quit()
+
+	win := a.NewWindow("detached")
+	tabs := container.NewDocTabs()
+
+	hid := domain.NewID()
+	st := &sessionTab{
+		hid:     hid,
+		connID:  "conn-detached",
+		tabItem: nil, // detached — no tab
+		window:  win,
+		cv:      iapp.ConnectionView{Name: "detached-host"},
+	}
+
+	registry := &sessionRegistry{
+		tabs:      tabs,
+		items:     map[domain.ID]*sessionTab{hid: st},
+		openConns: map[string]struct{}{"conn-detached": {}},
+		groups:    map[*container.TabItem]*paneGroup{},
+	}
+
+	// Must not panic and must return true (session found).
+	if !focusExistingSession(registry, "conn-detached") {
+		t.Fatal("focusExistingSession returned false for known connection")
+	}
+}
+
+// TestFocusExistingSession_NotFound verifies that focusExistingSession
+// returns false when no session exists for the given connection ID.
+func TestFocusExistingSession_NotFound(t *testing.T) {
+	tabs := container.NewDocTabs()
+	registry := &sessionRegistry{
+		tabs:      tabs,
+		items:     map[domain.ID]*sessionTab{},
+		openConns: map[string]struct{}{},
+		groups:    map[*container.TabItem]*paneGroup{},
+	}
+
+	if focusExistingSession(registry, "no-such-conn") {
+		t.Fatal("focusExistingSession returned true for unknown connection")
 	}
 }
