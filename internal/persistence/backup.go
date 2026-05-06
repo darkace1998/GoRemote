@@ -169,7 +169,10 @@ func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 	return nil
 }
 
-// pruneBackups deletes the oldest *.zip files in backupsDir so that at most
+// extractEntryFunc is the type of the function that extracts a single zip entry
+// into a root directory. It is a field on Store so tests can inject a failing
+// implementation to verify atomicity guarantees.
+type extractEntryFunc func(f *zip.File, root string) error
 // keep files remain. Non-zip entries are ignored.
 func pruneBackups(backupsDir string, keep int) error {
 	entries, err := os.ReadDir(backupsDir)
@@ -217,6 +220,12 @@ func pruneBackups(backupsDir string, keep int) error {
 // into <dir>/backups/ so an operator can always roll back. The safety
 // backup is retained under the same retention policy as manual backups.
 //
+// Restore is atomic with respect to extraction failures: it extracts into a
+// sibling temp directory first. Only if extraction succeeds does it swap the
+// directories (rename current → .restore-old, rename temp → current). On any
+// error the original directory is left untouched; on a swap error the
+// pre-swap state is recovered from .restore-old.
+//
 // The backup archive is expected to be a zip produced by Backup (paths
 // relative to the store root, no absolute or traversal-escaping entries).
 // Restore refuses archives containing "../" components.
@@ -253,26 +262,50 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		}
 	}
 
-	// Remove current top-level files/dirs except backups/.
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return fmt.Errorf("persistence: read dir: %w", err)
+	// Extract into a sibling temp directory so that a mid-extraction failure
+	// does not corrupt the live store.
+	tmpDir := s.dir + ".restore-new"
+	oldDir := s.dir + ".restore-old"
+	// Clean up any debris from a previous interrupted restore.
+	_ = os.RemoveAll(tmpDir)
+	_ = os.RemoveAll(oldDir)
+
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return fmt.Errorf("persistence: mkdir restore temp: %w", err)
 	}
-	for _, e := range entries {
-		if e.Name() == BackupsDirName {
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(s.dir, e.Name())); err != nil {
-			return fmt.Errorf("persistence: clear %s: %w", e.Name(), err)
+
+	extractFn := s.extractEntry
+	for _, f := range zr.File {
+		if err := extractFn(f, tmpDir); err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return fmt.Errorf("persistence: extract %q: %w", f.Name, err)
 		}
 	}
 
-	// Extract.
-	for _, f := range zr.File {
-		if err := extractZipEntry(f, s.dir); err != nil {
-			return err
+	// Atomic swap: rename current dir to .old, rename temp to current.
+	if err := os.Rename(s.dir, oldDir); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return fmt.Errorf("persistence: rename store to .restore-old: %w", err)
+	}
+	if err := os.Rename(tmpDir, s.dir); err != nil {
+		// Roll back: restore the original directory.
+		if rerr := os.Rename(oldDir, s.dir); rerr != nil {
+			return fmt.Errorf("persistence: rename new store failed (%w); rollback also failed: %v", err, rerr)
+		}
+		return fmt.Errorf("persistence: rename new store: %w", err)
+	}
+
+	// Preserve the backups directory from the pre-swap store.
+	oldBackups := filepath.Join(oldDir, BackupsDirName)
+	if fi, serr := os.Stat(oldBackups); serr == nil && fi.IsDir() {
+		newBackups := filepath.Join(s.dir, BackupsDirName)
+		if merr := os.Rename(oldBackups, newBackups); merr != nil {
+			// Backups are still accessible in oldDir; report but don't remove oldDir.
+			return fmt.Errorf("persistence: preserve backups after restore: %w", merr)
 		}
 	}
+
+	_ = os.RemoveAll(oldDir)
 	return nil
 }
 

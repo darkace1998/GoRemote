@@ -86,9 +86,10 @@ func WithGOOS(goos string) Option {
 
 // Host is the generic plugin host.
 type Host struct {
-	mu      sync.RWMutex
-	plugins map[string]*Loaded
-	events  *eventbus.Bus[Event]
+	mu          sync.RWMutex
+	plugins     map[string]*Loaded
+	registering map[string]struct{} // IDs currently running Init (sentinel for race prevention)
+	events      *eventbus.Bus[Event]
 
 	approval        ApprovalHook
 	initTimeout     time.Duration
@@ -111,6 +112,7 @@ var (
 func New(events *eventbus.Bus[Event], opts ...Option) *Host {
 	h := &Host{
 		plugins:         make(map[string]*Loaded),
+		registering:     make(map[string]struct{}),
 		events:          events,
 		initTimeout:     10 * time.Second,
 		shutdownTimeout: 10 * time.Second,
@@ -168,22 +170,31 @@ func (h *Host) Register(ctx context.Context, m sdkplugin.Manifest, module any, t
 		h.mu.Unlock()
 		return fmt.Errorf("%w: %s", ErrAlreadyRegistered, m.ID)
 	}
-	// Reserve the ID to avoid duplicate Init races; store after Init succeeds.
+	if _, pending := h.registering[m.ID]; pending {
+		h.mu.Unlock()
+		return fmt.Errorf("%w: %s", ErrAlreadyRegistered, m.ID)
+	}
+	// Reserve the ID before releasing the lock so that a concurrent Register
+	// call with the same ID cannot also pass the dup check and run Init.
+	h.registering[m.ID] = struct{}{}
 	h.mu.Unlock()
 
 	m.Trust = trust
 
+	var initErr error
 	if lc, ok := module.(sdkplugin.Lifecycle); ok {
 		ictx, cancel := context.WithTimeout(ctx, h.initTimeout)
-		err := safeCall(func() error { return lc.Init(ictx) })
+		initErr = safeCall(func() error { return lc.Init(ictx) })
 		cancel()
-		if err != nil {
-			h.publish(ctx, Event{Kind: EventCrashed, PluginID: m.ID, Err: err, At: time.Now()})
-			return fmt.Errorf("plugin %q init failed: %w", m.ID, err)
-		}
 	}
 
 	h.mu.Lock()
+	delete(h.registering, m.ID)
+	if initErr != nil {
+		h.mu.Unlock()
+		h.publish(ctx, Event{Kind: EventCrashed, PluginID: m.ID, Err: initErr, At: time.Now()})
+		return fmt.Errorf("plugin %q init failed: %w", m.ID, initErr)
+	}
 	if _, dup := h.plugins[m.ID]; dup {
 		h.mu.Unlock()
 		return fmt.Errorf("%w: %s", ErrAlreadyRegistered, m.ID)

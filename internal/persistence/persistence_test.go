@@ -617,3 +617,66 @@ func TestRestore_RejectsUnsafePath(t *testing.T) {
 		t.Error("expected rejection of traversal entry")
 	}
 }
+
+// TestRestore_AtomicOnExtractFailure verifies that if extraction fails midway
+// the original store files are left completely intact.
+func TestRestore_AtomicOnExtractFailure(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir)
+	snap := sampleSnapshot(t)
+	if err := s.Save(context.Background(), snap); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// Capture original file contents for later comparison.
+	origMeta, err := os.ReadFile(filepath.Join(dir, FileMeta))
+	if err != nil {
+		t.Fatalf("read original meta: %v", err)
+	}
+	origInventory, err := os.ReadFile(filepath.Join(dir, FileInventory))
+	if err != nil {
+		t.Fatalf("read original inventory: %v", err)
+	}
+
+	// Take a backup (this is what we will attempt to restore).
+	zipPath, err := s.Backup(context.Background())
+	if err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+
+	// Inject an extractor that succeeds for the first entry then fails.
+	var extracted int
+	s.extractEntry = func(f *zip.File, root string) error {
+		extracted++
+		if extracted > 1 {
+			return errors.New("injected mid-extract failure")
+		}
+		return extractZipEntry(f, root)
+	}
+
+	if err := s.Restore(context.Background(), zipPath); err == nil {
+		t.Fatal("expected Restore to return error on injected failure")
+	}
+
+	// Original files must be present and byte-identical to before Restore.
+	gotMeta, err := os.ReadFile(filepath.Join(dir, FileMeta))
+	if err != nil {
+		t.Fatalf("meta.json missing after failed restore: %v", err)
+	}
+	if !bytes.Equal(origMeta, gotMeta) {
+		t.Errorf("meta.json was mutated by the failed restore")
+	}
+
+	gotInventory, err := os.ReadFile(filepath.Join(dir, FileInventory))
+	if err != nil {
+		t.Fatalf("inventory.json missing after failed restore: %v", err)
+	}
+	if !bytes.Equal(origInventory, gotInventory) {
+		t.Errorf("inventory.json was mutated by the failed restore")
+	}
+
+	// Temp dir must have been cleaned up.
+	if _, err := os.Stat(dir + ".restore-new"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf(".restore-new temp dir not cleaned up: %v", err)
+	}
+}

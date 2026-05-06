@@ -50,13 +50,16 @@ type Store struct {
 	// now is indirected for tests that need deterministic timestamps; tests
 	// in this package don't override it, but it's available for callers.
 	now func() time.Time
+	// extractEntry extracts a single zip entry into a root directory.
+	// Defaults to extractZipEntry; override in tests to inject failures.
+	extractEntry extractEntryFunc
 }
 
 // New constructs a Store rooted at dir. The directory is created lazily on
 // the first Save; Load on a fresh directory returns an empty Snapshot with
 // Meta.Version == CurrentVersion.
 func New(dir string) *Store {
-	return &Store{dir: dir, now: time.Now}
+	return &Store{dir: dir, now: time.Now, extractEntry: extractZipEntry}
 }
 
 // Dir returns the root directory this Store manages.

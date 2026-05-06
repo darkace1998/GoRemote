@@ -133,6 +133,13 @@ func (m *Manifest) Validate() error {
 			return errors.New("manifest.capabilities contains empty entry")
 		}
 	}
+	if m.Kind == KindProtocol {
+		for _, cap := range m.Capabilities {
+			if cap == CapProcessSpawn || cap == CapExternalLauncher {
+				return fmt.Errorf("manifest.capabilities: KindProtocol may not declare %q (forbidden for Go-native protocol plugins)", cap)
+			}
+		}
+	}
 	return nil
 }
 

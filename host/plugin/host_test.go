@@ -116,6 +116,49 @@ func TestRegisterDuplicateRejected(t *testing.T) {
 	}
 }
 
+// TestRegisterConcurrentSameID verifies that two concurrent Register calls for
+// the same plugin ID result in exactly one Init call and one registration.
+// Before the fix, both could pass the duplicate check before either reserved
+// the ID, causing a double-Init and potential data race.
+func TestRegisterConcurrentSameID(t *testing.T) {
+	// Use a blocking Init so both goroutines are inside Register simultaneously.
+	const blockDur = 20 * time.Millisecond
+	h := New(nil, WithInitTimeout(time.Second))
+	ctx := context.Background()
+
+	mod := &stubModule{blockInit: blockDur}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = h.Register(ctx, validManifest("concurrent.id"), mod, sdkplugin.TrustCore)
+		}(i)
+	}
+	wg.Wait()
+
+	// Exactly one must succeed and one must fail with ErrAlreadyRegistered.
+	var successes, dupes int
+	for _, err := range errs {
+		if err == nil {
+			successes++
+		} else if errors.Is(err, ErrAlreadyRegistered) {
+			dupes++
+		} else {
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if successes != 1 || dupes != 1 {
+		t.Errorf("want 1 success + 1 dup, got successes=%d dupes=%d errs=%v", successes, dupes, errs)
+	}
+	// Init must have been called exactly once.
+	if n := mod.initCalls.Load(); n != 1 {
+		t.Errorf("Init called %d times, want 1", n)
+	}
+}
+
 func TestRegisterAPIMajorMismatch(t *testing.T) {
 	h := New(nil)
 	m := validManifest("bad")
