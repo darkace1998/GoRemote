@@ -12,16 +12,16 @@ import (
 
 // Session is a live TN5250 session backed by an in-process TCP connection.
 //
-// The session dials host:port on Start and relays data bidirectionally
-// between the caller's stdin/stdout and the remote TCP stream. The 5250
-// data stream is carried over this connection; no external binary is spawned.
+// The session dials host:port on Start and relays the remote TCP stream
+// without spawning an external binary. Full TN5250 negotiation is still
+// experimental.
 type Session struct {
 	addr string
 
-	mu        sync.Mutex
-	conn      net.Conn
-	closeOnce sync.Once
-	closeErr  error
+	mu       sync.Mutex
+	conn     net.Conn
+	closed   bool
+	closeErr error
 }
 
 // Compile-time assertion: *Session implements protocol.Session.
@@ -41,12 +41,24 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 		stdout = io.Discard
 	}
 
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
+
 	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", s.addr)
 	if err != nil {
 		return fmt.Errorf("tn5250: dial %s: %w", s.addr, err)
 	}
 
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		_ = conn.Close()
+		return nil
+	}
 	s.conn = conn
 	s.mu.Unlock()
 
@@ -56,23 +68,10 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 		fromServer <- err
 	}()
 
-	fromStdin := make(chan struct{}, 1)
-	go func() {
-		if stdin != nil {
-			_, _ = io.Copy(conn, stdin)
-		}
-		// Signal EOF to the remote without dropping our receive path.
-		if tc, ok := conn.(*net.TCPConn); ok {
-			_ = tc.CloseWrite()
-		}
-		close(fromStdin)
-	}()
-
 	var result error
 	select {
 	case result = <-fromServer:
 		_ = s.Close()
-		<-fromStdin
 	case <-ctx.Done():
 		_ = s.Close()
 		<-fromServer
@@ -81,6 +80,14 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 
 	if result != nil && ctx.Err() != nil {
 		return nil
+	}
+	if result != nil {
+		s.mu.Lock()
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			return nil
+		}
 	}
 	return result
 }
@@ -92,9 +99,18 @@ func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 
 // SendInput writes data directly to the remote TCP stream.
 func (s *Session) SendInput(ctx context.Context, data []byte) error {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	s.mu.Lock()
 	conn := s.conn
+	closed := s.closed
 	s.mu.Unlock()
+	if closed {
+		return fmt.Errorf("tn5250: session closed")
+	}
 	if conn == nil {
 		return fmt.Errorf("tn5250: session not started")
 	}
@@ -104,14 +120,21 @@ func (s *Session) SendInput(ctx context.Context, data []byte) error {
 
 // Close terminates the TCP connection. Safe to call multiple times.
 func (s *Session) Close() error {
-	s.closeOnce.Do(func() {
-		s.mu.Lock()
-		conn := s.conn
+	s.mu.Lock()
+	if s.closed {
+		err := s.closeErr
 		s.mu.Unlock()
-		if conn != nil {
-			s.closeErr = conn.Close()
-		}
-	})
-	return s.closeErr
+		return err
+	}
+	s.closed = true
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return nil
+	}
+	err := conn.Close()
+	s.mu.Lock()
+	s.closeErr = err
+	s.mu.Unlock()
+	return err
 }
-

@@ -2,9 +2,9 @@ package rdp
 
 import (
 	"context"
-	"strings"
 	"testing"
 
+	"github.com/darkace1998/GoRemote/sdk/plugin"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
@@ -17,8 +17,8 @@ func TestManifestValidate(t *testing.T) {
 	if Manifest.Version != "2.0.0" {
 		t.Fatalf("Version = %q want 2.0.0", Manifest.Version)
 	}
-	if Manifest.Status != "ready" {
-		t.Fatalf("Status = %q want ready", Manifest.Status)
+	if Manifest.Status != plugin.StatusExperimental {
+		t.Fatalf("Status = %q want experimental", Manifest.Status)
 	}
 	if !Manifest.HasCapability("network.outbound") {
 		t.Fatalf("Manifest must declare network.outbound capability; got %v", Manifest.Capabilities)
@@ -132,7 +132,14 @@ func TestOpen_ReturnsSessionWithoutDialing(t *testing.T) {
 
 func TestSettingsSchema_HostRequired(t *testing.T) {
 	defs := New().Settings()
+	if len(defs) != 2 {
+		t.Fatalf("Settings() returned %d settings, want host and port only", len(defs))
+	}
 	for _, d := range defs {
+		switch d.Key {
+		case SettingUsername, SettingDomain, SettingWidth, SettingHeight, SettingFullscreen, SettingGateway:
+			t.Fatalf("RDP must not expose unimplemented setting %q while protocol engine is experimental", d.Key)
+		}
 		if d.Key == SettingHost {
 			if !d.Required {
 				t.Fatalf("host setting must be required")
@@ -142,35 +149,3 @@ func TestSettingsSchema_HostRequired(t *testing.T) {
 	}
 	t.Fatal("host setting not found")
 }
-
-func TestConfigFromRequest_Fullscreen(t *testing.T) {
-	cfg, err := configFromRequest(protocol.OpenRequest{
-		Settings: map[string]any{
-			SettingHost:       "h",
-			SettingFullscreen: true,
-		},
-	})
-	if err != nil {
-		t.Fatalf("configFromRequest: %v", err)
-	}
-	if !cfg.Fullscreen {
-		t.Fatal("Fullscreen should be true")
-	}
-}
-
-func TestConfigFromRequest_Gateway(t *testing.T) {
-	cfg, err := configFromRequest(protocol.OpenRequest{
-		Settings: map[string]any{
-			SettingHost:    "h",
-			SettingGateway: "gw.example.com:443",
-		},
-	})
-	if err != nil {
-		t.Fatalf("configFromRequest: %v", err)
-	}
-	if !strings.Contains(cfg.Gateway, "gw.example.com") {
-		t.Fatalf("Gateway = %q", cfg.Gateway)
-	}
-}
-
-

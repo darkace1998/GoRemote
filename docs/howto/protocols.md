@@ -1,13 +1,9 @@
 # Protocols
 
-GoRemote splits protocols into two families:
-
-* **In-process** protocols are linked into the binary; they render
-  directly into a tab in the main window.
-* **External-launcher** protocols spawn a vendor viewer (RDP / VNC /
-  TN5250 / MOSH client). GoRemote tracks the lifetime of the spawned
-  process but the actual remote rendering happens in the launched
-  window.
+GoRemote protocol modules are Go-native packages linked into the binary. The
+protocol system does not spawn vendor viewers or route protocol sessions over
+IPC. External tool launching is a separate planned feature outside the protocol
+plugin system.
 
 > _Screenshot pending — see [contributing-screenshots.md](./contributing-screenshots.md). Suggested filename: `protocol-ssh-session.png`._
 
@@ -20,35 +16,17 @@ GoRemote splits protocols into two families:
 | **Telnet** | Linemode + character mode with optional TLS-STARTTLS. |
 | **Rlogin** | Mostly here for legacy parity with mRemoteNG. |
 | **Raw socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
-| **PowerShell** | Spawns a local PowerShell process and pipes it into a tab. |
-| **HTTP** | Embedded browser tab for `http://` / `https://` connection definitions. |
+| **HTTP** | Experimental in-process `net/http` GET/probe session. |
 | **Serial / COM** | Local serial ports (`/dev/ttyUSB0`, `COM3`, …) at configurable baud rate / parity. |
+| **RDP** | Experimental Go-native TCP scaffold; full graphical protocol pipeline is planned. |
+| **VNC** | Experimental Go-native TCP scaffold; full RFB handling is planned. |
+| **TN5250** | Experimental Go-native TCP scaffold; full 5250 negotiation/screen model is planned. |
+| **MOSH** | Planned/experimental Go-native package; session start is unsupported until MOSH UDP transport lands. |
+| **PowerShell remoting** | Planned; not registered until a Go-native remoting transport exists. |
 
 Open any of these by selecting the connection in the tree and
 clicking the toolbar icon whose tooltip reads `"Connect (open
 selected)"`.
-
-## External-launcher protocols
-
-| Protocol | Required executable on `PATH` |
-|---|---|
-| **RDP** | `xfreerdp` (Linux/macOS) or `mstsc.exe` (Windows). |
-| **VNC** | `vncviewer` (TigerVNC / RealVNC / TightVNC). |
-| **TN5250** | `tn5250` (the GNU `tn5250` CLI). |
-| **MOSH** | `mosh-client` plus a reachable `mosh-server` on the remote. |
-
-When you connect to one of these, GoRemote:
-
-1. Resolves the credential reference and writes any required temporary
-   credentials to a tightly-scoped location (e.g. an `.rdp` file with
-   `0600` permissions, deleted on session close).
-2. Spawns the launcher with the appropriate command-line flags.
-3. Tracks the spawned process so that closing the GoRemote tab also
-   terminates the launcher.
-
-If the launcher executable is missing, GoRemote refuses to open the
-session and surfaces a `"<binary> not found in PATH"` message; install
-the launcher and try again.
 
 ## Choosing per-connection settings
 
@@ -56,10 +34,8 @@ Open a connection's edit dialog and look at the **Protocol** section.
 Common knobs:
 
 * Connection-specific port override.
-* Protocol-specific options (SSH proxy command, RDP screen geometry,
-  VNC view-only mode, serial baud rate, etc.).
-* Custom launcher flags for external-launcher protocols, when you
-  need to push a flag the dialog does not surface natively.
+* Protocol-specific options such as SSH host-key policy, terminal encoding, or
+  serial baud rate.
 
 ## Related buttons
 
@@ -67,5 +43,5 @@ Common knobs:
 |---|---|
 | `New connection…` | Create a connection (you choose the protocol here). |
 | `Connect (open selected)` | Open a session with the protocol configured on the selected connection. |
-| `Disconnect current session` | Cleanly terminate the active session, including external launchers. |
+| `Disconnect current session` | Cleanly terminate the active session. |
 | `Plugins…` | Where third-party protocol modules surface (see [plugins.md](./plugins.md)). |

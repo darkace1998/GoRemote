@@ -7,17 +7,19 @@ import (
 	"net"
 	"strconv"
 
+	protossh "github.com/darkace1998/GoRemote/plugins/protocol-ssh"
 	"github.com/darkace1998/GoRemote/sdk/plugin"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
 // Setting keys exposed by the MOSH plugin.
 const (
-	SettingHost     = "host"
-	SettingPort     = "port"
-	SettingUsername = "username"
-	SettingMoshPort = "mosh_port"
-	SettingSSHArgs  = "ssh_args"
+	SettingHost                  = "host"
+	SettingPort                  = "port"
+	SettingUsername              = "username"
+	SettingMoshPort              = "mosh_port"
+	SettingKnownHostsPath        = protossh.SettingKnownHostsPath
+	SettingStrictHostKeyChecking = protossh.SettingStrictHostKeyChecking
 )
 
 // Defaults applied when the corresponding setting is unset.
@@ -66,8 +68,16 @@ func (m *Module) Settings() []protocol.SettingDef {
 			Description: "UDP port range start for the mosh server. 0 lets mosh pick automatically.",
 		},
 		{
-			Key: SettingSSHArgs, Label: "Extra SSH arguments", Type: protocol.SettingString,
-			Description: "Extra OpenSSH client options (e.g. \"-o StrictHostKeyChecking=no\").",
+			Key: SettingKnownHostsPath, Label: "Known hosts file",
+			Type:        protocol.SettingString,
+			Description: "Path to the OpenSSH known_hosts file. Defaults to ~/.ssh/known_hosts.",
+		},
+		{
+			Key: SettingStrictHostKeyChecking, Label: "Strict host key checking",
+			Type:        protocol.SettingEnum,
+			Default:     protossh.StrictAcceptNew,
+			EnumValues:  []string{protossh.StrictAcceptNew, protossh.StrictStrict, protossh.StrictOff},
+			Description: "accept-new: trust and remember unknown hosts. strict: refuse unknown hosts. off: skip verification.",
 		},
 	}
 }
@@ -75,8 +85,13 @@ func (m *Module) Settings() []protocol.SettingDef {
 // Capabilities reports the runtime capabilities advertised by the MOSH module.
 func (m *Module) Capabilities() protocol.Capabilities {
 	return protocol.Capabilities{
-		RenderModes:       []protocol.RenderMode{protocol.RenderTerminal},
-		AuthMethods:       []protocol.AuthMethod{protocol.AuthNone},
+		RenderModes: []protocol.RenderMode{protocol.RenderTerminal},
+		AuthMethods: []protocol.AuthMethod{
+			protocol.AuthPassword,
+			protocol.AuthPublicKey,
+			protocol.AuthAgent,
+			protocol.AuthInteractive,
+		},
 		SupportsResize:    false,
 		SupportsClipboard: false,
 		SupportsLogging:   true,
@@ -86,11 +101,14 @@ func (m *Module) Capabilities() protocol.Capabilities {
 
 // config is the validated form of an OpenRequest.
 type config struct {
-	Host     string
-	Port     int
-	Username string
-	MoshPort int
-	SSHArgs  string
+	Host                  string
+	Port                  int
+	Username              string
+	MoshPort              int
+	KnownHostsPath        string
+	StrictHostKeyChecking string
+	AuthMethod            protocol.AuthMethod
+	Secret                protocol.CredentialMaterial
 }
 
 // settingsView is a minimal typed view over the untyped settings map.
@@ -143,6 +161,17 @@ func configFromRequest(req protocol.OpenRequest) (*config, error) {
 	if username == "" {
 		username = view.stringOr(SettingUsername, "")
 	}
+	if username == "" {
+		username = req.Secret.Username
+	}
+	if username == "" {
+		return nil, errors.New("mosh: username is required")
+	}
+
+	authMethod := req.AuthMethod
+	if authMethod == "" {
+		authMethod = protocol.AuthPassword
+	}
 
 	moshPort := view.intOr(SettingMoshPort, 0)
 	if moshPort < 0 || moshPort > 65535 {
@@ -150,11 +179,14 @@ func configFromRequest(req protocol.OpenRequest) (*config, error) {
 	}
 
 	return &config{
-		Host:     host,
-		Port:     port,
-		Username: username,
-		MoshPort: moshPort,
-		SSHArgs:  view.stringOr(SettingSSHArgs, ""),
+		Host:                  host,
+		Port:                  port,
+		Username:              username,
+		MoshPort:              moshPort,
+		KnownHostsPath:        view.stringOr(SettingKnownHostsPath, ""),
+		StrictHostKeyChecking: view.stringOr(SettingStrictHostKeyChecking, protossh.StrictAcceptNew),
+		AuthMethod:            authMethod,
+		Secret:                req.Secret,
 	}, nil
 }
 

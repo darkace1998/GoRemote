@@ -24,7 +24,7 @@ Use a **Go monorepo with a shared `go.work`** and a thin desktop shell backed by
 4. **Persistence Layer**
    - Native config format, import/export, backups, schema migration.
 5. **Protocol Host**
-   - Loads built-in protocol modules and external protocol plugins.
+   - Loads built-in Go-native protocol modules compiled into the binary.
 6. **Credential Host**
    - Loads built-in credential providers and external credential plugins.
 7. **Platform Services**
@@ -45,7 +45,8 @@ Use a **Go monorepo with a shared `go.work`** and a thin desktop shell backed by
 - `sdk/plugin`, `sdk/protocol`, `sdk/credential` — versioned plugin contracts
 - `host/plugin`, `host/protocol`, `host/credential` — in-process plugin hosts
 - `proto/plugin/v1/` — IPC contract for credential provider plugins only (length-prefixed JSON over Unix domain sockets)
-- `plugins/protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial,tn5250,rdp,vnc,http,powershell,mosh}` — built-in protocols (all Go-native packages, compiled into binary)
+- `plugins/protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial,tn5250,rdp,vnc,http,mosh}` — built-in protocols (all Go-native packages, compiled into binary)
+- `plugins/protocol-powershell` — planned Go-native PowerShell remoting module; not registered until a native remoting transport exists
 - `plugins/credential-{file,keychain,1password,bitwarden}` — built-in providers
 - `installers/` — Windows WiX MSI sources (and platform packaging stubs)
 - `test/integration` — fake-plugin integration harness
@@ -126,10 +127,10 @@ Each protocol module must implement the shared `sdk/protocol` interface and expo
 - diagnostics hooks
 
 ### Built-in protocols
-All supported protocols (`ssh`, `sftp`, `telnet`, `rlogin`, `rawsocket`, `serial`, `tn5250`, `rdp`, `vnc`, `http`, `powershell`, `mosh`) are implemented as Go packages under `plugins/protocol-*` and registered at compile time via the protocol host. No subprocess or IPC path exists for any of these.
+All supported protocols (`ssh`, `sftp`, `telnet`, `rlogin`, `rawsocket`, `serial`, `tn5250`, `rdp`, `vnc`, `http`, `mosh`) are implemented as Go packages under `plugins/protocol-*` and registered at compile time via the protocol host. No subprocess or IPC path exists for any of these. PowerShell remoting remains a planned Go-native module and is not registered while it lacks a native transport.
 
 ### Session rendering modes
-- **Terminal mode** for SSH, Telnet, TN5250, Raw Socket, rlogin.
+- **Terminal mode** for SSH, Telnet, TN5250, Raw Socket, rlogin, HTTP response views, and MOSH.
 - **Graphical framebuffer mode** for VNC, RDP, and similar graphical protocols — rendered in-process using Go libraries.
 - **External tool mode** is reserved only for user-configured external tool sessions (where the user explicitly specifies an OS command); it is not a protocol system mechanism.
 

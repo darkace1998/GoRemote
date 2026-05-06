@@ -13,6 +13,14 @@ import (
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
+type failOnRead struct{ t *testing.T }
+
+func (r failOnRead) Read(p []byte) (int, error) {
+	r.t.Helper()
+	r.t.Fatalf("Start must not read stdin for experimental TN5250 sessions")
+	return 0, io.EOF
+}
+
 var _ protocol.Module = (*Module)(nil)
 var _ protocol.Session = (*Session)(nil)
 
@@ -119,9 +127,6 @@ func TestConfigFromRequestDefaults(t *testing.T) {
 	if cfg.Port != defaultPort {
 		t.Errorf("Port = %d, want %d", cfg.Port, defaultPort)
 	}
-	if cfg.SSL {
-		t.Errorf("SSL default should be false")
-	}
 	if cfg.CodePage != "" {
 		t.Errorf("CodePage default should be empty, got %q", cfg.CodePage)
 	}
@@ -141,6 +146,11 @@ func TestSettingsRequiredFlags(t *testing.T) {
 	if !hostDef.Required {
 		t.Errorf("host setting must be required")
 	}
+	for _, def := range defs {
+		if def.Key == "ssl" {
+			t.Fatalf("tn5250 must not expose unimplemented ssl setting")
+		}
+	}
 }
 
 func TestHostArg(t *testing.T) {
@@ -149,9 +159,7 @@ func TestHostArg(t *testing.T) {
 		want string
 	}{
 		{config{Host: "h", Port: 23}, "h"},
-		{config{Host: "h", Port: 23, SSL: true}, "ssl:h"},
 		{config{Host: "h", Port: 992}, "h:992"},
-		{config{Host: "h", Port: 992, SSL: true}, "ssl:h:992"},
 	}
 	for _, tc := range cases {
 		got := hostArg(&tc.cfg)
@@ -203,23 +211,64 @@ func TestStart_ReceivesDataFromServer(t *testing.T) {
 	}
 }
 
-func TestStart_SendsDataToServer(t *testing.T) {
-	addr, closeServer := startEchoServer(t)
-	defer closeServer()
+func TestStart_ReturnsWhenServerClosesWithOpenStdin(t *testing.T) {
+	want := []byte("5250-goodbye")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_, _ = conn.Write(want)
+		_ = conn.Close()
+	}()
+	defer ln.Close()
 
-	sess := newSession(addr)
-	pr, pw := io.Pipe()
+	sess := newSession(ln.Addr().String())
 	var out bytes.Buffer
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	done := make(chan error, 1)
-	go func() { done <- sess.Start(ctx, pr, &out) }()
+	go func() { done <- sess.Start(ctx, failOnRead{t}, &out) }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start hung after remote closed while stdin remained open")
+	}
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("output = %q, want %q", out.Bytes(), want)
+	}
+}
+
+func TestStart_SendsDataToServer(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
+
+	sess := newSession(addr)
+	var out bytes.Buffer
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- sess.Start(ctx, nil, &out) }()
 
 	msg := []byte("5250-input")
-	_, _ = pw.Write(msg)
-	_ = pw.Close()
+	waitForConn(t, sess)
+	if err := sess.SendInput(ctx, msg); err != nil {
+		t.Fatalf("SendInput: %v", err)
+	}
+	waitForOutput(t, &out, msg)
+	_ = sess.Close()
 
 	select {
 	case err := <-done:
@@ -229,9 +278,7 @@ func TestStart_SendsDataToServer(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Start did not return")
 	}
-	if !bytes.Equal(out.Bytes(), msg) {
-		t.Fatalf("echoed = %q, want %q", out.Bytes(), msg)
-	}
+	waitForOutput(t, &out, msg)
 }
 
 func TestStart_ContextCancellation(t *testing.T) {
@@ -267,6 +314,16 @@ func TestSendInputAndResizeUnsupported(t *testing.T) {
 	}
 }
 
+func TestSendInput_ContextCanceled(t *testing.T) {
+	s := newSession("127.0.0.1:23")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := s.SendInput(ctx, []byte("x"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("SendInput err = %v, want context.Canceled", err)
+	}
+}
+
 func TestCloseIdempotent(t *testing.T) {
 	s := newSession("127.0.0.1:23")
 	for i := 0; i < 8; i++ {
@@ -276,6 +333,39 @@ func TestCloseIdempotent(t *testing.T) {
 	}
 }
 
+func TestCloseBeforeStartPreventsDial(t *testing.T) {
+	s := newSession("127.0.0.1:23")
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := s.Start(context.Background(), nil, io.Discard); err != nil {
+		t.Fatalf("Start after Close: %v", err)
+	}
+}
 
-var _ protocol.Module = (*Module)(nil)
-var _ protocol.Session = (*Session)(nil)
+func waitForConn(t *testing.T, sess *Session) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		sess.mu.Lock()
+		conn := sess.conn
+		sess.mu.Unlock()
+		if conn != nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("session did not establish connection")
+}
+
+func waitForOutput(t *testing.T, out *bytes.Buffer, want []byte) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if bytes.Equal(out.Bytes(), want) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("echoed = %q, want %q", out.Bytes(), want)
+}

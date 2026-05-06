@@ -1,5 +1,5 @@
-// Package protocol defines the contract every protocol plugin must satisfy,
-// regardless of whether it is built-in or out-of-process.
+// Package protocol defines the contract every Go-native in-process protocol
+// plugin must satisfy.
 //
 // A protocol plugin describes:
 //   - its manifest and settings schema (declarative metadata)

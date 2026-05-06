@@ -461,7 +461,7 @@ func defaultAuthMethod(protocolID string, mat protocol.CredentialMaterial) proto
 	if i := strings.LastIndex(short, "."); i >= 0 {
 		short = short[i+1:]
 	}
-	if short == "ssh" {
+	if short == "ssh" || short == "mosh" {
 		switch {
 		case mat.Password != "":
 			return protocol.AuthPassword

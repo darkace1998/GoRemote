@@ -42,7 +42,6 @@ import (
 	credkeychain "github.com/darkace1998/GoRemote/plugins/credential-keychain"
 	protohttp "github.com/darkace1998/GoRemote/plugins/protocol-http"
 	protomosh "github.com/darkace1998/GoRemote/plugins/protocol-mosh"
-	protopowershell "github.com/darkace1998/GoRemote/plugins/protocol-powershell"
 	protoraw "github.com/darkace1998/GoRemote/plugins/protocol-rawsocket"
 	protordp "github.com/darkace1998/GoRemote/plugins/protocol-rdp"
 	protorlogin "github.com/darkace1998/GoRemote/plugins/protocol-rlogin"
@@ -1083,7 +1082,6 @@ func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
 		{"rlogin", protorlogin.New()},
 		{"rawsocket", protoraw.New()},
 		{"http", protohttp.New()},
-		{"powershell", protopowershell.New()},
 		{"rdp", protordp.New()},
 		{"vnc", protovnc.New()},
 		{"tn5250", prototn5250.New()},

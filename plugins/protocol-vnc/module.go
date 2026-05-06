@@ -50,16 +50,6 @@ func (m *Module) Settings() []protocol.SettingDef {
 			Max:         &maxPort,
 			Description: "TCP port of the VNC server (5900 is display :0).",
 		},
-		{
-			Key: SettingViewOnly, Label: "View-only", Type: protocol.SettingBool,
-			Default:     false,
-			Description: "Open the session without sending input events to the server.",
-		},
-		{
-			Key: SettingFullscreen, Label: "Fullscreen", Type: protocol.SettingBool,
-			Default:     false,
-			Description: "Request a fullscreen display.",
-		},
 	}
 }
 
@@ -67,7 +57,7 @@ func (m *Module) Settings() []protocol.SettingDef {
 func (m *Module) Capabilities() protocol.Capabilities {
 	return protocol.Capabilities{
 		RenderModes:       []protocol.RenderMode{protocol.RenderGraphical},
-		AuthMethods:       []protocol.AuthMethod{protocol.AuthPassword, protocol.AuthNone},
+		AuthMethods:       []protocol.AuthMethod{protocol.AuthNone},
 		SupportsResize:    false,
 		SupportsClipboard: false,
 		SupportsLogging:   true,
@@ -101,21 +91,10 @@ func (s settingsView) intOr(key string, def int) int {
 	return def
 }
 
-func (s settingsView) boolOr(key string, def bool) bool {
-	if v, ok := s.m[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return def
-}
-
 // openConfig is the resolved, plugin-internal view of an OpenRequest.
 type openConfig struct {
-	host       string
-	port       int
-	viewOnly   bool
-	fullscreen bool
+	host string
+	port int
 }
 
 // resolveConfig validates the OpenRequest and produces an openConfig with
@@ -124,10 +103,8 @@ func resolveConfig(req protocol.OpenRequest) (openConfig, error) {
 	view := settingsView{m: req.Settings}
 
 	cfg := openConfig{
-		host:       view.stringOr(SettingHost, ""),
-		port:       view.intOr(SettingPort, defaultPort),
-		viewOnly:   view.boolOr(SettingViewOnly, false),
-		fullscreen: view.boolOr(SettingFullscreen, false),
+		host: view.stringOr(SettingHost, ""),
+		port: view.intOr(SettingPort, defaultPort),
 	}
 
 	if req.Host != "" {
@@ -156,4 +133,3 @@ func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.S
 	addr := net.JoinHostPort(cfg.host, strconv.Itoa(cfg.port))
 	return newSession(addr), nil
 }
-

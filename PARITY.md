@@ -15,13 +15,13 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | Telnet       | ✅        | ✅ **Ready**       | RFC 854 negotiation; NAWS; TTYPE; configurable encoding. |
 | Rlogin       | ✅        | ✅ **Ready**       | RFC 1282 handshake; in-band window-size updates. |
 | Raw socket   | ✅        | ✅ **Ready**       | Configurable EOL (lf / crlf / none), keepalive, configurable encoding. |
-| PowerShell   | ✅        | ✅ **Ready**       | Local `pwsh`/`powershell` launch; on Unix uses PTY (full terminal), on Windows uses ConPTY (`CreatePseudoConsole`) with full ANSI/VT and working resize. Argument quoting safe-by-default. |
-| HTTP / HTTPS | ✅        | ✅ **Ready**       | In-app browser session via `webview`/system browser launcher; cookie isolation per session; basic / bearer auth from credential providers. |
-| RDP          | ✅        | ✅ **Ready** (external) | Launches `mstsc.exe` on Windows or `xfreerdp` on Linux/macOS; credentials handed off via the platform launcher with cleanup of any spool files. See **Notes**. |
-| VNC          | ✅        | ✅ **Ready** (external) | Launches the system `vncviewer` (TigerVNC / RealVNC / TightVNC) with credentials piped through the launcher. See **Notes**. |
-| IBM TN5250   | ✅        | ✅ **Ready** (external) | Launches `tn5250` / `xtn5250`. See **Notes**. |
-| External app | ✅        | ✅ **Ready**       | `internal/extlaunch` runs arbitrary launcher commands with templated args. |
-| MOSH         | (3rd-party) | ✅ **Ready** (external) | Launched via the system `mosh` binary (extlaunch, RenderExternal); not available on Windows (no native mosh.exe). |
+| PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned before registration. |
+| HTTP / HTTPS | ✅        | 🔶 **Experimental** | In-process `net/http` GET/probe session. Browser/webview integration is not part of the protocol system. |
+| RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
+| VNC          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full RFB negotiation/auth/framebuffer pipeline still planned. |
+| IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
+| External app | ✅        | 🔶 **Planned**     | External tool launching is outside the protocol plugin system. |
+| MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
 | SFTP         | (3rd-party) | ✅ **Ready**       | Interactive SFTP file-browser shell (ls/cd/get/put/mkdir/rm/mv/chmod/...) over an SSH connection. Reuses the SSH plugin's auth + known-hosts machinery. |
 | Serial / COM | ✅ (PuTTY)  | ✅ **Ready**       | Local serial-console terminal sessions. Configurable baud/data-bits/parity/stop-bits/EOL. Cross-platform (Linux/macOS `/dev/tty*`, Windows `COMn`). |
 
@@ -29,8 +29,9 @@ Plugins shipped today (`plugins/`):
 
 ```
 protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
-protocol-rawsocket  protocol-powershell protocol-http       protocol-rdp
+protocol-rawsocket  protocol-http       protocol-rdp
 protocol-vnc        protocol-tn5250     protocol-mosh       protocol-serial
+protocol-powershell (planned, not registered)
 ```
 
 ## Credential providers
@@ -71,11 +72,11 @@ Source of truth for the feature list: `requirements.md`, `architecture.md`, `sta
 | Per-session colors / icons / labels              | 🟡 **Partial**  | Color/label persisted; icon picker deferred |
 | Notifications / status indicators                | ✅ **Ready**    | Event bus + UI banner |
 | Workspace persistence across restarts            | ✅ **Ready**    | `app/workspace` |
-| Embedded vs external launch per protocol         | ✅ **Ready**    | `internal/extlaunch` + protocol manifest capability flags |
+| Embedded Go-native protocol modules             | 🟡 **Partial**  | Ready terminal protocols plus experimental RDP / VNC / TN5250 / HTTP / MOSH scaffolding |
 
 ### 4.3 Protocols
 
-See the protocols table above. All required first-class protocols are available; the graphical protocols (RDP / VNC / TN5250) ship via the external-launcher model documented in **Notes**.
+See the protocols table above. Ready terminal protocols are available today; graphical protocols, TN5250, HTTP, MOSH, and PowerShell remoting are tracked as experimental or planned until their Go-native engines are complete.
 
 ### 4.4 Credential providers
 
@@ -142,25 +143,17 @@ See the protocols table above. All required first-class protocols are available;
 
 ## Notes
 
-### External-launcher model (RDP, VNC, TN5250)
+### Go-native protocol model
 
-Graphical and 5250 protocols ship through `internal/extlaunch` rather than a re-implemented in-process client. When a session of these types is opened, goremote:
-
-1. Resolves credentials from the configured provider chain.
-2. Templates a launcher command from the protocol manifest (e.g. `xfreerdp /v:{host} /u:{user} /p:{password-file}`).
-3. Spawns the platform-appropriate binary (`mstsc` / `xfreerdp` / `vncviewer` / `tn5250`) under a supervised child process.
-4. Streams the launcher's stdout/stderr into the session log and exposes lifecycle events (`opened`, `exited`, `failed`) on the event bus.
-5. Cleans up any temporary credential files / `.rdp` / `.vnc` files on session close.
-
-**Rationale.** A fully in-process RDP or RFB stack is months of work and a meaningful security surface. Every supported desktop OS already ships (or makes available) a hardened, well-maintained client for these protocols. The external-launcher model:
-
-- Reaches feature parity with mRemoteNG on day one for these protocols.
-- Inherits OS-native rendering, GPU acceleration, smart-card redirection, and clipboard integration "for free."
-- Keeps the goremote process small and free of large protocol decoders.
-- Leaves the door open for an in-process implementation later (the SDK already supports `Session` types that own their own renderer).
-
-Trade-off: embedded-tab UX is replaced by a separate OS window. This is documented in the connection's settings panel.
+Protocol modules are Go packages compiled into the application binary. They do
+not spawn local vendor viewers, local shells, or protocol helper processes, and
+they do not use plugin IPC for session transport. Modules whose protocol engines
+are not complete are marked experimental or planned in their manifests and in
+the table above.
 
 ### IPC reference implementation
 
-External plugins are expected to communicate over the IPC contract at `host/plugin/ipc/` (length-prefixed JSON frames over Unix domain sockets — supported on Linux, macOS, and Windows 10 1809+), not Go's native `plugin` package. The reference implementation is exercised by `plugins/external-example` and tested in `host/plugin/ipc` (including a chaos test for crash / cancellation behavior).
+External credential providers are expected to communicate over the IPC contract
+at `host/plugin/ipc/` (length-prefixed JSON frames over Unix domain sockets —
+supported on Linux, macOS, and Windows 10 1809+), not Go's native `plugin`
+package. Protocol sessions remain Go-native and in-process.

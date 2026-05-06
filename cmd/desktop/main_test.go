@@ -58,7 +58,7 @@ func TestNewAppWithRecovery_DoesNotMaskNonLoadErrors(t *testing.T) {
 	}
 }
 
-func TestRegisterBuiltins_SkipsUnsupportedPlatformModules(t *testing.T) {
+func TestRegisterBuiltins_RegistersPlatformIndependentProtocols(t *testing.T) {
 	dir := t.TempDir()
 	logger := logging.New(logging.Options{Writer: io.Discard})
 	ph := pluginhost.New(eventbus.New[pluginhost.Event](), pluginhost.WithGOOS("windows"))
@@ -78,8 +78,8 @@ func TestRegisterBuiltins_SkipsUnsupportedPlatformModules(t *testing.T) {
 	if err := registerBuiltins(context.Background(), a, dir); err != nil {
 		t.Fatalf("registerBuiltins: %v", err)
 	}
-	if _, ok := a.ProtocolHost().Module("io.goremote.protocol.mosh"); ok {
-		t.Fatalf("mosh should be skipped on windows host")
+	if _, ok := a.ProtocolHost().Module("io.goremote.protocol.mosh"); !ok {
+		t.Fatalf("mosh should be registered on windows host")
 	}
 	if _, ok := a.ProtocolHost().Module("io.goremote.protocol.ssh"); !ok {
 		t.Fatalf("ssh should be registered")

@@ -12,6 +12,14 @@ import (
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
+type failOnRead struct{ t *testing.T }
+
+func (r failOnRead) Read(p []byte) (int, error) {
+	r.t.Helper()
+	r.t.Fatalf("Start must not read stdin for experimental RDP sessions")
+	return 0, io.EOF
+}
+
 // startEchoServer starts a TCP echo server and returns its address and a
 // closer. The server echoes every byte it receives back to the sender.
 func startEchoServer(t *testing.T) (addr string, close func()) {
@@ -80,25 +88,54 @@ func TestStart_ReceivesDataFromServer(t *testing.T) {
 	}
 }
 
-func TestStart_SendsDataToServer(t *testing.T) {
-	addr, closeServer := startEchoServer(t)
+func TestStart_ReturnsWhenServerClosesWithOpenStdin(t *testing.T) {
+	want := []byte("rdp-server-goodbye")
+	addr, closeServer := startFixedReplyServer(t, want)
 	defer closeServer()
 
 	sess := newSession(addr)
-
-	pr, pw := io.Pipe()
 	var out bytes.Buffer
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	done := make(chan error, 1)
-	go func() { done <- sess.Start(ctx, pr, &out) }()
+	go func() { done <- sess.Start(ctx, failOnRead{t}, &out) }()
 
-	// Write then close stdin so the I/O loop terminates.
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start hung after remote closed while stdin remained open")
+	}
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("output = %q, want %q", out.Bytes(), want)
+	}
+}
+
+func TestStart_SendsDataToServer(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
+
+	sess := newSession(addr)
+
+	var out bytes.Buffer
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- sess.Start(ctx, nil, &out) }()
+
 	msg := []byte("hello-rdp")
-	_, _ = pw.Write(msg)
-	_ = pw.Close()
+	waitForConn(t, sess)
+	if err := sess.SendInput(ctx, msg); err != nil {
+		t.Fatalf("SendInput: %v", err)
+	}
+	waitForOutput(t, &out, msg)
+	_ = sess.Close()
 
 	select {
 	case err := <-done:
@@ -109,9 +146,7 @@ func TestStart_SendsDataToServer(t *testing.T) {
 		t.Fatal("Start did not return")
 	}
 
-	if !bytes.Equal(out.Bytes(), msg) {
-		t.Fatalf("echoed = %q, want %q", out.Bytes(), msg)
-	}
+	waitForOutput(t, &out, msg)
 }
 
 func TestStart_ContextCancellation(t *testing.T) {
@@ -171,6 +206,9 @@ func TestClose_BeforeStart(t *testing.T) {
 	if err := sess.Close(); err != nil {
 		t.Fatalf("Close before Start: %v", err)
 	}
+	if err := sess.Start(context.Background(), nil, io.Discard); err != nil {
+		t.Fatalf("Start after Close: %v", err)
+	}
 }
 
 func TestSendInput_BeforeStart(t *testing.T) {
@@ -181,10 +219,47 @@ func TestSendInput_BeforeStart(t *testing.T) {
 	}
 }
 
+func TestSendInput_ContextCanceled(t *testing.T) {
+	sess := newSession("127.0.0.1:3389")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := sess.SendInput(ctx, []byte("x"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("SendInput err = %v, want context.Canceled", err)
+	}
+}
+
 func TestResize_Unsupported(t *testing.T) {
 	sess := newSession("127.0.0.1:3389")
 	err := sess.Resize(context.Background(), protocol.Size{Cols: 80, Rows: 24})
 	if !errors.Is(err, protocol.ErrUnsupported) {
 		t.Fatalf("Resize err = %v, want ErrUnsupported", err)
 	}
+}
+
+func waitForConn(t *testing.T, sess *Session) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		sess.mu.Lock()
+		conn := sess.conn
+		sess.mu.Unlock()
+		if conn != nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("session did not establish connection")
+}
+
+func waitForOutput(t *testing.T, out *bytes.Buffer, want []byte) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if bytes.Equal(out.Bytes(), want) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("echoed = %q, want %q", out.Bytes(), want)
 }

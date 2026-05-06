@@ -65,10 +65,10 @@ Select a connection in the tree, then either:
 * Press **Enter**, or
 * Click the toolbar icon whose tooltip is `"Connect (open selected)"`.
 
-A new tab opens in the right pane with a live terminal (for SSH /
-Telnet / Rlogin / Raw / Serial / SFTP / PowerShell), an HTTP browser
-for `http://…`, or a launched external viewer for RDP / VNC / TN5250 /
-MOSH.
+A new tab opens in the right pane with a live terminal for ready terminal
+protocols (SSH / Telnet / Rlogin / Raw / Serial / SFTP). HTTP, RDP, VNC,
+TN5250, and MOSH currently surface experimental/planned Go-native protocol
+work rather than launching external viewers.
 
 ## 6. Tabs, splits, and detached windows
 

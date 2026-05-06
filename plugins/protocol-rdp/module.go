@@ -25,9 +25,7 @@ const (
 
 // Defaults applied when the corresponding setting is unset.
 const (
-	defaultPort   = 3389
-	defaultWidth  = 1280
-	defaultHeight = 800
+	defaultPort = 3389
 )
 
 func ptrInt(v int) *int { return &v }
@@ -59,47 +57,6 @@ func (m *Module) Settings() []protocol.SettingDef {
 			Max:         ptrInt(65535),
 			Description: "TCP port the RDP service is listening on.",
 		},
-		{
-			Key:         SettingUsername,
-			Label:       "Username",
-			Type:        protocol.SettingString,
-			Description: "User name for RDP authentication.",
-		},
-		{
-			Key:         SettingDomain,
-			Label:       "Domain",
-			Type:        protocol.SettingString,
-			Description: "Optional Active Directory / NT domain name.",
-		},
-		{
-			Key:         SettingWidth,
-			Label:       "Width",
-			Type:        protocol.SettingInt,
-			Default:     defaultWidth,
-			Min:         ptrInt(1),
-			Description: "Initial RDP session width in pixels.",
-		},
-		{
-			Key:         SettingHeight,
-			Label:       "Height",
-			Type:        protocol.SettingInt,
-			Default:     defaultHeight,
-			Min:         ptrInt(1),
-			Description: "Initial RDP session height in pixels.",
-		},
-		{
-			Key:         SettingFullscreen,
-			Label:       "Fullscreen",
-			Type:        protocol.SettingBool,
-			Default:     false,
-			Description: "Request a fullscreen RDP session.",
-		},
-		{
-			Key:         SettingGateway,
-			Label:       "RD Gateway",
-			Type:        protocol.SettingString,
-			Description: "Optional Remote Desktop Gateway in host[:port] form.",
-		},
 	}
 }
 
@@ -107,7 +64,7 @@ func (m *Module) Settings() []protocol.SettingDef {
 func (m *Module) Capabilities() protocol.Capabilities {
 	return protocol.Capabilities{
 		RenderModes:       []protocol.RenderMode{protocol.RenderGraphical},
-		AuthMethods:       []protocol.AuthMethod{protocol.AuthPassword, protocol.AuthNone},
+		AuthMethods:       []protocol.AuthMethod{protocol.AuthNone},
 		SupportsResize:    false,
 		SupportsClipboard: false,
 		SupportsLogging:   true,
@@ -117,14 +74,8 @@ func (m *Module) Capabilities() protocol.Capabilities {
 
 // config is the validated form of an OpenRequest.
 type config struct {
-	Host       string
-	Port       int
-	Username   string
-	Domain     string
-	Width      int
-	Height     int
-	Fullscreen bool
-	Gateway    string
+	Host string
+	Port int
 }
 
 // settingsView is a minimal typed view over the untyped settings map.
@@ -153,15 +104,6 @@ func (s settingsView) intOr(key string, def int) int {
 	return def
 }
 
-func (s settingsView) boolOr(key string, def bool) bool {
-	if v, ok := s.m[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return def
-}
-
 // configFromRequest validates and assembles a config from the OpenRequest.
 // req.Host / req.Port take precedence over the settings map entries when
 // non-empty/non-zero.
@@ -184,29 +126,9 @@ func configFromRequest(req protocol.OpenRequest) (*config, error) {
 		return nil, fmt.Errorf("rdp: port must be in [1,65535], got %d", port)
 	}
 
-	username := req.Username
-	if username == "" {
-		username = view.stringOr(SettingUsername, "")
-	}
-
-	width := view.intOr(SettingWidth, defaultWidth)
-	if width < 1 {
-		return nil, fmt.Errorf("rdp: width must be >= 1, got %d", width)
-	}
-	height := view.intOr(SettingHeight, defaultHeight)
-	if height < 1 {
-		return nil, fmt.Errorf("rdp: height must be >= 1, got %d", height)
-	}
-
 	return &config{
-		Host:       host,
-		Port:       port,
-		Username:   username,
-		Domain:     view.stringOr(SettingDomain, ""),
-		Width:      width,
-		Height:     height,
-		Fullscreen: view.boolOr(SettingFullscreen, false),
-		Gateway:    view.stringOr(SettingGateway, ""),
+		Host: host,
+		Port: port,
 	}, nil
 }
 

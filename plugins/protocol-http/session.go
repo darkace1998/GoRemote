@@ -15,44 +15,40 @@ import (
 // sessionConfig is the immutable parameter bundle a [Session] is built with.
 type sessionConfig struct {
 	url         string
-	browser     string
 	verifyTLS   bool
 	healthCheck bool
-	launcher    launcher
 	probe       probeFunc
+	fetch       fetchFunc
 }
 
 // probeFunc performs an HTTP health-check against rawURL. The returned line
 // must be a single human-readable status string suitable for printing to the
 // session's stdout (without a trailing newline).
 type probeFunc func(ctx context.Context, rawURL string, verifyTLS bool) string
+type fetchFunc func(ctx context.Context, rawURL string, verifyTLS bool, stdout io.Writer) error
 
-// Session is a live HTTP/HTTPS launcher session. It is safe for the caller
-// to invoke Start, Resize, SendInput, and Close concurrently.
+// Session is a live HTTP/HTTPS session. It is safe for the caller to invoke
+// Start, Resize, SendInput, and Close concurrently.
 type Session struct {
 	cfg sessionConfig
 
 	closeOnce sync.Once
 	closeCh   chan struct{}
+	cancelMu  sync.Mutex
+	cancel    context.CancelFunc
 }
 
 func newSession(cfg sessionConfig) *Session {
 	return &Session{cfg: cfg, closeCh: make(chan struct{})}
 }
 
-// RenderMode reports the rendering mode negotiated at Open time. HTTP
-// sessions always render externally (in the user's browser).
-func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderExternal }
+// RenderMode reports the rendering mode negotiated at Open time.
+func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderTerminal }
 
-// Start launches the URL in the configured browser, optionally runs a single
-// health-check probe, and then blocks until either ctx is cancelled or
-// [Session.Close] is invoked. Start returns nil for both clean shutdowns and
-// a non-nil error only if the launch itself failed.
+// Start fetches the URL with Go's in-process HTTP client. It optionally runs a
+// single health-check probe first, then streams the response body to stdout.
 //
-// stdin is ignored: HTTP sessions accept no input. stdout receives one line
-// describing the launch and, if health_check was set, one additional line
-// reporting the probe result. If stdout is nil, the lines are simply
-// discarded.
+// stdin is ignored: HTTP sessions accept no input.
 func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	if stdout == nil {
 		stdout = io.Discard
@@ -65,49 +61,50 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 	default:
 	}
 
-	path, prefixArgs, err := s.cfg.launcher.resolve(ctx, s.cfg.browser)
-	if err != nil {
-		return err
-	}
-	args := append(append([]string(nil), prefixArgs...), s.cfg.url)
-	if err := s.cfg.launcher.run(ctx, path, args); err != nil {
-		return fmt.Errorf("http: failed to launch browser: %w", err)
-	}
+	runCtx, cancel := context.WithCancel(ctx)
+	s.cancelMu.Lock()
+	s.cancel = cancel
+	s.cancelMu.Unlock()
+	defer cancel()
 
-	announce := fmt.Sprintf("goremote: opened %s in default browser\n", s.cfg.url)
-	if s.cfg.browser != "" {
-		announce = fmt.Sprintf("goremote: opened %s in %s\n", s.cfg.url, s.cfg.browser)
-	}
-	if _, werr := io.WriteString(stdout, announce); werr != nil {
-		return werr
-	}
+	go func() {
+		select {
+		case <-s.closeCh:
+			cancel()
+		case <-runCtx.Done():
+		}
+	}()
 
 	if s.cfg.healthCheck {
 		probe := s.cfg.probe
 		if probe == nil {
 			probe = defaultProbe
 		}
-		line := probe(ctx, s.cfg.url, s.cfg.verifyTLS)
+		line := probe(runCtx, s.cfg.url, s.cfg.verifyTLS)
 		if _, werr := io.WriteString(stdout, "goremote: "+line+"\n"); werr != nil {
 			return werr
 		}
 	}
 
-	// Block until ctx is cancelled or Close is invoked. HTTP sessions have
-	// no I/O loop of their own; their lifetime is purely host-driven.
-	select {
-	case <-ctx.Done():
-	case <-s.closeCh:
+	fetch := s.cfg.fetch
+	if fetch == nil {
+		fetch = defaultFetch
+	}
+	if err := fetch(runCtx, s.cfg.url, s.cfg.verifyTLS, stdout); err != nil {
+		if runCtx.Err() != nil {
+			return nil
+		}
+		return err
 	}
 	return nil
 }
 
-// Resize is unsupported for external-launcher sessions.
+// Resize is unsupported for HTTP sessions.
 func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 	return protocol.ErrUnsupported
 }
 
-// SendInput is unsupported for external-launcher sessions.
+// SendInput is unsupported for HTTP sessions.
 func (s *Session) SendInput(ctx context.Context, data []byte) error {
 	return protocol.ErrUnsupported
 }
@@ -115,8 +112,38 @@ func (s *Session) SendInput(ctx context.Context, data []byte) error {
 // Close terminates the logical session. It is idempotent and safe across
 // concurrent callers; only the first invocation actually unblocks Start.
 func (s *Session) Close() error {
-	s.closeOnce.Do(func() { close(s.closeCh) })
+	s.closeOnce.Do(func() {
+		close(s.closeCh)
+		s.cancelMu.Lock()
+		cancel := s.cancel
+		s.cancelMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+	})
 	return nil
+}
+
+func defaultFetch(ctx context.Context, rawURL string, verifyTLS bool, stdout io.Writer) error {
+	tr := &http.Transport{
+		// #nosec G402 -- verifyTLS=false is an explicit user opt-out; SECURITY.md documents the risk and the default remains true.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: !verifyTLS},
+	}
+	client := &http.Client{Transport: tr}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", rawURL, err)
+	}
+	defer resp.Body.Close()
+	if _, err := fmt.Fprintf(stdout, "goremote: GET %s, status %d\n", rawURL, resp.StatusCode); err != nil {
+		return err
+	}
+	_, err = io.Copy(stdout, resp.Body)
+	return err
 }
 
 // defaultProbe performs a single HEAD request (falling back to GET if HEAD

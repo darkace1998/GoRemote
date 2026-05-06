@@ -60,11 +60,11 @@
 - Provider crashes or timeouts do not take down the app.
 - Secret handling passes review.
 
-## Stage 5 - Graphical and Launcher Protocols
-**Status: ✅ Delivered** — RDP and VNC implemented as Go-native in-process packages; HTTP, PowerShell, and MOSH delivered via user-configured external tool sessions.
+## Stage 5 - Graphical and Additional Protocols
+**Status: 🚧 In progress** — RDP, VNC, HTTP, TN5250, and MOSH have Go-native in-process scaffolding; protocol-complete graphical/MOSH engines and PowerShell remoting remain hardening work.
 ### Goals
 - Add VNC and RDP support as Go-native protocol packages.
-- Add HTTP/HTTPS launch flows, PowerShell remoting integration, and external tool modules.
+- Add HTTP/HTTPS in-process flows and PowerShell remoting integration.
 - Support embedded in-process rendering for graphical protocols.
 
 ### Exit Criteria

@@ -1,8 +1,8 @@
 // Package vnc implements the built-in VNC protocol plugin for goremote.
 //
 // Sessions are handled entirely in-process: the plugin dials the remote host
-// over TCP using Go's standard net package and relays the RFB byte stream.
-// No external binary is required. Rendering uses [protocol.RenderGraphical].
+// over TCP using Go's standard net package. No external binary is required.
+// Full RFB handling is still experimental.
 package vnc
 
 import "github.com/darkace1998/GoRemote/sdk/plugin"
@@ -13,7 +13,7 @@ import "github.com/darkace1998/GoRemote/sdk/plugin"
 var Manifest = plugin.Manifest{
 	ID:          "io.goremote.protocol.vnc",
 	Name:        "VNC",
-	Description: "Virtual Network Computing — Go-native in-process TCP/RFB session.",
+	Description: "Virtual Network Computing — experimental Go-native in-process TCP/RFB session.",
 	Kind:        plugin.KindProtocol,
 	Version:     "2.0.0",
 	APIVersion:  plugin.CurrentAPIVersion,
@@ -21,8 +21,7 @@ var Manifest = plugin.Manifest{
 		plugin.CapNetworkOutbound,
 		plugin.CapGraphical,
 	},
-	Status:    plugin.StatusReady,
+	Status:    plugin.StatusExperimental,
 	Publisher: "goremote",
 	License:   "MIT",
 }
-

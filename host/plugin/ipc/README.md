@@ -1,7 +1,8 @@
 # Plugin IPC transport
 
 `host/plugin/ipc` implements the reference transport between the goremote
-host and out-of-process plugins, as outlined in `architecture.md`.
+host and out-of-process credential provider plugins, as outlined in
+`architecture.md`.
 
 ## Wire format
 
@@ -24,8 +25,9 @@ host and out-of-process plugins, as outlined in `architecture.md`.
   capabilities, and a status string of `ready` or `degraded:<reason>`.
 - `Ping` — smoke test / liveness probe; the plugin echoes the request payload.
 
-Higher-level protocol and credential RPCs will layer on top of the
-same connection; only the contract above is part of the v1 surface.
+Higher-level credential provider RPCs will layer on top of the same
+connection; protocol sessions are Go-native in-process packages and do not
+use this transport.
 
 ## Build-tag policy
 

@@ -5,8 +5,8 @@
 //
 // The transport is intentionally narrow. Only two services are wired here —
 // PluginHandshake and Echo — both defined in proto/plugin/v1. Higher-level
-// protocol/credential RPCs will layer on top of the same connection in
-// follow-up work.
+// credential provider RPCs will layer on top of the same connection in
+// follow-up work; protocol sessions are Go-native in-process packages.
 package ipc
 
 import (

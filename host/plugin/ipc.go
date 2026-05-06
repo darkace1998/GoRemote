@@ -26,16 +26,16 @@ type IPCTransport interface {
 	// (protobuf/Connect/JSON) is chosen by the concrete transport.
 	Call(ctx context.Context, method string, request []byte) (response []byte, err error)
 
-	// Stream opens a bidirectional stream for long-lived interactions such
-	// as a protocol session's I/O loop.
+	// Stream opens a bidirectional stream for long-lived credential-provider
+	// interactions such as unlock or MFA challenges.
 	Stream(ctx context.Context, method string) (IPCStream, error)
 
 	// Ping verifies liveness; used by the host to detect crashed plugins.
 	Ping(ctx context.Context, deadline time.Duration) error
 }
 
-// IPCStream is a bidirectional message stream used for streaming RPCs such
-// as interactive protocol sessions.
+// IPCStream is a bidirectional message stream used for credential-provider
+// streaming RPCs.
 type IPCStream interface {
 	io.Closer
 	Send(ctx context.Context, msg []byte) error
@@ -43,15 +43,15 @@ type IPCStream interface {
 }
 
 // IPCRegistrar is what a transport presents to the Host when loading an
-// external plugin: it produces the Module/Provider shim that the generic
-// Host treats like any in-process plugin.
+// external credential provider: it produces the Provider shim that the generic
+// Host treats like any in-process provider.
 type IPCRegistrar interface {
 	// Manifest returns the external plugin's advertised manifest. The host
 	// validates it before activating the plugin.
 	Manifest(ctx context.Context) ([]byte, error)
 
-	// BuildModule wires the transport into a local shim satisfying the
-	// appropriate SDK interface (sdk/protocol.Module or sdk/credential.Provider).
-	// The returned value is passed to Host.Register as the module.
+	// BuildModule wires the transport into a local shim satisfying
+	// sdk/credential.Provider. The returned value is passed to Host.Register as
+	// the provider module.
 	BuildModule(ctx context.Context, transport IPCTransport) (any, error)
 }

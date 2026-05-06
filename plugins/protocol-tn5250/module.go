@@ -17,7 +17,6 @@ const (
 	SettingPort       = "port"
 	SettingDeviceName = "device_name"
 	SettingCodePage   = "code_page"
-	SettingSSL        = "ssl"
 )
 
 // defaultPort is the standard TN5250 / Telnet port.
@@ -61,11 +60,6 @@ func (m *Module) Settings() []protocol.SettingDef {
 			Default:     "",
 			Description: "Optional EBCDIC code page. Common values: 37 (US/Canada), 1141 (Germany/Austria), 1140 (international).",
 		},
-		{
-			Key: SettingSSL, Label: "Use SSL/TLS", Type: protocol.SettingBool,
-			Default:     false,
-			Description: "Establish a TLS-wrapped TN5250 session.",
-		},
 	}
 }
 
@@ -87,7 +81,6 @@ type config struct {
 	Port       int
 	DeviceName string
 	CodePage   string
-	SSL        bool
 }
 
 // settingsView is a minimal typed view over the untyped settings map.
@@ -111,15 +104,6 @@ func (s settingsView) intOr(key string, def int) int {
 			return int(x)
 		case float64:
 			return int(x)
-		}
-	}
-	return def
-}
-
-func (s settingsView) boolOr(key string, def bool) bool {
-	if v, ok := s.m[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
 		}
 	}
 	return def
@@ -150,21 +134,16 @@ func configFromRequest(req protocol.OpenRequest) (*config, error) {
 		Port:       port,
 		DeviceName: view.stringOr(SettingDeviceName, ""),
 		CodePage:   view.stringOr(SettingCodePage, ""),
-		SSL:        view.boolOr(SettingSSL, false),
 	}, nil
 }
 
 // hostArg renders the address used to connect to the remote. It returns
-// "[ssl:]host" when port == defaultPort and "[ssl:]host:port" otherwise.
+// "host" when port == defaultPort and "host:port" otherwise.
 func hostArg(cfg *config) string {
-	prefix := ""
-	if cfg.SSL {
-		prefix = "ssl:"
-	}
 	if cfg.Port == defaultPort {
-		return prefix + cfg.Host
+		return cfg.Host
 	}
-	return prefix + cfg.Host + ":" + strconv.Itoa(cfg.Port)
+	return cfg.Host + ":" + strconv.Itoa(cfg.Port)
 }
 
 // Open validates settings and returns a Session ready to dial the remote.
@@ -177,4 +156,3 @@ func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.S
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	return newSession(addr), nil
 }
-

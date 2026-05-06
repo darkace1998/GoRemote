@@ -44,14 +44,20 @@ func TestSession_CloseIdempotent(t *testing.T) {
 	}
 }
 
-func TestSession_StartDialFailure(t *testing.T) {
-	cfg := &config{Host: "127.0.0.1", Port: 1}
+func TestSession_StartUnsupportedUntilUDPTransportExists(t *testing.T) {
+	cfg := &config{
+		Host:                  "127.0.0.1",
+		Port:                  1,
+		Username:              "user",
+		AuthMethod:            protocol.AuthPassword,
+		Secret:                protocol.CredentialMaterial{Password: "pw"},
+		StrictHostKeyChecking: "off",
+	}
 	sess := newSession(cfg, "127.0.0.1:1")
 	ctx, cancel := context.WithTimeout(context.Background(), 2000000000) // 2s
 	defer cancel()
 	err := sess.Start(ctx, nil, nil)
-	if err == nil {
-		t.Fatal("expected dial error for unreachable SSH port")
+	if !errors.Is(err, protocol.ErrUnsupported) {
+		t.Fatalf("Start err = %v, want ErrUnsupported", err)
 	}
 }
-

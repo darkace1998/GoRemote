@@ -3440,7 +3440,7 @@ func showSettingsDialog(w fyne.Window, b *Bindings, a fyne.App) {
 
 func showAboutDialog(w fyne.Window) {
 	msg := fmt.Sprintf(
-		"goremote %s\n\nA cross-platform connection manager.\nLicensed under the project license.\n\nProtocols: SSH, Telnet, Rlogin, RDP, VNC, RawSocket, PowerShell, Mosh, TN5250, HTTP",
+		"goremote %s\n\nA cross-platform connection manager.\nLicensed under the project license.\n\nProtocols: SSH, Telnet, Rlogin, RDP, VNC, RawSocket, Mosh, TN5250, HTTP",
 		Version,
 	)
 	dialog.ShowInformation("About goremote", msg, w)

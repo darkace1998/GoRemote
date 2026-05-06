@@ -32,8 +32,8 @@ imported in a "needs attention" state rather than skipped.
 A typical warning looks like:
 
 ```
-Connection "DC01" — protocol "RDP" requires an external launcher.
-Configure xfreerdp / mstsc and re-open to use it.
+Connection "DC01" — protocol "RDP" is imported as experimental.
+The Go-native RDP protocol engine is incomplete; verify settings before use.
 ```
 
 Acknowledge the warnings (the dialog will not close while there are

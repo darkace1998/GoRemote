@@ -7,7 +7,7 @@ A Go-based, cross-platform successor to **mRemoteNG**: a modern multi-protocol r
 ## Highlights
 
 - 🖥️ **Cross-platform desktop** — Windows, Linux, macOS via **Fyne v2** (pure-Go, OpenGL-rendered native UI; no browser runtime required).
-- 🔌 **Modular protocols** — SSH, SFTP, Telnet, Rlogin, Raw socket, PowerShell, HTTP, Serial / COM, plus RDP / VNC / TN5250 / MOSH via the external-launcher model. See `plugins/`.
+- 🔌 **Modular protocols** — Go-native protocol packages for SSH, SFTP, Telnet, Rlogin, Raw socket, HTTP, Serial / COM, plus experimental RDP / VNC / TN5250 / MOSH scaffolding. PowerShell remoting is planned and not registered until a native transport exists. See `plugins/`.
 - 🔐 **Pluggable credentials** — OS keychain, encrypted file vault (AES-256-GCM + Argon2id), 1Password (`op`), Bitwarden (`bw`).
 - 📥 **Trustworthy migration** — streaming XML + CSV importer for mRemoteNG data with explicit warnings instead of silent drops.
 - 🧱 **Stable plugin contract** — versioned SDK in `sdk/`; out-of-process plugin reference implementation in `host/plugin/ipc/`.
@@ -26,17 +26,16 @@ internal/
   platform/             OS-specific paths, keychain, clipboard, notifier
   logging/              slog wrapper with secret redaction (file sink + rotation)
   import/mremoteng/     XML + CSV importer with warnings
-  extlaunch/            External-launcher session helper (RDP / VNC / TN5250 / MOSH)
 app/                    App-level features: settings, workspace persistence, update,
                         diagnostics, marketplace, extplugin loader, git-sync
 plugins/
-  protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial}/   Real terminal protocols
-  protocol-{powershell,http}/                           Real launcher / browser protocols
-  protocol-{rdp,vnc,tn5250,mosh}/                       External-launcher protocols
+  protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial}/   Ready Go-native terminal protocols
+  protocol-http/                                        Experimental in-process HTTP client
+  protocol-{rdp,vnc,tn5250,mosh}/                       Experimental Go-native protocol scaffolds
+  protocol-powershell/                                  Planned Go-native PowerShell remoting module
   credential-{file,keychain,1password,bitwarden}/       Credential providers
-  external-example/                                     Reference out-of-process plugin
 proto/plugin/v1/        Length-prefixed JSON IPC frame + message types for the
-                        out-of-process plugin transport
+                        out-of-process credential provider transport
 cmd/desktop/            Fyne v2 entry point (gui_fyne.go + fyne_session.go)
 cmd/sign-manifest/      Release helper that signs auto-update manifests (Ed25519)
 installers/             Windows WiX MSI sources (and platform packaging stubs)
@@ -53,7 +52,7 @@ docs/screenshots/       Reserved for screenshots once the UI stabilizes
   - macOS: Xcode command-line tools.
   - Windows (cross-compiling from Linux): `gcc-mingw-w64-x86-64`.
   - Windows (native build): any C compiler; no extra SDK required.
-- Optional, only when used: `xfreerdp` / `mstsc`, `vncviewer`, `tn5250`, `mosh`, `op`, `bw`.
+- Optional, only when used: `op`, `bw`.
 
 ## Install / build / run
 
@@ -116,7 +115,7 @@ make dist-windows         # uses CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc interna
 ## Documentation
 
 - **[How-to guides](docs/howto/README.md)** — task-oriented walkthroughs (getting started, git sync, mRemoteNG import, credentials, plugins, backup/restore, updates, logs).
-- **[PARITY.md](PARITY.md)** — feature parity matrix vs mRemoteNG, including the external-launcher model for RDP / VNC / TN5250.
+- **[PARITY.md](PARITY.md)** — feature parity matrix vs mRemoteNG, including readiness status for each Go-native protocol module.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — dev workflow, plugin contracts, code review checklist.
 - **[SECURITY.md](SECURITY.md)** — threat model, credential handling guarantees, vulnerability reporting.
 - **[requirements.md](requirements.md)** — product and non-functional requirements.

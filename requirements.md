@@ -57,11 +57,12 @@ The platform must support a modular protocol system where all protocol implement
 - HTTP / HTTPS
 - Raw socket
 - rlogin
-- PowerShell remoting
-- External tool based sessions
+- PowerShell remoting (planned; must be Go-native before registration)
+- External tool based sessions (outside the protocol plugin system)
 
 #### Protocol requirements
 - Each protocol module must be a Go package implementing the shared protocol interface; no subprocess, IPC, or external service dependency is permitted.
+- Protocol modules that do not yet have complete Go-native engines must be marked experimental or planned and must not expose settings that imply unsupported behavior.
 - Each protocol module must declare capabilities, settings schema, auth requirements, rendering mode, and platform support.
 - Terminal-style protocols must support keyboard mapping, copy/paste, font settings, encoding selection, scrollback, logging, and theming.
 - Graphical protocols must support resize, clipboard integration, scaling, fullscreen, reconnect, and credential injection where permitted.

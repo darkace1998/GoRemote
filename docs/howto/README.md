@@ -13,7 +13,7 @@ on "how do I do X in the running app".
 | [Getting started](./getting-started.md) | First launch, choosing a credential provider, creating folders & connections, opening a session |
 | [Importing from mRemoteNG](./importing-from-mremoteng.md) | Streaming XML / CSV importer, inheritance, warnings vs silent drops |
 | [Credentials](./credentials.md) | OS keychain, encrypted file vault, 1Password (`op`), Bitwarden (`bw`), lock/unlock |
-| [Protocols](./protocols.md) | Built-in protocols, external-launcher protocols, prerequisites |
+| [Protocols](./protocols.md) | Built-in Go-native protocols, readiness status, prerequisites |
 | [Plugins](./plugins.md) | Discovering, enabling, quarantining; trust policy & keys; marketplace |
 | [Backup & restore](./backup-and-restore.md) | Zip backups, restore safety checks, integrity validator |
 | [Git sync](./git-sync.md) | Mirror your workspace as a git repo and auto-commit on every save |

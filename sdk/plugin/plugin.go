@@ -1,9 +1,8 @@
 // Package plugin defines the cross-cutting plugin SDK: manifests, capabilities,
 // trust levels, and lifecycle metadata shared by protocol and credential plugins.
 //
-// The plugin SDK is intentionally transport-agnostic. Built-in plugins satisfy
-// these interfaces directly; out-of-process plugins satisfy them through an IPC
-// shim (planned: gRPC/Connect over named pipes / Unix sockets).
+// Protocol plugins are compiled Go-native packages. Credential providers may
+// also be out-of-process and satisfy their interfaces through an IPC shim.
 package plugin
 
 import (
