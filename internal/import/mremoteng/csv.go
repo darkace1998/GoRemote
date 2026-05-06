@@ -1,6 +1,7 @@
 package mremoteng
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -14,7 +15,7 @@ import (
 // Rows with a Type column other than "Connection" (or empty, which we treat
 // as "Connection") are skipped — mRemoteNG CSV exports are connection-only.
 func parseCSV(r io.Reader) ([]rawConnection, error) {
-	cr := csv.NewReader(r)
+	cr := csv.NewReader(stripBOM(r))
 	cr.FieldsPerRecord = -1
 	cr.TrimLeadingSpace = true
 
@@ -51,6 +52,17 @@ func parseCSV(r io.Reader) ([]rawConnection, error) {
 		out = append(out, rc)
 	}
 	return out, nil
+}
+
+// stripBOM returns a reader that skips a leading UTF-8 BOM (0xEF 0xBB 0xBF)
+// if present, so CSV header lookups by name are not corrupted.
+func stripBOM(r io.Reader) io.Reader {
+	br := bufio.NewReader(r)
+	peeked, err := br.Peek(3)
+	if err == nil && peeked[0] == 0xEF && peeked[1] == 0xBB && peeked[2] == 0xBF {
+		_, _ = br.Discard(3)
+	}
+	return br
 }
 
 func isBlankRow(row []string) bool {

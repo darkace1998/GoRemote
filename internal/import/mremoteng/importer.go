@@ -143,6 +143,22 @@ func (i *importer) addFolder(n *rawConnection, parentID domain.ID, path string) 
 		Description: n.Descr,
 		Icon:        n.Icon,
 	}
+	// Populate defaults so children with Inherit* flags can pick them up.
+	f.Defaults.Host = n.Hostname
+	f.Defaults.Username = n.Username
+	f.Defaults.Description = n.Descr
+	f.Defaults.Icon = n.Icon
+	f.Defaults.Environment = n.Panel
+	if n.Protocol != "" {
+		if id, ok := mapProtocol(n.Protocol); ok {
+			f.Defaults.ProtocolID = id
+		}
+	}
+	if n.Port != "" {
+		if p := parsePort(n.Port); p > 0 {
+			f.Defaults.Port = p
+		}
+	}
 	if n.ID != "" {
 		f.Defaults.Settings = map[string]any{"legacy_id": n.ID}
 	}
@@ -220,6 +236,18 @@ func (i *importer) addConnection(n *rawConnection, parentID domain.ID, path stri
 		i.warn(SeverityInfo, CodeProtocolSetting,
 			fmt.Sprintf("legacy setting %q preserved; goremote's protocol plugin may not honour it yet", ps.attr),
 			path, ps.attr)
+	}
+
+	// Encrypted per-protocol passwords: stored as blobs, same treatment as Password.
+	for _, ep := range encryptedPerProtocolSettings {
+		v := perProtocolValue(n, ep.attr)
+		if v == "" {
+			continue
+		}
+		c.Settings[ep.key] = v
+		i.warn(SeverityWarn, CodeEncryptedPassword,
+			fmt.Sprintf("mRemoteNG %s blob preserved as %s; encrypted-password import is not yet supported — re-enter the credential or attach a credential reference", ep.attr, ep.key),
+			path, ep.attr)
 	}
 
 	// Inheritance profile translation.

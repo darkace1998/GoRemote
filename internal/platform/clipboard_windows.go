@@ -23,7 +23,10 @@ func (clipboardImpl) ReadText() (string, error) {
 }
 
 func (clipboardImpl) WriteText(s string) error {
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", "Set-Clipboard")
+	// "$input | Set-Clipboard" reads the process stdin via the PowerShell
+	// $input automatic variable and pipes it into Set-Clipboard, which is
+	// more reliable than passing the value as a bare -Command argument.
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", "$input | Set-Clipboard")
 	cmd.Stdin = strings.NewReader(s)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%w: Set-Clipboard: %v", ErrClipboardUnavailable, err)

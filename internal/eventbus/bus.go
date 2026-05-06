@@ -31,6 +31,7 @@ type Bus[T any] struct {
 	mu        sync.RWMutex
 	subs      map[*subscription[T]]struct{}
 	closed    bool
+	done      chan struct{} // closed by Close() to unblock Subscribe goroutines
 	published atomic.Uint64
 	dropped   atomic.Uint64
 }
@@ -39,6 +40,7 @@ type Bus[T any] struct {
 func New[T any]() *Bus[T] {
 	return &Bus[T]{
 		subs: make(map[*subscription[T]]struct{}),
+		done: make(chan struct{}),
 	}
 }
 
@@ -65,7 +67,10 @@ func (b *Bus[T]) Subscribe(ctx context.Context, buffer int) <-chan T {
 	b.mu.Unlock()
 
 	go func() {
-		<-ctx.Done()
+		select {
+		case <-ctx.Done():
+		case <-b.done:
+		}
 		b.removeSub(s)
 	}()
 
@@ -123,6 +128,7 @@ func (b *Bus[T]) Close() {
 	b.subs = make(map[*subscription[T]]struct{})
 	b.mu.Unlock()
 
+	close(b.done) // unblock any Subscribe goroutines waiting on b.done
 	for s := range subs {
 		close(s.ch)
 	}

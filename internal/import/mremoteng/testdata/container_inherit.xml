@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Connections Name="InheritTest" ConfVersion="2.7">
+  <Node Name="DevFolder" Type="Container" Hostname="dev.example.com" Username="devuser" Protocol="SSH2" Port="22">
+    <Node Name="child-explicit" Type="Connection"
+          Hostname="child.example.com" Protocol="SSH2" Port="2222"
+          Username="explicit"
+          InheritUsername="False" InheritPort="False" InheritProtocol="False"/>
+    <Node Name="child-inherit" Type="Connection"
+          Hostname="" Protocol="" Port=""
+          Username=""
+          InheritUsername="True" InheritPort="True" InheritProtocol="True"/>
+  </Node>
+</Connections>

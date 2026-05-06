@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,4 +107,50 @@ func TestFileSink_CloseRejectsLaterWrites(t *testing.T) {
 	if _, err := s.Write([]byte("after-close")); err == nil {
 		t.Errorf("expected write-after-close error")
 	}
+}
+
+// errCloseFile wraps a fileWriter but returns a configurable error from Close.
+type errCloseFile struct {
+fileWriter
+closeErr error
+}
+
+func (e *errCloseFile) Close() error { return e.closeErr }
+
+// TestFileSink_RotateCloseFailureClearsFile verifies that when rotateLocked
+// fails to close the current file, s.f is set to nil so subsequent Writes
+// return a clean "file sink closed" error instead of operating on a broken fd.
+func TestFileSink_RotateCloseFailureClearsFile(t *testing.T) {
+dir := t.TempDir()
+p := filepath.Join(dir, "a.log")
+s, err := OpenFileSink(p, 16) // small threshold to trigger rotation
+if err != nil {
+t.Fatalf("open: %v", err)
+}
+
+// Inject a closer that always fails.
+s.f = &errCloseFile{fileWriter: s.f, closeErr: errors.New("injected close error")}
+
+// Trigger rotation by setting size above threshold and calling rotateLocked.
+s.mu.Lock()
+s.size = 32
+rotErr := s.rotateLocked()
+s.mu.Unlock()
+
+if rotErr == nil {
+t.Fatal("expected rotateLocked to return the injected error")
+}
+
+s.mu.Lock()
+fNil := s.f == nil
+s.mu.Unlock()
+
+if !fNil {
+t.Error("s.f should be nil after a close failure in rotateLocked")
+}
+
+// Subsequent Write must return an error, not operate on a broken fd.
+if _, werr := s.Write([]byte("after-fail")); werr == nil {
+t.Error("Write after close failure should return an error")
+}
 }

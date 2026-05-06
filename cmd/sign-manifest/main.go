@@ -51,9 +51,12 @@ func main() {
 	var (
 		in     = flag.String("in", "", "input manifest JSON")
 		out    = flag.String("out", "", "output manifest JSON (default: overwrite -in)")
-		keyB64 = flag.String("key", os.Getenv("GOREMOTE_RELEASE_KEY"), "base64 Ed25519 private key (seed or full)")
+		keyB64 = flag.String("key", "", "base64 Ed25519 private key (seed or full; or set GOREMOTE_RELEASE_KEY env var)")
 	)
 	flag.Parse()
+	if *keyB64 == "" {
+		*keyB64 = os.Getenv("GOREMOTE_RELEASE_KEY")
+	}
 	if *in == "" {
 		fail("missing -in")
 	}
@@ -119,4 +122,14 @@ func decodeKey(b64 string) (ed25519.PrivateKey, error) {
 func fail(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "sign-manifest: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// resolveKey returns flagVal if non-empty, otherwise envVal.
+// This indirection prevents the env-var value from appearing as a flag
+// default (which would leak it in -help output).
+func resolveKey(flagVal, envVal string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	return envVal
 }

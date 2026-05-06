@@ -3,9 +3,7 @@
 package platform
 
 import (
-	"fmt"
 	"os/exec"
-	"strings"
 )
 
 func osNotify(title, body string) error {
@@ -13,13 +11,14 @@ func osNotify(title, body string) error {
 	if err != nil {
 		return ErrNotifierUnavailable
 	}
-	script := fmt.Sprintf(`display notification %q with title %q`, escapeAppleScript(body), escapeAppleScript(title))
-	if err := exec.Command(path, "-e", script).Run(); err != nil {
+	// Pass title and body as osascript argv so they are never interpolated
+	// into the script string, avoiding any double-escaping or injection.
+	if err := exec.Command(path,
+		"-e", "on run argv",
+		"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+		"-e", "end run",
+		"--", title, body).Run(); err != nil {
 		return ErrNotifierUnavailable
 	}
 	return nil
-}
-
-func escapeAppleScript(s string) string {
-	return strings.ReplaceAll(s, `"`, `\"`)
 }

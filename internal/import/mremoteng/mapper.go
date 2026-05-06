@@ -269,7 +269,7 @@ var perProtocolSettings = []struct {
 	{"VNCProxyIP", "vnc_proxy_ip"},
 	{"VNCProxyPort", "vnc_proxy_port"},
 	{"VNCProxyUsername", "vnc_proxy_username"},
-	{"VNCProxyPassword", "vnc_proxy_password"},
+	// VNCProxyPassword is intentionally absent here — handled as an encrypted blob.
 	{"VNCColors", "vnc_colors"},
 	{"VNCSmartSizeMode", "vnc_smart_size_mode"},
 	{"VNCViewOnly", "vnc_view_only"},
@@ -277,10 +277,18 @@ var perProtocolSettings = []struct {
 	{"RDGatewayHostname", "rd_gateway_hostname"},
 	{"RDGatewayUseConnectionCredentials", "rd_gateway_use_connection_credentials"},
 	{"RDGatewayUsername", "rd_gateway_username"},
-	{"RDGatewayPassword", "rd_gateway_password"},
+	// RDGatewayPassword is intentionally absent here — handled as an encrypted blob.
 	{"RDGatewayDomain", "rd_gateway_domain"},
 	{"PuttySession", "putty_session"},
 	{"Domain", "domain"},
+}
+
+// encryptedPerProtocolSettings lists the per-protocol password fields that
+// contain opaque ciphertext and must be flagged with CodeEncryptedPassword
+// rather than stored as plain protocol settings.
+var encryptedPerProtocolSettings = []struct{ attr, key string }{
+	{"VNCProxyPassword", "legacy_vnc_proxy_password_blob"},
+	{"RDGatewayPassword", "legacy_rd_gateway_password_blob"},
 }
 
 func perProtocolValue(r *rawConnection, attr string) string {

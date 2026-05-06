@@ -8,6 +8,14 @@ import (
 	"sync"
 )
 
+// fileWriter is the minimal interface FileSink requires of its backing file.
+// Satisfied by *os.File; replaceable in tests.
+type fileWriter interface {
+	Write(p []byte) (int, error)
+	Close() error
+	Stat() (os.FileInfo, error)
+}
+
 // FileSink is an io.Writer backed by a log file with simple size-based
 // rotation. Once the underlying file exceeds MaxBytes after a write, the
 // current file is renamed to <path>.1 (replacing any existing .1) and a
@@ -20,7 +28,7 @@ type FileSink struct {
 	maxBytes int64
 
 	mu   sync.Mutex
-	f    *os.File
+	f    fileWriter
 	size int64
 }
 
@@ -81,6 +89,7 @@ func (s *FileSink) Write(p []byte) (int, error) {
 
 func (s *FileSink) rotateLocked() error {
 	if err := s.f.Close(); err != nil {
+		s.f = nil // broken fd; mark closed so next Write returns an error
 		return err
 	}
 	rotated := s.path + ".1"
