@@ -362,3 +362,66 @@ func fmtScanPort(s string, out *int) (int, error) {
 	*out = n
 	return 1, nil
 }
+
+// TestStart_CancelDuringLogin verifies that cancelling ctx during the blocking
+// doPasswordLogin (server accepts TCP but never sends "login:") causes Start
+// to return promptly instead of blocking forever.
+func TestStart_CancelDuringLogin(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	// Accept the connection but never write anything.
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		// Block until the connection is closed by the client.
+		buf := make([]byte, 1)
+		for {
+			if _, err := conn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
+	var port int
+	if _, err := fmtScanPort(portStr, &port); err != nil {
+		t.Fatalf("parse port: %v", err)
+	}
+
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+
+	sess := &Session{
+		neg:      NewNegotiator(conn, "xterm", 80, 24),
+		auth:     protocol.AuthPassword,
+		username: "user",
+		password: "pass",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() { done <- sess.Start(ctx, nil, io.Discard) }()
+
+	// Give Start a moment to block inside doPasswordLogin, then cancel.
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil || (!errors.Is(err, context.Canceled) && !isBenignCloseErr(err)) {
+			t.Logf("Start returned: %v (acceptable)", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not return within 2s after ctx cancel during blocking login")
+	}
+}

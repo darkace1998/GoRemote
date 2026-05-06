@@ -137,15 +137,6 @@ func configFromRequest(req protocol.OpenRequest) (*config, error) {
 	}, nil
 }
 
-// hostArg renders the address used to connect to the remote. It returns
-// "host" when port == defaultPort and "host:port" otherwise.
-func hostArg(cfg *config) string {
-	if cfg.Port == defaultPort {
-		return cfg.Host
-	}
-	return cfg.Host + ":" + strconv.Itoa(cfg.Port)
-}
-
 // Open validates settings and returns a Session ready to dial the remote.
 // The TCP connection is not established until [Session.Start] is called.
 func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.Session, error) {

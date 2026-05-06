@@ -21,6 +21,13 @@ import (
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
+// lineResult carries one line (or error) from the background stdin reader
+// goroutine to the Start select loop.
+type lineResult struct {
+	line string
+	err  error
+}
+
 // Session is a live SFTP browser session. The user interacts with a
 // classic shell-style REPL (cwd-prompt, line-buffered commands) over
 // the host's terminal pane.
@@ -109,26 +116,47 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 	}()
 
 	if stdin != nil {
-		// Drive the REPL from the stdin pipe. Reads a line at a time
-		// so we can keep the prompt model consistent regardless of
-		// whether the host buffers locally.
+		// Drive the REPL from the stdin pipe. Lines are read in a helper
+		// goroutine so that ctx cancellation or Close can interrupt the main
+		// loop without blocking inside bufio.Reader.ReadString. The helper
+		// goroutine exits when it encounters an error or s.closed is closed.
 		r := bufio.NewReader(stdin)
+		lineCh := make(chan lineResult, 1)
+		go func() {
+			for {
+				line, err := readLine(r)
+				select {
+				case lineCh <- lineResult{line, err}:
+				case <-s.closed:
+					return
+				}
+				if err != nil {
+					return
+				}
+			}
+		}()
 		for {
-			line, err := readLine(r)
-			if err != nil {
-				if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
+			select {
+			case <-ctx.Done():
+				return s.Close()
+			case <-s.closed:
+				return nil
+			case res := <-lineCh:
+				if res.err != nil {
+					if errors.Is(res.err, io.EOF) || errors.Is(res.err, io.ErrClosedPipe) {
+						return s.Close()
+					}
+					if ctx.Err() != nil {
+						return s.Close()
+					}
+					_ = s.writeLine("[stdin error: " + res.err.Error() + "]")
 					return s.Close()
 				}
-				if ctx.Err() != nil {
+				if cont := s.handleLine(ctx, res.line); !cont {
 					return s.Close()
 				}
-				_ = s.writeLine("[stdin error: " + err.Error() + "]")
-				return s.Close()
+				s.writePrompt()
 			}
-			if cont := s.handleLine(ctx, line); !cont {
-				return s.Close()
-			}
-			s.writePrompt()
 		}
 	}
 

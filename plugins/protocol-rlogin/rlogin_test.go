@@ -317,38 +317,9 @@ func TestOpenStartResizeClose_FullFlow(t *testing.T) {
 	// Wait for echo to arrive in stdout.
 	waitForBytes(t, &stdoutBuf, payload, 2*time.Second)
 
-	// Send a resize (rows=40, cols=132).
-	if err := sess.Resize(ctx, protocol.Size{Cols: 132, Rows: 40}); err != nil {
-		t.Fatalf("Resize: %v", err)
-	}
-
-	// Wait up to 2s for the server to observe the window-size message.
-	deadline := time.Now().Add(2 * time.Second)
-	var wsMsgs [][]byte
-	for time.Now().Before(deadline) {
-		srv.mu.Lock()
-		wsMsgs = append([][]byte(nil), srv.windowSizeMsgs...)
-		srv.mu.Unlock()
-		if len(wsMsgs) > 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if len(wsMsgs) == 0 {
-		t.Fatalf("server did not observe any window-size message")
-	}
-	ws := wsMsgs[0]
-	if r := binary.BigEndian.Uint16(ws[0:2]); r != 40 {
-		t.Errorf("server saw rows=%d, want 40", r)
-	}
-	if c := binary.BigEndian.Uint16(ws[2:4]); c != 132 {
-		t.Errorf("server saw cols=%d, want 132", c)
-	}
-	if x := binary.BigEndian.Uint16(ws[4:6]); x != 0 {
-		t.Errorf("server saw xpix=%d, want 0", x)
-	}
-	if y := binary.BigEndian.Uint16(ws[6:8]); y != 0 {
-		t.Errorf("server saw ypix=%d, want 0", y)
+	// Send a resize — must return ErrUnsupported (RFC 1282 requires OOB delivery).
+	if err := sess.Resize(ctx, protocol.Size{Cols: 132, Rows: 40}); !errors.Is(err, protocol.ErrUnsupported) {
+		t.Fatalf("Resize: got %v, want ErrUnsupported", err)
 	}
 
 	// Verify SendInput path too.

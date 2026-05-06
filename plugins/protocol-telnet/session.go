@@ -43,6 +43,20 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 		stdout = io.Discard
 	}
 
+	// Hoist the ctx-cancel watcher before login so that a cancellation during
+	// doPasswordLogin can close the connection and unblock the blocking Read
+	// inside expectPrompt. Without this, a server that never sends "login:"
+	// causes doPasswordLogin to block forever regardless of ctx.
+	ctxDone := make(chan struct{})
+	defer close(ctxDone)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = s.Close()
+		case <-ctxDone:
+		}
+	}()
+
 	if s.auth == protocol.AuthPassword {
 		if err := s.doPasswordLogin(ctx, stdout); err != nil {
 			return err
@@ -65,21 +79,11 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 		errCh <- err
 	}()
 
-	// Watch ctx cancellation in parallel so we can tear down the conn.
-	ctxDone := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = s.Close()
-		case <-ctxDone:
-		}
-	}()
-
 	// Wait for first goroutine to finish, then close so the other unwinds.
 	first := <-errCh
 	_ = s.Close()
 	second := <-errCh
-	close(ctxDone)
+	// ctxDone is closed by defer above.
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr

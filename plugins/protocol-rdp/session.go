@@ -4,23 +4,22 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"sync"
 
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
-// Session is a live RDP session backed by an in-process TCP connection.
+// Session is a live RDP session placeholder.
 //
-// The session dials host:port on Start and relays the remote TCP stream
-// without spawning an external binary. Full RDP framing is still experimental.
+// Open validates config and provides a reachability check via TCP dial in the
+// module. Start immediately returns ErrUnsupported: full RDP protocol framing,
+// TLS negotiation, and auth are not yet implemented. Connecting without these
+// would deliver garbage data to the caller.
 type Session struct {
 	addr string
 
-	mu       sync.Mutex
-	conn     net.Conn
-	closed   bool
-	closeErr error
+	closeOnce sync.Once
+	closeErr  error
 }
 
 // Compile-time assertion: *Session implements protocol.Session.
@@ -33,108 +32,31 @@ func newSession(addr string) *Session {
 // RenderMode reports the graphical rendering mode used by RDP sessions.
 func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderGraphical }
 
-// Start dials the remote RDP endpoint and runs the bidirectional I/O loop.
-// It blocks until the remote closes, ctx is cancelled, or Close is called.
+// Start returns ErrUnsupported. Full RDP protocol framing is not yet
+// implemented; returning ErrUnsupported avoids presenting a "connected"
+// session that streams raw unframed TCP bytes.
 func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
-	if stdout == nil {
-		stdout = io.Discard
-	}
-
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return nil
-	}
-	s.mu.Unlock()
-
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", s.addr)
-	if err != nil {
-		return fmt.Errorf("rdp: dial %s: %w", s.addr, err)
-	}
-
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		_ = conn.Close()
-		return nil
-	}
-	s.conn = conn
-	s.mu.Unlock()
-
-	fromServer := make(chan error, 1)
-	go func() {
-		_, err := io.Copy(stdout, conn)
-		fromServer <- err
-	}()
-
-	var result error
-	select {
-	case result = <-fromServer:
-		_ = s.Close()
-	case <-ctx.Done():
-		_ = s.Close()
-		<-fromServer
-		return nil
-	}
-
-	if result != nil && ctx.Err() != nil {
-		return nil
-	}
-	if result != nil {
-		s.mu.Lock()
-		closed := s.closed
-		s.mu.Unlock()
-		if closed {
-			return nil
-		}
-	}
-	return result
+	return protocol.ErrUnsupported
 }
 
-// Resize requests a window-size change. This will be wired to the RDP
-// resize PDU once the full protocol layer is in place.
+// Resize is not wired to an RDP resize PDU.
 func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 	return protocol.ErrUnsupported
 }
 
-// SendInput writes data directly to the remote TCP stream.
+// SendInput returns an error because no connection is established while
+// Start returns ErrUnsupported.
 func (s *Session) SendInput(ctx context.Context, data []byte) error {
 	if ctx != nil {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 	}
-	s.mu.Lock()
-	conn := s.conn
-	closed := s.closed
-	s.mu.Unlock()
-	if closed {
-		return fmt.Errorf("rdp: session closed")
-	}
-	if conn == nil {
-		return fmt.Errorf("rdp: session not started")
-	}
-	_, err := conn.Write(data)
-	return err
+	return fmt.Errorf("rdp: session not started")
 }
 
-// Close terminates the TCP connection. Safe to call multiple times.
+// Close is idempotent. No connection is held while Start returns ErrUnsupported.
 func (s *Session) Close() error {
-	s.mu.Lock()
-	if s.closed {
-		err := s.closeErr
-		s.mu.Unlock()
-		return err
-	}
-	s.closed = true
-	conn := s.conn
-	s.mu.Unlock()
-	if conn == nil {
-		return nil
-	}
-	err := conn.Close()
-	s.mu.Lock()
-	s.closeErr = err
-	s.mu.Unlock()
-	return err
+	s.closeOnce.Do(func() {})
+	return s.closeErr
 }

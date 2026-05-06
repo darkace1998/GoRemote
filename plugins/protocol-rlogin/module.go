@@ -52,7 +52,7 @@ func (m *Module) Capabilities() protocol.Capabilities {
 	return protocol.Capabilities{
 		RenderModes:     []protocol.RenderMode{protocol.RenderTerminal},
 		AuthMethods:     []protocol.AuthMethod{protocol.AuthNone},
-		SupportsResize:  true,
+		SupportsResize:  false,
 		SupportsLogging: true,
 	}
 }

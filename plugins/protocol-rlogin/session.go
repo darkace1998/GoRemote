@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -126,21 +125,15 @@ func buildWindowSize(rows, cols, xpix, ypix uint16) []byte {
 	return b
 }
 
-// Resize sends an in-band window-size notification.
+// Resize returns ErrUnsupported. RFC 1282 requires the window-size message
+// to be delivered via TCP urgent (out-of-band) data, which portable user-space
+// code cannot reliably send. The in-band 0xFF 0xFF 's' 's' framing is not
+// honoured by compliant rlogind implementations. Use SSH for resize support.
 //
-// Deviation from RFC 1282: the RFC specifies this be delivered via TCP
-// urgent (out-of-band) data alongside a 0x80 control marker. This
-// implementation sends it in-band; the 0xFF 0xFF 's' 's' framing is
-// distinctive enough that compliant servers will still recognize it.
+// buildWindowSize is retained for potential future use when OOB delivery is
+// implemented.
 func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
-	if size.Cols <= 0 || size.Rows <= 0 {
-		return fmt.Errorf("rlogin: invalid resize %dx%d", size.Cols, size.Rows)
-	}
-	if size.Cols > 0xFFFF || size.Rows > 0xFFFF {
-		return fmt.Errorf("rlogin: resize %dx%d exceeds uint16 range", size.Cols, size.Rows)
-	}
-	msg := buildWindowSize(uint16(size.Rows), uint16(size.Cols), 0, 0)
-	return s.writeLocked(msg)
+	return protocol.ErrUnsupported
 }
 
 // SendInput writes data to the remote.
