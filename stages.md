@@ -61,11 +61,11 @@
 - Secret handling passes review.
 
 ## Stage 5 - Graphical and Launcher Protocols
-**Status: ✅ Delivered** — RDP, VNC, HTTP, PowerShell via `internal/extlaunch`; MOSH via external launcher.
+**Status: ✅ Delivered** — RDP and VNC implemented as Go-native in-process packages; HTTP, PowerShell, and MOSH delivered via user-configured external tool sessions.
 ### Goals
-- Add VNC and RDP support.
+- Add VNC and RDP support as Go-native protocol packages.
 - Add HTTP/HTTPS launch flows, PowerShell remoting integration, and external tool modules.
-- Support embedded rendering where practical and external-launch fallback where necessary.
+- Support embedded in-process rendering for graphical protocols.
 
 ### Exit Criteria
 - Users have a viable path for major non-terminal workflows.

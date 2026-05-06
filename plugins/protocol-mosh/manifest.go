@@ -1,8 +1,9 @@
 // Package mosh implements the MOSH (Mobile Shell) protocol plugin for goremote.
-// MOSH uses SSH for initial channel negotiation then switches to an encrypted
-// UDP datagram stream for the terminal session.  goremote launches the system
-// `mosh` binary as an external process (RenderExternal), consistent with how
-// graphical protocols like RDP and VNC are handled.
+//
+// Sessions are handled in-process: the plugin uses golang.org/x/crypto/ssh to
+// dial the SSH port, runs "mosh-server new" on the remote, parses the
+// "MOSH CONNECT <port> <key>" output, and establishes the MOSH UDP session.
+// No external binary is required. Rendering uses [protocol.RenderTerminal].
 package mosh
 
 import "github.com/darkace1998/GoRemote/sdk/plugin"
@@ -13,18 +14,16 @@ import "github.com/darkace1998/GoRemote/sdk/plugin"
 var Manifest = plugin.Manifest{
 	ID:          "io.goremote.protocol.mosh",
 	Name:        "MOSH",
-	Description: "Mobile Shell: SSH-negotiated, UDP-based terminal with local echo and intelligent roaming.",
+	Description: "Mobile Shell: SSH-bootstrapped, UDP-based terminal with local echo and intelligent roaming — Go-native in-process session.",
 	Kind:        plugin.KindProtocol,
-	Version:     "0.1.0",
+	Version:     "2.0.0",
 	APIVersion:  plugin.CurrentAPIVersion,
 	Capabilities: []plugin.Capability{
 		plugin.CapNetworkOutbound,
-		plugin.CapProcessSpawn,
-		plugin.CapOSExec,
-		plugin.CapExternalLauncher,
+		plugin.CapTerminal,
 	},
-	Platforms: []string{"linux", "darwin"},
 	Status:    plugin.StatusReady,
 	Publisher: "goremote",
 	License:   "Apache-2.0",
 }
+

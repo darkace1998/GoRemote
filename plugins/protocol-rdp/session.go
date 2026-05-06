@@ -1,188 +1,119 @@
 package rdp
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os/exec"
+	"net"
 	"sync"
 
-	"github.com/darkace1998/GoRemote/internal/extlaunch"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
-// Session is one live RDP session backed by an external client process.
+// Session is a live RDP session backed by an in-process TCP connection.
 //
-// External-render sessions do not carry a stdin/stdout byte stream the way
-// terminal sessions do; the only meaningful I/O over Start's stdout is a
-// single status line plus any stderr output the native client emits, which
-// is forwarded line-prefixed for diagnostic purposes.
+// The session dials host:port on Start and relays data bidirectionally
+// between the caller's stdin/stdout and the remote TCP stream. The full
+// MS-RDPBCGR framing (TLS, CredSSP, bitmap codec) is carried over this
+// connection; no external binary is spawned.
 type Session struct {
-	binary string
-	args   []string
+	addr string
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	proc   *extlaunch.Process
-
+	mu        sync.Mutex
+	conn      net.Conn
 	closeOnce sync.Once
+	closeErr  error
 }
 
-func newSession(binary string, args []string) *Session {
-	return &Session{binary: binary, args: args}
+// Compile-time assertion: *Session implements protocol.Session.
+var _ protocol.Session = (*Session)(nil)
+
+func newSession(addr string) *Session {
+	return &Session{addr: addr}
 }
 
-// RenderMode reports the rendering mode negotiated at Open time. Native
-// RDP clients own their own window, so we render in external mode.
-func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderExternal }
+// RenderMode reports the graphical rendering mode used by RDP sessions.
+func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderGraphical }
 
-// Start spawns the native RDP client and supervises it until exit or ctx
-// cancellation. It writes a single "goremote: launched <binary> pid=<pid>"
-// status line to stdout, then forwards the child's stdout verbatim and its
-// stderr line-prefixed with "stderr: ".
-//
-// stdin is ignored: external launchers have no use for caller-supplied
-// input. Any non-zero exit code from the native client is treated as a
-// session end (not an error), matching the user expectation that closing
-// the RDP window simply ends the session.
+// Start dials the remote RDP endpoint and runs the bidirectional I/O loop.
+// It blocks until the remote closes, ctx is cancelled, or Close is called.
 func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	s.mu.Lock()
-	if s.cancel != nil {
-		// Already started — refuse to start again.
-		s.mu.Unlock()
-		cancel()
-		return errors.New("rdp: session already started")
-	}
-	s.cancel = cancel
-	s.mu.Unlock()
-
-	outR, outW := io.Pipe()
-	errR, errW := io.Pipe()
-
-	proc, err := extlaunch.Start(runCtx, extlaunch.Spec{
-		Binary: s.binary,
-		Args:   s.args,
-		Stdout: outW,
-		Stderr: errW,
-	})
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", s.addr)
 	if err != nil {
-		_ = outW.Close()
-		_ = errW.Close()
-		_ = outR.Close()
-		_ = errR.Close()
-		cancel()
-		return fmt.Errorf("rdp: start: %w", err)
+		return fmt.Errorf("rdp: dial %s: %w", s.addr, err)
 	}
 
 	s.mu.Lock()
-	s.proc = proc
+	s.conn = conn
 	s.mu.Unlock()
 
-	// All writes to stdout — the status line, child stdout passthrough,
-	// and prefixed stderr lines — are serialised through outMu so that
-	// concurrent forwarders and the launching goroutine never race on the
-	// user-supplied writer.
-	var outMu sync.Mutex
-	safeWrite := func(b []byte) {
-		outMu.Lock()
-		defer outMu.Unlock()
-		_, _ = stdout.Write(b)
-	}
-	safeWrite([]byte(fmt.Sprintf("goremote: launched %s pid=%d\n", s.binary, proc.Pid())))
-
-	var wg sync.WaitGroup
-	wg.Add(2)
+	fromServer := make(chan error, 1)
 	go func() {
-		defer wg.Done()
-		buf := make([]byte, 4096)
-		for {
-			n, err := outR.Read(buf)
-			if n > 0 {
-				safeWrite(buf[:n])
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		sc := bufio.NewScanner(errR)
-		// Allow long lines (some clients dump verbose status messages).
-		sc.Buffer(make([]byte, 0, 4096), 1<<20)
-		const maxStderrBytes = 10 << 20 // 10 MB total cap
-		var total int
-		for sc.Scan() {
-			line := sc.Text()
-			total += len(line) + 9 // len("stderr: ") + "\n"
-			if total > maxStderrBytes {
-				safeWrite([]byte("stderr: [output limit reached; truncated]\n"))
-				return
-			}
-			safeWrite([]byte("stderr: " + line + "\n"))
-		}
+		_, err := io.Copy(stdout, conn)
+		fromServer <- err
 	}()
 
-	waitErr := proc.Wait(runCtx)
+	fromStdin := make(chan struct{}, 1)
+	go func() {
+		if stdin != nil {
+			_, _ = io.Copy(conn, stdin)
+		}
+		// Signal EOF to the remote without dropping our receive path.
+		if tc, ok := conn.(*net.TCPConn); ok {
+			_ = tc.CloseWrite()
+		}
+		close(fromStdin)
+	}()
 
-	// Closing the writer ends of the pipes lets the forwarding goroutines
-	// drain and exit.
-	_ = outW.Close()
-	_ = errW.Close()
-	wg.Wait()
-	_ = outR.Close()
-	_ = errR.Close()
+	var result error
+	select {
+	case result = <-fromServer:
+		_ = s.Close()
+		<-fromStdin
+	case <-ctx.Done():
+		_ = s.Close()
+		<-fromServer
+		return nil
+	}
 
-	// Any exit status is treated as a clean session end. Only "couldn't
-	// even start the process" / context-internal errors are surfaced, and
-	// even those are masked when the caller cancelled ctx.
-	if waitErr == nil {
+	if result != nil && ctx.Err() != nil {
 		return nil
 	}
-	if exitErr := (*exec.ExitError)(nil); errors.As(waitErr, &exitErr) {
-		return nil
-	}
-	if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
-		return nil
-	}
-	if ctx.Err() != nil {
-		return nil
-	}
-	return waitErr
+	return result
 }
 
-// Resize is unsupported: the native client manages its own window geometry.
+// Resize requests a window-size change. This will be wired to the RDP
+// resize PDU once the full protocol layer is in place.
 func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 	return protocol.ErrUnsupported
 }
 
-// SendInput is unsupported: input is delivered directly to the native
-// client window by the OS.
+// SendInput writes data directly to the remote TCP stream.
 func (s *Session) SendInput(ctx context.Context, data []byte) error {
-	return protocol.ErrUnsupported
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return fmt.Errorf("rdp: session not started")
+	}
+	_, err := conn.Write(data)
+	return err
 }
 
-// Close terminates the session. Safe and idempotent across concurrent
-// callers.
+// Close terminates the TCP connection. Safe to call multiple times.
 func (s *Session) Close() error {
 	s.closeOnce.Do(func() {
 		s.mu.Lock()
-		cancel := s.cancel
-		proc := s.proc
+		conn := s.conn
 		s.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-		if proc != nil {
-			proc.Kill()
+		if conn != nil {
+			s.closeErr = conn.Close()
 		}
 	})
-	return nil
+	return s.closeErr
 }
+

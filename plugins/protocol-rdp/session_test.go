@@ -4,205 +4,187 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
-	"os"
-	"strconv"
-	"strings"
-	"sync"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
-func helperSession(args ...string) *Session {
-	argv := append([]string{"-test.run=TestHelperProcess", "--"}, args...)
-	return newSession(os.Args[0], argv)
+// startEchoServer starts a TCP echo server and returns its address and a
+// closer. The server echoes every byte it receives back to the sender.
+func startEchoServer(t *testing.T) (addr string, close func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() { io.Copy(conn, conn); conn.Close() }() //nolint:errcheck
+		}
+	}()
+	return ln.Addr().String(), func() { _ = ln.Close() }
 }
 
-func TestHelperProcess(t *testing.T) {
-	sep := -1
-	for i, arg := range os.Args {
-		if arg == "--" {
-			sep = i
-			break
-		}
+// startFixedReplyServer starts a TCP server that sends a fixed reply to each
+// accepted connection and then closes it.
+func startFixedReplyServer(t *testing.T, reply []byte) (addr string, close func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
 	}
-	if sep < 0 || sep+1 >= len(os.Args) {
-		return
-	}
-
-	switch os.Args[sep+1] {
-	case "stdout":
-		if sep+2 < len(os.Args) {
-			fmt.Fprintln(os.Stdout, os.Args[sep+2])
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				_, _ = conn.Write(reply)
+				_ = conn.Close()
+			}()
 		}
-	case "stderr":
-		if sep+2 < len(os.Args) {
-			fmt.Fprintln(os.Stderr, os.Args[sep+2])
-		}
-	case "exit":
-		code := 0
-		if sep+2 < len(os.Args) {
-			code, _ = strconv.Atoi(os.Args[sep+2])
-		}
-		os.Exit(code)
-	case "sleep":
-		time.Sleep(30 * time.Second)
-	}
-	os.Exit(0)
+	}()
+	return ln.Addr().String(), func() { _ = ln.Close() }
 }
 
-func TestStart_LaunchesAndForwardsLine(t *testing.T) {
-	sess := helperSession("stdout", "launched")
+func TestRenderMode(t *testing.T) {
+	s := newSession("127.0.0.1:3389")
+	if s.RenderMode() != protocol.RenderGraphical {
+		t.Fatalf("RenderMode = %s, want graphical", s.RenderMode())
+	}
+}
 
+func TestStart_ReceivesDataFromServer(t *testing.T) {
+	want := []byte("rdp-server-hello")
+	addr, closeServer := startFixedReplyServer(t, want)
+	defer closeServer()
+
+	sess := newSession(addr)
 	var out bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	if err := sess.Start(ctx, nil, &out); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("output = %q, want %q", out.Bytes(), want)
+	}
+}
+
+func TestStart_SendsDataToServer(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
+
+	sess := newSession(addr)
+
+	pr, pw := io.Pipe()
+	var out bytes.Buffer
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	done := make(chan error, 1)
-	go func() { done <- sess.Start(ctx, nil, &out) }()
+	go func() { done <- sess.Start(ctx, pr, &out) }()
+
+	// Write then close stdin so the I/O loop terminates.
+	msg := []byte("hello-rdp")
+	_, _ = pw.Write(msg)
+	_ = pw.Close()
 
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("Start returned error: %v", err)
+			t.Fatalf("Start: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatalf("Start did not return")
+		t.Fatal("Start did not return")
 	}
 
-	got := out.String()
-	if !strings.Contains(got, "goremote: launched "+os.Args[0]+" pid=") {
-		t.Fatalf("status line missing in output: %q", got)
-	}
-	if !strings.Contains(got, "launched\n") {
-		t.Fatalf("child stdout 'launched' line missing in output: %q", got)
+	if !bytes.Equal(out.Bytes(), msg) {
+		t.Fatalf("echoed = %q, want %q", out.Bytes(), msg)
 	}
 }
 
-func TestStart_ForwardsStderrLinePrefixed(t *testing.T) {
-	sess := helperSession("stderr", "oops")
-	var out bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := sess.Start(ctx, nil, &out); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if !strings.Contains(out.String(), "stderr: oops") {
-		t.Fatalf("expected line-prefixed stderr forwarding, got %q", out.String())
-	}
-}
+func TestStart_ContextCancellation(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
 
-func TestStart_NonZeroExitTreatedAsClean(t *testing.T) {
-	sess := helperSession("exit", "7")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := sess.Start(ctx, nil, io.Discard); err != nil {
-		t.Fatalf("non-zero exit must surface as nil; got %v", err)
-	}
-}
-
-func TestStart_ContextCancellationStops(t *testing.T) {
-	sess := helperSession("sleep")
+	sess := newSession(addr)
 	ctx, cancel := context.WithCancel(context.Background())
-
-	done := make(chan error, 1)
-	go func() { done <- sess.Start(ctx, nil, io.Discard) }()
-
-	time.Sleep(80 * time.Millisecond)
-	cancel()
-
-	select {
-	case err := <-done:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("Start returned unexpected error after cancel: %v", err)
-		}
-	case <-time.After(8 * time.Second):
-		t.Fatalf("Start did not return after ctx cancel")
-	}
-}
-
-func TestCloseIdempotent(t *testing.T) {
-	sess := helperSession("sleep")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	done := make(chan error, 1)
 	go func() { done <- sess.Start(ctx, nil, io.Discard) }()
 
 	time.Sleep(50 * time.Millisecond)
-
-	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := sess.Close(); err != nil {
-				t.Errorf("Close: %v", err)
-			}
-		}()
-	}
-	wg.Wait()
+	cancel()
 
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	case <-time.After(5 * time.Second):
-		t.Fatalf("Start did not return after Close")
-	}
-
-	// And one more Close just to confirm.
-	if err := sess.Close(); err != nil {
-		t.Fatalf("Close after stop: %v", err)
+		t.Fatal("Start did not return after context cancel")
 	}
 }
 
-func TestSendInputAndResizeUnsupported(t *testing.T) {
-	sess := helperSession("stdout", "unused")
-	if err := sess.SendInput(context.Background(), []byte("x")); !errors.Is(err, protocol.ErrUnsupported) {
-		t.Fatalf("SendInput err = %v, want ErrUnsupported", err)
-	}
-	if err := sess.Resize(context.Background(), protocol.Size{Cols: 80, Rows: 24}); !errors.Is(err, protocol.ErrUnsupported) {
-		t.Fatalf("Resize err = %v, want ErrUnsupported", err)
-	}
-}
-
-// TestOpen_WithInjectedDiscover verifies that the public Open path,
-// configured with a test-only discover hook, produces a Session whose Start
-// can run a known no-op binary and emit the launched marker line.
-func TestOpen_WithInjectedDiscover(t *testing.T) {
-	mod := &Module{
-		discover: func(override string, candidates []string) (string, error) {
-			return os.Args[0], nil
-		},
-		argvFor: func(goos string, cfg *config) ([]string, error) {
-			return []string{"-test.run=TestHelperProcess", "--", "stdout", "launched"}, nil
-		},
-	}
-	sess, err := mod.Open(context.Background(), protocol.OpenRequest{
-		Host: "h",
-		Port: 3389,
-		Settings: map[string]any{
-			SettingHost: "h",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if sess.RenderMode() != protocol.RenderExternal {
-		t.Fatalf("RenderMode = %v want external", sess.RenderMode())
-	}
-	var out bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func TestStart_DialFailure(t *testing.T) {
+	sess := newSession("127.0.0.1:1") // port 1 should not be listening
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := sess.Start(ctx, nil, &out); err != nil {
-		t.Fatalf("Start: %v", err)
+
+	err := sess.Start(ctx, nil, io.Discard)
+	if err == nil {
+		t.Fatal("expected dial error, got nil")
 	}
-	if !strings.Contains(out.String(), "goremote: launched "+os.Args[0]+" pid=") {
-		t.Fatalf("missing status line in %q", out.String())
+}
+
+func TestClose_Idempotent(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
+
+	sess := newSession(addr)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() { _ = sess.Start(ctx, nil, io.Discard) }()
+	time.Sleep(30 * time.Millisecond)
+
+	for i := 0; i < 8; i++ {
+		if err := sess.Close(); err != nil {
+			t.Errorf("Close #%d: %v", i, err)
+		}
 	}
-	if !strings.Contains(out.String(), "launched\n") {
-		t.Fatalf("missing child output in %q", out.String())
+}
+
+func TestClose_BeforeStart(t *testing.T) {
+	sess := newSession("127.0.0.1:3389")
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close before Start: %v", err)
+	}
+}
+
+func TestSendInput_BeforeStart(t *testing.T) {
+	sess := newSession("127.0.0.1:3389")
+	err := sess.SendInput(context.Background(), []byte("x"))
+	if err == nil {
+		t.Fatal("expected error when session not started")
+	}
+}
+
+func TestResize_Unsupported(t *testing.T) {
+	sess := newSession("127.0.0.1:3389")
+	err := sess.Resize(context.Background(), protocol.Size{Cols: 80, Rows: 24})
+	if !errors.Is(err, protocol.ErrUnsupported) {
+		t.Fatalf("Resize err = %v, want ErrUnsupported", err)
 	}
 }

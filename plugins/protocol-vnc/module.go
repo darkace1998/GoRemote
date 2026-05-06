@@ -3,7 +3,8 @@ package vnc
 import (
 	"context"
 	"fmt"
-	"runtime"
+	"net"
+	"strconv"
 
 	"github.com/darkace1998/GoRemote/sdk/plugin"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
@@ -11,20 +12,10 @@ import (
 
 // Setting keys exposed by the VNC plugin.
 const (
-	SettingHost        = "host"
-	SettingPort        = "port"
-	SettingPasswordVia = "password_via"
-	SettingViewOnly    = "view_only"
-	SettingFullscreen  = "fullscreen"
-	SettingBinary      = "binary"
-	SettingExtraArgs   = "extra_args"
-)
-
-// Allowed values for password_via.
-const (
-	PasswordViaNone         = "none"
-	PasswordViaStdin        = "stdin"
-	PasswordViaPasswordFile = "passwordfile"
+	SettingHost       = "host"
+	SettingPort       = "port"
+	SettingViewOnly   = "view_only"
+	SettingFullscreen = "fullscreen"
 )
 
 // Default port for VNC (display 0 == 5900).
@@ -60,12 +51,6 @@ func (m *Module) Settings() []protocol.SettingDef {
 			Description: "TCP port of the VNC server (5900 is display :0).",
 		},
 		{
-			Key: SettingPasswordVia, Label: "Password delivery", Type: protocol.SettingEnum,
-			Default:     PasswordViaNone,
-			EnumValues:  []string{PasswordViaNone, PasswordViaStdin, PasswordViaPasswordFile},
-			Description: "How to deliver the credential password to the viewer (when a credential is supplied).",
-		},
-		{
 			Key: SettingViewOnly, Label: "View-only", Type: protocol.SettingBool,
 			Default:     false,
 			Description: "Open the session without sending input events to the server.",
@@ -73,29 +58,19 @@ func (m *Module) Settings() []protocol.SettingDef {
 		{
 			Key: SettingFullscreen, Label: "Fullscreen", Type: protocol.SettingBool,
 			Default:     false,
-			Description: "Launch the viewer in fullscreen mode.",
-		},
-		{
-			Key: SettingBinary, Label: "Viewer binary", Type: protocol.SettingString,
-			Description: "Explicit path or name of the VNC viewer binary (overrides auto-discovery).",
-		},
-		{
-			Key: SettingExtraArgs, Label: "Extra arguments", Type: protocol.SettingString,
-			Description: "Additional command-line arguments appended after the rendered argv.",
+			Description: "Request a fullscreen display.",
 		},
 	}
 }
 
-// Capabilities reports the runtime capabilities advertised by the VNC
-// module. Because we drive an external viewer, the host has no way to
-// programmatically resize the framebuffer or inject input.
+// Capabilities reports the runtime capabilities advertised by the VNC module.
 func (m *Module) Capabilities() protocol.Capabilities {
 	return protocol.Capabilities{
-		RenderModes:       []protocol.RenderMode{protocol.RenderExternal},
-		AuthMethods:       []protocol.AuthMethod{protocol.AuthNone},
+		RenderModes:       []protocol.RenderMode{protocol.RenderGraphical},
+		AuthMethods:       []protocol.AuthMethod{protocol.AuthPassword, protocol.AuthNone},
 		SupportsResize:    false,
 		SupportsClipboard: false,
-		SupportsLogging:   false,
+		SupportsLogging:   true,
 		SupportsReconnect: false,
 	}
 }
@@ -135,61 +110,26 @@ func (s settingsView) boolOr(key string, def bool) bool {
 	return def
 }
 
-func (s settingsView) stringSlice(key string) []string {
-	v, ok := s.m[key]
-	if !ok {
-		return nil
-	}
-	switch x := v.(type) {
-	case []string:
-		return append([]string(nil), x...)
-	case []any:
-		out := make([]string, 0, len(x))
-		for _, e := range x {
-			if str, ok := e.(string); ok {
-				out = append(out, str)
-			}
-		}
-		return out
-	}
-	return nil
-}
-
 // openConfig is the resolved, plugin-internal view of an OpenRequest.
 type openConfig struct {
-	host        string
-	port        int
-	passwordVia string
-	viewOnly    bool
-	fullscreen  bool
-	binary      string
-	extraArgs   []string
-
-	// runtime
-	goos     string
-	password string // resolved from credential, never logged
+	host       string
+	port       int
+	viewOnly   bool
+	fullscreen bool
 }
 
 // resolveConfig validates the OpenRequest and produces an openConfig with
-// defaults applied. It does not perform any side effects (no PATH lookup,
-// no file I/O).
+// defaults applied.
 func resolveConfig(req protocol.OpenRequest) (openConfig, error) {
 	view := settingsView{m: req.Settings}
 
 	cfg := openConfig{
-		host:        view.stringOr(SettingHost, ""),
-		port:        view.intOr(SettingPort, defaultPort),
-		passwordVia: view.stringOr(SettingPasswordVia, PasswordViaNone),
-		viewOnly:    view.boolOr(SettingViewOnly, false),
-		fullscreen:  view.boolOr(SettingFullscreen, false),
-		binary:      view.stringOr(SettingBinary, ""),
-		extraArgs:   view.stringSlice(SettingExtraArgs),
-		goos:        runtime.GOOS,
-		password:    req.Secret.Password,
+		host:       view.stringOr(SettingHost, ""),
+		port:       view.intOr(SettingPort, defaultPort),
+		viewOnly:   view.boolOr(SettingViewOnly, false),
+		fullscreen: view.boolOr(SettingFullscreen, false),
 	}
 
-	// OpenRequest.Host / Port take precedence when set; otherwise fall back
-	// to the values declared via Settings.
 	if req.Host != "" {
 		cfg.host = req.Host
 	}
@@ -203,21 +143,17 @@ func resolveConfig(req protocol.OpenRequest) (openConfig, error) {
 	if cfg.port < 1 || cfg.port > 65535 {
 		return cfg, fmt.Errorf("vnc: port out of range: %d", cfg.port)
 	}
-	switch cfg.passwordVia {
-	case PasswordViaNone, PasswordViaStdin, PasswordViaPasswordFile:
-	default:
-		return cfg, fmt.Errorf("vnc: invalid %s %q", SettingPasswordVia, cfg.passwordVia)
-	}
 	return cfg, nil
 }
 
-// Open prepares a new VNC session. Discovery and password-file
-// materialisation happen here so that Open can fail fast before the host
-// wires up a renderer.
+// Open prepares a new VNC session. The TCP connection is not established
+// until [Session.Start] is called.
 func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.Session, error) {
 	cfg, err := resolveConfig(req)
 	if err != nil {
 		return nil, err
 	}
-	return openSession(ctx, cfg, defaultDiscoverer)
+	addr := net.JoinHostPort(cfg.host, strconv.Itoa(cfg.port))
+	return newSession(addr), nil
 }
+

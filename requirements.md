@@ -17,7 +17,7 @@ Build a Go-based successor to mRemoteNG that delivers the same or better functio
 - Dockable tabs/panels and connection workspaces.
 - Tree-based connection organization with inheritance/templates.
 - Plugin system for credential providers.
-- Modular protocol system for built-in and third-party protocols.
+- Modular protocol system where all protocols are implemented as compiled Go-native packages.
 - Import/migration from existing mRemoteNG connection data.
 - Secure local storage, sync options, and enterprise-friendly deployment.
 
@@ -46,7 +46,7 @@ Build a Go-based successor to mRemoteNG that delivers the same or better functio
 - Support opening protocols either embedded or externally, depending on protocol capability.
 
 ### 4.3 Protocol Support
-The platform must support a modular protocol system with a stable SDK for built-in and external protocol modules.
+The platform must support a modular protocol system where all protocol implementations are compiled Go-native packages linked directly into the application binary. No out-of-process IPC, external service launchers, or runtime-loaded plugins are permitted for protocol implementations.
 
 #### Required first-class protocols
 - SSH
@@ -61,10 +61,11 @@ The platform must support a modular protocol system with a stable SDK for built-
 - External tool based sessions
 
 #### Protocol requirements
+- Each protocol module must be a Go package implementing the shared protocol interface; no subprocess, IPC, or external service dependency is permitted.
 - Each protocol module must declare capabilities, settings schema, auth requirements, rendering mode, and platform support.
 - Terminal-style protocols must support keyboard mapping, copy/paste, font settings, encoding selection, scrollback, logging, and theming.
 - Graphical protocols must support resize, clipboard integration, scaling, fullscreen, reconnect, and credential injection where permitted.
-- Protocol modules must be independently testable and releasable.
+- Protocol modules must be independently testable.
 - Adding a new protocol must not require invasive changes in the application core.
 
 ### 4.4 Credential Provider Plugin System
@@ -121,6 +122,7 @@ The platform must support a modular protocol system with a stable SDK for built-
 - Publish internal SDK contracts for protocols and credential providers.
 - Enforce semantic versioning for plugin APIs.
 - Do not depend on Go's native `plugin` package for cross-platform extensions.
+- All protocol implementations must be Go packages compiled directly into the application binary; no out-of-process IPC or external service dependencies are permitted for protocols.
 
 ### 5.4 Observability
 - Structured logging must exist for app core, protocol modules, and plugins.

@@ -1,13 +1,11 @@
 package vnc
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"os"
-	"reflect"
-	"runtime"
-	"strings"
-	"sync"
+	"io"
+	"net"
 	"testing"
 	"time"
 
@@ -17,6 +15,49 @@ import (
 // Compile-time check that *Module satisfies protocol.Module.
 var _ protocol.Module = (*Module)(nil)
 
+// --- helpers ---------------------------------------------------------------
+
+func startEchoServer(t *testing.T) (addr string, closeServer func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() { io.Copy(conn, conn); conn.Close() }() //nolint:errcheck
+		}
+	}()
+	return ln.Addr().String(), func() { _ = ln.Close() }
+}
+
+func startFixedReplyServer(t *testing.T, reply []byte) (addr string, closeServer func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				_, _ = conn.Write(reply)
+				_ = conn.Close()
+			}()
+		}
+	}()
+	return ln.Addr().String(), func() { _ = ln.Close() }
+}
+
+// --- manifest / capabilities -----------------------------------------------
+
 func TestManifestValidate(t *testing.T) {
 	if err := Manifest.Validate(); err != nil {
 		t.Fatalf("Manifest.Validate(): %v", err)
@@ -24,36 +65,35 @@ func TestManifestValidate(t *testing.T) {
 	if Manifest.ID != "io.goremote.protocol.vnc" {
 		t.Fatalf("manifest ID = %q", Manifest.ID)
 	}
-	if Manifest.Version != "1.0.0" {
+	if Manifest.Version != "2.0.0" {
 		t.Fatalf("manifest version = %q", Manifest.Version)
 	}
 	if Manifest.Status != "ready" {
 		t.Fatalf("manifest status = %q", Manifest.Status)
 	}
-	if !Manifest.HasCapability("os.exec") {
-		t.Fatalf("manifest must declare os.exec capability")
+	if !Manifest.HasCapability("network.outbound") {
+		t.Fatalf("manifest must declare network.outbound capability; got %v", Manifest.Capabilities)
 	}
 }
 
 func TestCapabilities(t *testing.T) {
 	caps := New().Capabilities()
-	if len(caps.RenderModes) != 1 || caps.RenderModes[0] != protocol.RenderExternal {
-		t.Fatalf("render modes = %v", caps.RenderModes)
-	}
-	if len(caps.AuthMethods) != 1 || caps.AuthMethods[0] != protocol.AuthNone {
-		t.Fatalf("auth methods = %v", caps.AuthMethods)
+	if len(caps.RenderModes) != 1 || caps.RenderModes[0] != protocol.RenderGraphical {
+		t.Fatalf("render modes = %v, want [graphical]", caps.RenderModes)
 	}
 	if caps.SupportsResize || caps.SupportsReconnect {
 		t.Fatalf("unexpected positive capability flags: %+v", caps)
 	}
 }
 
+// --- settings / config -----------------------------------------------------
+
 func TestSettingsSchema(t *testing.T) {
 	got := map[string]protocol.SettingDef{}
 	for _, s := range New().Settings() {
 		got[s.Key] = s
 	}
-	for _, want := range []string{SettingHost, SettingPort, SettingPasswordVia, SettingViewOnly, SettingFullscreen, SettingBinary, SettingExtraArgs} {
+	for _, want := range []string{SettingHost, SettingPort, SettingViewOnly, SettingFullscreen} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("missing setting %q", want)
 		}
@@ -63,11 +103,6 @@ func TestSettingsSchema(t *testing.T) {
 	}
 	if got[SettingPort].Default != 5900 {
 		t.Errorf("port default = %v, want 5900", got[SettingPort].Default)
-	}
-	if pv := got[SettingPasswordVia]; pv.Default != PasswordViaNone {
-		t.Errorf("password_via default = %v", pv.Default)
-	} else if !reflect.DeepEqual(pv.EnumValues, []string{PasswordViaNone, PasswordViaStdin, PasswordViaPasswordFile}) {
-		t.Errorf("password_via enum = %v", pv.EnumValues)
 	}
 }
 
@@ -87,237 +122,114 @@ func TestResolveConfigPortRange(t *testing.T) {
 	}
 }
 
-func TestResolveConfigInvalidPasswordVia(t *testing.T) {
-	_, err := resolveConfig(protocol.OpenRequest{Settings: map[string]any{
-		SettingHost: "h", SettingPasswordVia: "bogus",
-	}})
-	if err == nil {
-		t.Fatalf("expected invalid password_via error")
+// --- session ---------------------------------------------------------------
+
+func TestRenderMode(t *testing.T) {
+	s := newSession("127.0.0.1:5900")
+	if s.RenderMode() != protocol.RenderGraphical {
+		t.Fatalf("RenderMode = %s, want graphical", s.RenderMode())
 	}
 }
 
-func TestBuildArgvVncviewer(t *testing.T) {
-	cfg := openConfig{host: "10.0.0.5", port: 5901}
-	got := buildArgv(cfg, "vncviewer", "")
-	if !reflect.DeepEqual(got, []string{"10.0.0.5::5901"}) {
-		t.Fatalf("argv = %v", got)
-	}
-}
+func TestStart_ReceivesDataFromServer(t *testing.T) {
+	want := []byte("rfb-server-greeting")
+	addr, closeServer := startFixedReplyServer(t, want)
+	defer closeServer()
 
-func TestBuildArgvFlagsAndPwfile(t *testing.T) {
-	cfg := openConfig{
-		host: "h", port: 5900,
-		viewOnly: true, fullscreen: true,
-		passwordVia: PasswordViaPasswordFile,
-		extraArgs:   []string{"-Quality=9"},
-	}
-	got := buildArgv(cfg, "tigervnc", "/tmp/pw")
-	want := []string{"h::5900", "-ViewOnly", "-FullScreen", "-PasswordFile=/tmp/pw", "-Quality=9"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %v want %v", got, want)
-	}
-}
+	sess := newSession(addr)
+	var out bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-func TestBuildArgvOpenURL(t *testing.T) {
-	cfg := openConfig{host: "host.example", port: 5902, viewOnly: true, fullscreen: true}
-	got := buildArgv(cfg, "open", "")
-	want := []string{"vnc://host.example:5902"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %v want %v", got, want)
-	}
-}
-
-func TestCandidatesPerPlatform(t *testing.T) {
-	if got := candidatesFor("linux"); !reflect.DeepEqual(got, []string{"vncviewer", "tigervnc", "remmina", "xtigervncviewer"}) {
-		t.Fatalf("linux: %v", got)
-	}
-	if got := candidatesFor("darwin"); !reflect.DeepEqual(got, []string{"vncviewer", "open"}) {
-		t.Fatalf("darwin: %v", got)
-	}
-	if got := candidatesFor("windows"); !reflect.DeepEqual(got, []string{"tvnviewer.exe", "tvnviewer", "vncviewer"}) {
-		t.Fatalf("windows: %v", got)
-	}
-}
-
-func TestBinaryBase(t *testing.T) {
-	cases := map[string]string{
-		"/usr/bin/vncviewer":     "vncviewer",
-		`C:\tools\tvnviewer.EXE`: "tvnviewer",
-		"vncviewer":              "vncviewer",
-	}
-	for in, want := range cases {
-		if got := binaryBase(in); got != want {
-			t.Errorf("binaryBase(%q) = %q want %q", in, got, want)
-		}
-	}
-}
-
-func TestWritePasswordFileMode(t *testing.T) {
-	path, err := writePasswordFile("hunter2")
-	if err != nil {
-		t.Fatalf("writePasswordFile: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Remove(path) })
-
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if runtime.GOOS != "windows" {
-		if mode := info.Mode().Perm(); mode != 0o600 {
-			t.Fatalf("password file mode = %o want 0600", mode)
-		}
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if string(b) != "hunter2" {
-		t.Fatalf("password file contents = %q", b)
-	}
-}
-
-func TestOpenSessionPasswordFileLifecycle(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unix-only test (uses /bin/sh)")
-	}
-	disc := func(override string, candidates []string) (string, error) {
-		return "/bin/sh", nil
-	}
-	cfg := openConfig{
-		host: "h", port: 5900, goos: runtime.GOOS,
-		passwordVia: PasswordViaPasswordFile,
-		password:    "secret",
-		// Replace the rendered argv with a no-op shell command via
-		// extraArgs, since the real binary is /bin/sh below.
-	}
-	sess, err := openSession(context.Background(), cfg, disc)
-	if err != nil {
-		t.Fatalf("openSession: %v", err)
-	}
-	if sess.pwfile == "" {
-		t.Fatalf("expected pwfile to be materialised")
-	}
-	if _, err := os.Stat(sess.pwfile); err != nil {
-		t.Fatalf("pwfile missing: %v", err)
-	}
-	pwfile := sess.pwfile
-
-	// Replace argv so /bin/sh just exits cleanly.
-	sess.argv = []string{"-c", "exit 0"}
-
-	if err := sess.Start(context.Background(), nil, nil); err != nil {
+	if err := sess.Start(ctx, nil, &out); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if _, err := os.Stat(pwfile); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("pwfile %q still present after Start: %v", pwfile, err)
-	}
-	// Close should still be a no-op.
-	if err := sess.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	if err := sess.Close(); err != nil {
-		t.Fatalf("Close (second): %v", err)
+	if !bytes.Equal(out.Bytes(), want) {
+		t.Fatalf("output = %q, want %q", out.Bytes(), want)
 	}
 }
 
-func TestStartStdinDeliversPassword(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unix-only test (uses /bin/sh)")
-	}
-	dir := t.TempDir()
-	captured := dir + "/stdin.txt"
+func TestStart_SendsDataToServer(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
 
-	disc := func(override string, candidates []string) (string, error) {
-		return "/bin/sh", nil
-	}
-	cfg := openConfig{
-		host: "h", port: 5900, goos: runtime.GOOS,
-		passwordVia: PasswordViaStdin,
-		password:    "topsekret",
-	}
-	sess, err := openSession(context.Background(), cfg, disc)
-	if err != nil {
-		t.Fatalf("openSession: %v", err)
-	}
-	// Override argv: read all of stdin into the captured file, then echo
-	// "launched" to stdout for the caller to verify the spawn happened.
-	sess.argv = []string{"-c", "cat > " + captured + "; echo launched"}
+	sess := newSession(addr)
+	pr, pw := io.Pipe()
+	var out bytes.Buffer
 
-	var out strings.Builder
-	if err := sess.Start(context.Background(), nil, &out); err != nil {
-		t.Fatalf("Start: %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- sess.Start(ctx, pr, &out) }()
+
+	msg := []byte("vnc-hello")
+	_, _ = pw.Write(msg)
+	_ = pw.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start did not return")
 	}
-	if got := strings.TrimSpace(out.String()); got != "launched" {
-		t.Fatalf("stdout = %q", out.String())
+
+	if !bytes.Equal(out.Bytes(), msg) {
+		t.Fatalf("echoed = %q, want %q", out.Bytes(), msg)
 	}
-	got, err := os.ReadFile(captured)
-	if err != nil {
-		t.Fatalf("read captured stdin: %v", err)
+}
+
+func TestStart_ContextCancellation(t *testing.T) {
+	addr, closeServer := startEchoServer(t)
+	defer closeServer()
+
+	sess := newSession(addr)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() { done <- sess.Start(ctx, nil, io.Discard) }()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start did not return after context cancel")
 	}
-	if string(got) != "topsekret\n" {
-		t.Fatalf("stdin captured = %q want %q", got, "topsekret\n")
+}
+
+func TestStart_DialFailure(t *testing.T) {
+	sess := newSession("127.0.0.1:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := sess.Start(ctx, nil, io.Discard); err == nil {
+		t.Fatal("expected dial error")
 	}
 }
 
 func TestSendInputAndResizeUnsupported(t *testing.T) {
-	sess := &Session{}
-	if err := sess.SendInput(context.Background(), []byte("x")); !errors.Is(err, protocol.ErrUnsupported) {
-		t.Fatalf("SendInput err = %v", err)
+	sess := newSession("127.0.0.1:5900")
+	if err := sess.SendInput(context.Background(), []byte("x")); err == nil {
+		t.Fatal("expected error for SendInput before Start")
 	}
 	if err := sess.Resize(context.Background(), protocol.Size{}); !errors.Is(err, protocol.ErrUnsupported) {
-		t.Fatalf("Resize err = %v", err)
+		t.Fatalf("Resize err = %v, want ErrUnsupported", err)
 	}
 }
 
 func TestCloseIdempotent(t *testing.T) {
-	sess := &Session{}
-	if err := sess.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	if err := sess.Close(); err != nil {
-		t.Fatalf("Close (second): %v", err)
-	}
-}
-
-func TestCloseInterruptsRunningViewer(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unix-only test")
-	}
-	disc := func(string, []string) (string, error) { return "/bin/sh", nil }
-	cfg := openConfig{host: "h", port: 5900, goos: runtime.GOOS}
-	sess, err := openSession(context.Background(), cfg, disc)
-	if err != nil {
-		t.Fatalf("openSession: %v", err)
-	}
-	sess.argv = []string{"-c", "sleep 30"}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_ = sess.Start(context.Background(), nil, nil)
-	}()
-
-	// Wait briefly for the child to be spawned, then Close.
-	time.Sleep(150 * time.Millisecond)
-	if err := sess.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	doneCh := make(chan struct{})
-	go func() { wg.Wait(); close(doneCh) }()
-	select {
-	case <-doneCh:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("Start did not return after Close")
+	sess := newSession("127.0.0.1:5900")
+	for i := 0; i < 4; i++ {
+		if err := sess.Close(); err != nil {
+			t.Errorf("Close #%d: %v", i, err)
+		}
 	}
 }
 
-func TestOpenSessionDiscoveryFailureSurfaces(t *testing.T) {
-	disc := func(string, []string) (string, error) { return "", errors.New("nope") }
-	cfg := openConfig{host: "h", port: 5900}
-	if _, err := openSession(context.Background(), cfg, disc); err == nil {
-		t.Fatalf("expected discovery error")
-	}
-}

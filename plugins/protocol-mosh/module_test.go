@@ -2,7 +2,7 @@ package mosh
 
 import (
 	"context"
-	"reflect"
+	"errors"
 	"testing"
 
 	"github.com/darkace1998/GoRemote/sdk/protocol"
@@ -16,69 +16,13 @@ func TestManifestValid(t *testing.T) {
 	}
 }
 
-func TestBuildArgv_BasicHost(t *testing.T) {
-	cfg := &config{Host: "host.example.com", Port: 22}
-	got, err := buildArgv(cfg)
-	if err != nil {
-		t.Fatalf("buildArgv: %v", err)
+func TestCapabilities(t *testing.T) {
+	caps := New().Capabilities()
+	if len(caps.RenderModes) != 1 || caps.RenderModes[0] != protocol.RenderTerminal {
+		t.Fatalf("RenderModes = %v, want [terminal]", caps.RenderModes)
 	}
-	want := []string{"host.example.com"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v", got, want)
-	}
-}
-
-func TestBuildArgv_PortAndUser(t *testing.T) {
-	cfg := &config{Host: "host.example.com", Port: 2222, Username: "alice"}
-	got, err := buildArgv(cfg)
-	if err != nil {
-		t.Fatalf("buildArgv: %v", err)
-	}
-	want := []string{"--ssh=ssh -p 2222", "alice@host.example.com"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v", got, want)
-	}
-}
-
-func TestBuildArgv_MoshPort(t *testing.T) {
-	cfg := &config{Host: "h", Port: 22, MoshPort: 60001}
-	got, err := buildArgv(cfg)
-	if err != nil {
-		t.Fatalf("buildArgv: %v", err)
-	}
-	want := []string{"--port=60001", "h"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v", got, want)
-	}
-}
-
-func TestBuildArgv_SSHArgs(t *testing.T) {
-	cfg := &config{Host: "h", Port: 22, SSHArgs: "-i ~/.ssh/id_rsa"}
-	got, err := buildArgv(cfg)
-	if err != nil {
-		t.Fatalf("buildArgv: %v", err)
-	}
-	want := []string{"--ssh=ssh -i ~/.ssh/id_rsa", "h"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v", got, want)
-	}
-}
-
-func TestBuildArgv_ExtraArgs(t *testing.T) {
-	cfg := &config{
-		Host:      "h",
-		Port:      22,
-		ExtraArgs: []string{"--no-init", "--predict=adaptive"},
-	}
-	got, err := buildArgv(cfg)
-	if err != nil {
-		t.Fatalf("buildArgv: %v", err)
-	}
-	if len(got) < 3 {
-		t.Fatalf("expected at least 3 args, got %#v", got)
-	}
-	if got[len(got)-2] != "--no-init" || got[len(got)-1] != "--predict=adaptive" {
-		t.Fatalf("extra_args not appended verbatim at end: %#v", got)
+	if caps.SupportsResize || caps.SupportsReconnect {
+		t.Fatalf("unexpected positive capability flags: %+v", caps)
 	}
 }
 
@@ -103,23 +47,82 @@ func TestConfigFromRequest_BadPort(t *testing.T) {
 	}
 }
 
-func TestOpen_BinaryNotFound(t *testing.T) {
-	mod := &Module{
-		discover: func(override string, candidates []string) (string, error) {
-			return "", errInjected
-		},
-	}
-	_, err := mod.Open(context.Background(), protocol.OpenRequest{
-		Host:     "h",
-		Settings: map[string]any{SettingHost: "h"},
+func TestConfigFromRequest_Defaults(t *testing.T) {
+	cfg, err := configFromRequest(protocol.OpenRequest{
+		Host:     "example.com",
+		Settings: map[string]any{},
 	})
-	if err == nil {
-		t.Fatalf("expected discover error")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Port != defaultPort {
+		t.Fatalf("Port = %d, want %d", cfg.Port, defaultPort)
+	}
+	if cfg.MoshPort != 0 {
+		t.Fatalf("MoshPort default = %d, want 0", cfg.MoshPort)
 	}
 }
 
-var errInjected = injectedErr("injected")
+func TestOpen_ReturnsSessionWithoutDialing(t *testing.T) {
+	mod := New()
+	sess, err := mod.Open(context.Background(), protocol.OpenRequest{
+		Host:     "example.com",
+		Settings: map[string]any{SettingHost: "example.com"},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if sess == nil {
+		t.Fatal("expected non-nil session")
+	}
+	// Session should not have dialed yet — Close should be safe.
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
 
-type injectedErr string
+func TestParseMoshConnect(t *testing.T) {
+	output := "some preamble\nMOSH CONNECT 60001 abc123key\nsome trailer\n"
+	port, key, err := parseMoshConnect(output)
+	if err != nil {
+		t.Fatalf("parseMoshConnect: %v", err)
+	}
+	if port != "60001" {
+		t.Fatalf("port = %q, want 60001", port)
+	}
+	if key != "abc123key" {
+		t.Fatalf("key = %q, want abc123key", key)
+	}
+}
 
-func (e injectedErr) Error() string { return string(e) }
+func TestParseMoshConnect_NotFound(t *testing.T) {
+	_, _, err := parseMoshConnect("no connect line here\n")
+	if err == nil {
+		t.Fatal("expected error when MOSH CONNECT line is absent")
+	}
+}
+
+func TestResizeUnsupported(t *testing.T) {
+	cfg := &config{Host: "h", Port: 22}
+	sess := newSession(cfg, "h:22")
+	err := sess.Resize(context.Background(), protocol.Size{Cols: 80, Rows: 24})
+	if !errors.Is(err, protocol.ErrUnsupported) {
+		t.Fatalf("Resize err = %v, want ErrUnsupported", err)
+	}
+}
+
+func TestCloseBeforeStart(t *testing.T) {
+	cfg := &config{Host: "h", Port: 22}
+	sess := newSession(cfg, "h:22")
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close before Start: %v", err)
+	}
+	// Idempotent
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close (second): %v", err)
+	}
+}
+
+
+var _ protocol.Module = (*Module)(nil)
+

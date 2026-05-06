@@ -4,102 +4,114 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 
-	"github.com/darkace1998/GoRemote/internal/extlaunch"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
 
-// Session is a single TN5250 launcher session. It owns one external client
-// subprocess and supervises its lifetime under the caller-supplied context.
+// Session is a live TN5250 session backed by an in-process TCP connection.
 //
-// Session is safe for concurrent invocation of Start, Resize, SendInput,
-// and Close.
+// The session dials host:port on Start and relays data bidirectionally
+// between the caller's stdin/stdout and the remote TCP stream. The 5250
+// data stream is carried over this connection; no external binary is spawned.
 type Session struct {
-	binary string
-	args   []string
+	addr string
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	proc   *extlaunch.Process
-	closed bool
+	mu        sync.Mutex
+	conn      net.Conn
+	closeOnce sync.Once
+	closeErr  error
 }
 
-func newSession(binary string, args []string) *Session {
-	return &Session{
-		binary: binary,
-		args:   append([]string(nil), args...),
-	}
+// Compile-time assertion: *Session implements protocol.Session.
+var _ protocol.Session = (*Session)(nil)
+
+func newSession(addr string) *Session {
+	return &Session{addr: addr}
 }
 
-// RenderMode reports the rendering mode negotiated at Open time. The native
-// TN5250 client owns its own window/terminal, so the host always renders in
-// external mode.
-func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderExternal }
+// RenderMode reports the terminal rendering mode used by TN5250 sessions.
+func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderTerminal }
 
-// Start spawns the external TN5250 client and blocks until it exits or ctx
-// is cancelled. stdin/stdout from the host pipeline are intentionally not
-// wired to the child: the native client takes over its own terminal /
-// window. stderr is forwarded to stdout (when supplied) so users can see
-// client diagnostics through the host log surface.
+// Start dials the remote TN5250 endpoint and runs the bidirectional I/O loop.
+// It blocks until the remote closes, ctx is cancelled, or Close is called.
 func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return fmt.Errorf("tn5250: session already closed")
-	}
-	if s.proc != nil {
-		s.mu.Unlock()
-		return fmt.Errorf("tn5250: session already started")
+	if stdout == nil {
+		stdout = io.Discard
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
-
-	spec := extlaunch.Spec{
-		Binary: s.binary,
-		Args:   s.args,
-		Stdout: stdout,
-		Stderr: stdout,
-	}
-
-	proc, err := extlaunch.Start(runCtx, spec)
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", s.addr)
 	if err != nil {
-		cancel()
-		s.cancel = nil
-		s.mu.Unlock()
-		return fmt.Errorf("tn5250: start: %w", err)
+		return fmt.Errorf("tn5250: dial %s: %w", s.addr, err)
 	}
-	s.proc = proc
+
+	s.mu.Lock()
+	s.conn = conn
 	s.mu.Unlock()
 
-	return proc.Wait(runCtx)
+	fromServer := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(stdout, conn)
+		fromServer <- err
+	}()
+
+	fromStdin := make(chan struct{}, 1)
+	go func() {
+		if stdin != nil {
+			_, _ = io.Copy(conn, stdin)
+		}
+		// Signal EOF to the remote without dropping our receive path.
+		if tc, ok := conn.(*net.TCPConn); ok {
+			_ = tc.CloseWrite()
+		}
+		close(fromStdin)
+	}()
+
+	var result error
+	select {
+	case result = <-fromServer:
+		_ = s.Close()
+		<-fromStdin
+	case <-ctx.Done():
+		_ = s.Close()
+		<-fromServer
+		return nil
+	}
+
+	if result != nil && ctx.Err() != nil {
+		return nil
+	}
+	return result
 }
 
-// Resize is unsupported: the native client owns its window geometry.
+// Resize is not yet wired to a 5250 resize sequence.
 func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 	return protocol.ErrUnsupported
 }
 
-// SendInput is unsupported: the native client reads keyboard input from its
-// own window directly.
+// SendInput writes data directly to the remote TCP stream.
 func (s *Session) SendInput(ctx context.Context, data []byte) error {
-	return protocol.ErrUnsupported
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return fmt.Errorf("tn5250: session not started")
+	}
+	_, err := conn.Write(data)
+	return err
 }
 
-// Close terminates the session. Safe and idempotent across concurrent
-// callers; only the first invocation cancels the supervising context, but
-// every call returns nil.
+// Close terminates the TCP connection. Safe to call multiple times.
 func (s *Session) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return nil
-	}
-	s.closed = true
-	if s.cancel != nil {
-		s.cancel()
-		s.cancel = nil
-	}
-	return nil
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		conn := s.conn
+		s.mu.Unlock()
+		if conn != nil {
+			s.closeErr = conn.Close()
+		}
+	})
+	return s.closeErr
 }
+

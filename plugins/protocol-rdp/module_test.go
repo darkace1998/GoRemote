@@ -2,7 +2,7 @@ package rdp
 
 import (
 	"context"
-	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/darkace1998/GoRemote/sdk/protocol"
@@ -14,33 +14,21 @@ func TestManifestValidate(t *testing.T) {
 	if err := Manifest.Validate(); err != nil {
 		t.Fatalf("Manifest.Validate() returned error: %v", err)
 	}
-	if Manifest.Version != "1.0.0" {
-		t.Fatalf("Version = %q want 1.0.0", Manifest.Version)
+	if Manifest.Version != "2.0.0" {
+		t.Fatalf("Version = %q want 2.0.0", Manifest.Version)
 	}
 	if Manifest.Status != "ready" {
 		t.Fatalf("Status = %q want ready", Manifest.Status)
 	}
-	if len(Manifest.Platforms) != 0 {
-		t.Fatalf("Platforms = %v, expected nil/empty (works wherever a candidate binary exists)", Manifest.Platforms)
-	}
-	wantCap := false
-	for _, c := range Manifest.Capabilities {
-		if string(c) == "os.exec" {
-			wantCap = true
-		}
-	}
-	if !wantCap {
-		t.Fatalf("Manifest must declare os.exec capability; got %v", Manifest.Capabilities)
+	if !Manifest.HasCapability("network.outbound") {
+		t.Fatalf("Manifest must declare network.outbound capability; got %v", Manifest.Capabilities)
 	}
 }
 
 func TestCapabilities(t *testing.T) {
 	caps := New().Capabilities()
-	if len(caps.RenderModes) != 1 || caps.RenderModes[0] != protocol.RenderExternal {
-		t.Fatalf("RenderModes = %v want [external]", caps.RenderModes)
-	}
-	if len(caps.AuthMethods) != 1 || caps.AuthMethods[0] != protocol.AuthNone {
-		t.Fatalf("AuthMethods = %v want [none]", caps.AuthMethods)
+	if len(caps.RenderModes) != 1 || caps.RenderModes[0] != protocol.RenderGraphical {
+		t.Fatalf("RenderModes = %v want [graphical]", caps.RenderModes)
 	}
 	if caps.SupportsResize {
 		t.Fatalf("SupportsResize must be false")
@@ -105,152 +93,84 @@ func TestConfigFromRequest_PortOutOfRange(t *testing.T) {
 	}
 }
 
-func TestBuildArgvFor_Linux_AllOptional(t *testing.T) {
-	cfg := &config{
-		Host:     "host.example.com",
-		Port:     3389,
-		Username: "alice",
-		Domain:   "EXAMPLE",
-		Width:    1280,
-		Height:   800,
-		Gateway:  "gw.example.com:443",
-	}
-	got, err := buildArgvFor("linux", cfg)
-	if err != nil {
-		t.Fatalf("buildArgvFor: %v", err)
-	}
-	want := []string{
-		"/v:host.example.com:3389",
-		"/u:alice",
-		"/d:EXAMPLE",
-		"/w:1280",
-		"/h:800",
-		"/g:gw.example.com:443",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v", got, want)
-	}
-}
-
-func TestBuildArgvFor_Linux_OptionalsSkippedWhenEmpty(t *testing.T) {
-	cfg := &config{
-		Host:   "host",
-		Port:   3389,
-		Width:  1024,
-		Height: 768,
-	}
-	got, err := buildArgvFor("linux", cfg)
-	if err != nil {
-		t.Fatalf("buildArgvFor: %v", err)
-	}
-	want := []string{
-		"/v:host:3389",
-		"/w:1024",
-		"/h:768",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v", got, want)
-	}
-}
-
-func TestBuildArgvFor_FullscreenPrependsF(t *testing.T) {
-	cfg := &config{Host: "h", Port: 1, Width: 1, Height: 1, Fullscreen: true}
-	got, err := buildArgvFor("linux", cfg)
-	if err != nil {
-		t.Fatalf("buildArgvFor: %v", err)
-	}
-	if len(got) == 0 || got[0] != "/f" {
-		t.Fatalf("expected first arg /f, got %#v", got)
-	}
-
-	gotW, err := buildArgvFor("windows", cfg)
-	if err != nil {
-		t.Fatalf("buildArgvFor windows: %v", err)
-	}
-	if len(gotW) == 0 || gotW[0] != "/f" {
-		t.Fatalf("expected first arg /f on windows, got %#v", gotW)
-	}
-}
-
-func TestBuildArgvFor_Windows_NoCredFlags(t *testing.T) {
-	cfg := &config{
-		Host: "h", Port: 3389,
-		Username: "alice", Domain: "DOM", Gateway: "gw:443",
-		Width: 1280, Height: 800,
-	}
-	got, err := buildArgvFor("windows", cfg)
-	if err != nil {
-		t.Fatalf("buildArgvFor: %v", err)
-	}
-	want := []string{
-		"/v:h:3389",
-		"/w:1280",
-		"/h:800",
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("argv = %#v\nwant   %#v (mstsc must not receive /u, /d, /g)", got, want)
-	}
-}
-
-func TestBuildArgvFor_ExtraArgsAppended(t *testing.T) {
-	cfg := &config{
-		Host: "h", Port: 3389, Width: 1, Height: 1,
-		ExtraArgs: []string{"+clipboard", "/cert:ignore"},
-	}
-	got, err := buildArgvFor("linux", cfg)
-	if err != nil {
-		t.Fatalf("buildArgvFor: %v", err)
-	}
-	if got[len(got)-2] != "+clipboard" || got[len(got)-1] != "/cert:ignore" {
-		t.Fatalf("extra_args not appended verbatim at end: %#v", got)
-	}
-}
-
-func TestCandidatesFor(t *testing.T) {
-	if got := candidatesFor("linux"); !reflect.DeepEqual(got, []string{"xfreerdp3", "xfreerdp", "remmina"}) {
-		t.Fatalf("linux candidates = %v", got)
-	}
-	if got := candidatesFor("darwin"); !reflect.DeepEqual(got, []string{"xfreerdp3", "xfreerdp", "remmina"}) {
-		t.Fatalf("darwin candidates = %v", got)
-	}
-	if got := candidatesFor("windows"); !reflect.DeepEqual(got, []string{"mstsc.exe", "mstsc"}) {
-		t.Fatalf("windows candidates = %v", got)
-	}
-}
-
-func TestExtraArgsFromAnySlice(t *testing.T) {
+func TestConfigFromRequest_HostPrecedence(t *testing.T) {
 	cfg, err := configFromRequest(protocol.OpenRequest{
+		Host: "override.example.com",
+		Port: 13389,
 		Settings: map[string]any{
-			SettingHost:      "h",
-			SettingExtraArgs: []any{"+clipboard", "/cert:ignore"},
+			SettingHost: "settings.example.com",
+			SettingPort: 3389,
 		},
 	})
 	if err != nil {
 		t.Fatalf("configFromRequest: %v", err)
 	}
-	if !reflect.DeepEqual(cfg.ExtraArgs, []string{"+clipboard", "/cert:ignore"}) {
-		t.Fatalf("ExtraArgs = %v", cfg.ExtraArgs)
+	if cfg.Host != "override.example.com" {
+		t.Fatalf("Host = %q, want override.example.com", cfg.Host)
+	}
+	if cfg.Port != 13389 {
+		t.Fatalf("Port = %d, want 13389", cfg.Port)
 	}
 }
 
-func TestOpenDiscoveryFailureSurfacesError(t *testing.T) {
-	mod := &Module{
-		discover: func(override string, candidates []string) (string, error) {
-			return "", errInjected
-		},
-	}
-	_, err := mod.Open(context.Background(), protocol.OpenRequest{
-		Host:     "h",
-		Port:     3389,
-		Settings: map[string]any{SettingHost: "h"},
+func TestOpen_ReturnsSessionWithoutDialing(t *testing.T) {
+	mod := New()
+	sess, err := mod.Open(context.Background(), protocol.OpenRequest{
+		Host:     "example.com",
+		Settings: map[string]any{SettingHost: "example.com"},
 	})
-	if err == nil {
-		t.Fatalf("expected discover error")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if sess == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if err := sess.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 }
 
-var errInjected = injectedErr("injected")
+func TestSettingsSchema_HostRequired(t *testing.T) {
+	defs := New().Settings()
+	for _, d := range defs {
+		if d.Key == SettingHost {
+			if !d.Required {
+				t.Fatalf("host setting must be required")
+			}
+			return
+		}
+	}
+	t.Fatal("host setting not found")
+}
 
-type injectedErr string
+func TestConfigFromRequest_Fullscreen(t *testing.T) {
+	cfg, err := configFromRequest(protocol.OpenRequest{
+		Settings: map[string]any{
+			SettingHost:       "h",
+			SettingFullscreen: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("configFromRequest: %v", err)
+	}
+	if !cfg.Fullscreen {
+		t.Fatal("Fullscreen should be true")
+	}
+}
 
-func (e injectedErr) Error() string { return string(e) }
+func TestConfigFromRequest_Gateway(t *testing.T) {
+	cfg, err := configFromRequest(protocol.OpenRequest{
+		Settings: map[string]any{
+			SettingHost:    "h",
+			SettingGateway: "gw.example.com:443",
+		},
+	})
+	if err != nil {
+		t.Fatalf("configFromRequest: %v", err)
+	}
+	if !strings.Contains(cfg.Gateway, "gw.example.com") {
+		t.Fatalf("Gateway = %q", cfg.Gateway)
+	}
+}
+
+

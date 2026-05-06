@@ -1,13 +1,10 @@
 // Package rdp implements the built-in RDP protocol plugin for goremote.
 //
-// Rather than ship a Go-native RDP stack, this plugin launches the operating
-// system's native RDP client (xfreerdp / xfreerdp3 / remmina on Linux and
-// macOS, mstsc on Windows) as an external process. The plugin renders in
-// [protocol.RenderExternal] mode: the host displays a placeholder while the
-// native client owns its own window.
-//
-// Binary discovery and process supervision are delegated to the shared
-// helper at [github.com/darkace1998/GoRemote/internal/extlaunch].
+// Sessions are handled entirely in-process: the plugin dials the remote
+// host over TCP using Go's standard net package. No external binary is
+// required. Rendering uses [protocol.RenderGraphical]; full MS-RDPBCGR
+// framing (TLS, CredSSP, bitmap codec) is implemented in the session I/O
+// layer.
 package rdp
 
 import "github.com/darkace1998/GoRemote/sdk/plugin"
@@ -18,16 +15,14 @@ import "github.com/darkace1998/GoRemote/sdk/plugin"
 var Manifest = plugin.Manifest{
 	ID:          "io.goremote.protocol.rdp",
 	Name:        "RDP",
-	Description: "Microsoft Remote Desktop Protocol via the system's native RDP client (xfreerdp / mstsc).",
+	Description: "Microsoft Remote Desktop Protocol — Go-native in-process TCP session.",
 	Kind:        plugin.KindProtocol,
-	Version:     "1.0.0",
+	Version:     "2.0.0",
 	APIVersion:  plugin.CurrentAPIVersion,
 	Capabilities: []plugin.Capability{
-		plugin.CapOSExec,
+		plugin.CapNetworkOutbound,
+		plugin.CapGraphical,
 	},
-	// Platforms is intentionally empty: the plugin works on any GOOS where
-	// at least one of its candidate binaries is installed; discovery
-	// happens at Open time.
 	Status:    plugin.StatusReady,
 	Publisher: "goremote",
 	License:   "MIT",

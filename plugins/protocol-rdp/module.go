@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
+	"net"
 	"strconv"
 
-	"github.com/darkace1998/GoRemote/internal/extlaunch"
 	"github.com/darkace1998/GoRemote/sdk/plugin"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
@@ -22,8 +21,6 @@ const (
 	SettingHeight     = "height"
 	SettingFullscreen = "fullscreen"
 	SettingGateway    = "gateway"
-	SettingBinary     = "binary"
-	SettingExtraArgs  = "extra_args"
 )
 
 // Defaults applied when the corresponding setting is unset.
@@ -38,22 +35,10 @@ func ptrInt(v int) *int { return &v }
 // Module is the built-in RDP protocol module.
 //
 // Module is safe for concurrent use; each [Module.Open] call yields an
-// independent [Session] that owns its own subprocess.
-type Module struct {
-	// discover, when non-nil, replaces extlaunch.Discover. It exists for
-	// tests so they can substitute a binary that's actually executable in
-	// CI (e.g. /bin/sh) without depending on a real RDP client being
-	// installed.
-	discover func(override string, candidates []string) (string, error)
+// independent [Session] backed by a Go TCP connection.
+type Module struct{}
 
-	// argvFor, when non-nil, replaces buildArgvFor. It exists so tests can
-	// substitute a trivial argv that prints a known marker line and exits
-	// instead of attempting an actual RDP handshake.
-	argvFor func(goos string, cfg *config) ([]string, error)
-}
-
-// New returns a ready-to-use [Module] that uses the real binary discovery
-// and argv templates.
+// New returns a ready-to-use [Module].
 func New() *Module { return &Module{} }
 
 // Manifest returns the static manifest for this plugin.
@@ -75,52 +60,54 @@ func (m *Module) Settings() []protocol.SettingDef {
 			Description: "TCP port the RDP service is listening on.",
 		},
 		{
-			Key: SettingUsername, Label: "Username", Type: protocol.SettingString,
-			Description: "User name passed to the native client. This is *not* an authentication credential; the user still authenticates inside the native client window.",
+			Key:         SettingUsername,
+			Label:       "Username",
+			Type:        protocol.SettingString,
+			Description: "User name for RDP authentication.",
 		},
 		{
-			Key: SettingDomain, Label: "Domain", Type: protocol.SettingString,
-			Description: "Optional Active Directory / NT domain name passed to the native client.",
+			Key:         SettingDomain,
+			Label:       "Domain",
+			Type:        protocol.SettingString,
+			Description: "Optional Active Directory / NT domain name.",
 		},
 		{
-			Key: SettingWidth, Label: "Width", Type: protocol.SettingInt,
+			Key:         SettingWidth,
+			Label:       "Width",
+			Type:        protocol.SettingInt,
 			Default:     defaultWidth,
 			Min:         ptrInt(1),
 			Description: "Initial RDP session width in pixels.",
 		},
 		{
-			Key: SettingHeight, Label: "Height", Type: protocol.SettingInt,
+			Key:         SettingHeight,
+			Label:       "Height",
+			Type:        protocol.SettingInt,
 			Default:     defaultHeight,
 			Min:         ptrInt(1),
 			Description: "Initial RDP session height in pixels.",
 		},
 		{
-			Key: SettingFullscreen, Label: "Fullscreen", Type: protocol.SettingBool,
+			Key:         SettingFullscreen,
+			Label:       "Fullscreen",
+			Type:        protocol.SettingBool,
 			Default:     false,
-			Description: "Launch the native client in fullscreen mode.",
+			Description: "Request a fullscreen RDP session.",
 		},
 		{
-			Key: SettingGateway, Label: "RD Gateway", Type: protocol.SettingString,
+			Key:         SettingGateway,
+			Label:       "RD Gateway",
+			Type:        protocol.SettingString,
 			Description: "Optional Remote Desktop Gateway in host[:port] form.",
-		},
-		{
-			Key: SettingBinary, Label: "Binary override", Type: protocol.SettingString,
-			Description: "Explicit path or name of the RDP client binary to launch (overrides auto-discovery).",
-		},
-		{
-			Key: SettingExtraArgs, Label: "Extra arguments", Type: protocol.SettingString,
-			Description: "Additional command-line arguments appended verbatim to the native client invocation.",
 		},
 	}
 }
 
-// Capabilities reports the runtime capabilities advertised by the RDP
-// module. The native client owns its own window, so the host renders in
-// external mode and cannot proxy resize / send-input events.
+// Capabilities reports the runtime capabilities advertised by the RDP module.
 func (m *Module) Capabilities() protocol.Capabilities {
 	return protocol.Capabilities{
-		RenderModes:       []protocol.RenderMode{protocol.RenderExternal},
-		AuthMethods:       []protocol.AuthMethod{protocol.AuthNone},
+		RenderModes:       []protocol.RenderMode{protocol.RenderGraphical},
+		AuthMethods:       []protocol.AuthMethod{protocol.AuthPassword, protocol.AuthNone},
 		SupportsResize:    false,
 		SupportsClipboard: false,
 		SupportsLogging:   true,
@@ -128,8 +115,7 @@ func (m *Module) Capabilities() protocol.Capabilities {
 	}
 }
 
-// config is the validated form of an OpenRequest. Kept package-local; the
-// public surface is the OpenRequest -> Session pipeline.
+// config is the validated form of an OpenRequest.
 type config struct {
 	Host       string
 	Port       int
@@ -139,8 +125,6 @@ type config struct {
 	Height     int
 	Fullscreen bool
 	Gateway    string
-	Binary     string
-	ExtraArgs  []string
 }
 
 // settingsView is a minimal typed view over the untyped settings map.
@@ -178,35 +162,9 @@ func (s settingsView) boolOr(key string, def bool) bool {
 	return def
 }
 
-func (s settingsView) stringSlice(key string) []string {
-	v, ok := s.m[key]
-	if !ok {
-		return nil
-	}
-	switch x := v.(type) {
-	case []string:
-		out := make([]string, 0, len(x))
-		for _, e := range x {
-			if e != "" {
-				out = append(out, e)
-			}
-		}
-		return out
-	case []any:
-		out := make([]string, 0, len(x))
-		for _, e := range x {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
-}
-
 // configFromRequest validates and assembles a config from the OpenRequest.
 // req.Host / req.Port take precedence over the settings map entries when
-// non-empty/non-zero, mirroring the rawsocket plugin's convention.
+// non-empty/non-zero.
 func configFromRequest(req protocol.OpenRequest) (*config, error) {
 	view := settingsView{m: req.Settings}
 
@@ -249,117 +207,16 @@ func configFromRequest(req protocol.OpenRequest) (*config, error) {
 		Height:     height,
 		Fullscreen: view.boolOr(SettingFullscreen, false),
 		Gateway:    view.stringOr(SettingGateway, ""),
-		Binary:     view.stringOr(SettingBinary, ""),
-		ExtraArgs:  view.stringSlice(SettingExtraArgs),
 	}, nil
 }
 
-// candidatesFor returns the ordered list of binary candidate names to try
-// on the given GOOS.
-func candidatesFor(goos string) []string {
-	if goos == "windows" {
-		return []string{"mstsc.exe", "mstsc"}
-	}
-	return []string{"xfreerdp3", "xfreerdp", "remmina"}
-}
-
-// buildArgvFor renders the argv for the given platform. The xfreerdp form is
-// used for any non-Windows platform; remmina accepts a different syntax in
-// general but the xfreerdp-flavoured argv is the common case and remains the
-// most useful default — users who need remmina-native invocation can supply
-// their own template via extra_args + binary override.
-//
-// On Windows the mstsc client cannot accept inline credentials on the
-// command line — only /v, /w, /h, and /f are honoured; username, domain,
-// and gateway flags are intentionally omitted from the template.
-func buildArgvFor(goos string, cfg *config) ([]string, error) {
-	vars := extlaunch.Vars{
-		"host":     cfg.Host,
-		"port":     strconv.Itoa(cfg.Port),
-		"username": cfg.Username,
-		"domain":   cfg.Domain,
-		"width":    strconv.Itoa(cfg.Width),
-		"height":   strconv.Itoa(cfg.Height),
-		"gateway":  cfg.Gateway,
-	}
-
-	var template []string
-	if goos == "windows" {
-		// mstsc: /v: target, /w: width, /h: height, optional /f for fullscreen.
-		// mstsc cannot accept inline credentials on the command line — only
-		// /v, /w, /h, and /f are honoured; username, domain, and gateway
-		// flags are intentionally omitted from the template.
-		if cfg.Fullscreen {
-			template = append(template, "/f")
-		}
-		template = append(template,
-			"/v:{host}:{port}",
-			"/w:{width}",
-			"/h:{height}",
-		)
-	} else {
-		// xfreerdp argv. Optional arguments whose substituted value is
-		// empty are omitted entirely so the client does not see flags like
-		// "/u:" with no value (which xfreerdp interprets as an explicit
-		// empty username rather than "no username supplied").
-		if cfg.Fullscreen {
-			template = append(template, "/f")
-		}
-		template = append(template, "/v:{host}:{port}")
-		if cfg.Username != "" {
-			template = append(template, "/u:{username}")
-		}
-		if cfg.Domain != "" {
-			template = append(template, "/d:{domain}")
-		}
-		template = append(template,
-			"/w:{width}",
-			"/h:{height}",
-		)
-		if cfg.Gateway != "" {
-			template = append(template, "/g:{gateway}")
-		}
-	}
-
-	args, err := extlaunch.Build(template, vars)
-	if err != nil {
-		return nil, fmt.Errorf("rdp: build argv: %w", err)
-	}
-	if len(cfg.ExtraArgs) > 0 {
-		args = append(args, cfg.ExtraArgs...)
-	}
-	return args, nil
-}
-
-// Open validates settings, discovers a suitable RDP client binary, and
-// renders the argv. The returned [Session] holds the resolved binary path
-// and arguments but does NOT spawn a subprocess until [Session.Start] is
-// called.
+// Open validates settings and returns a Session ready to dial the remote.
+// The TCP connection is not established until [Session.Start] is called.
 func (m *Module) Open(ctx context.Context, req protocol.OpenRequest) (protocol.Session, error) {
 	cfg, err := configFromRequest(req)
 	if err != nil {
 		return nil, err
 	}
-
-	goos := runtime.GOOS
-
-	discover := m.discover
-	if discover == nil {
-		discover = extlaunch.Discover
-	}
-	binary, err := discover(cfg.Binary, candidatesFor(goos))
-	if err != nil {
-		return nil, fmt.Errorf("rdp: discover client: %w", err)
-	}
-
-	argvFor := m.argvFor
-	if argvFor == nil {
-		argvFor = buildArgvFor
-	}
-	args, err := argvFor(goos, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return newSession(binary, args), nil
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	return newSession(addr), nil
 }

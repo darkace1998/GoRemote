@@ -37,7 +37,6 @@ Use a **Go monorepo with a shared `go.work`** and a thin desktop shell backed by
 - `internal/domain` — connection / folder / template / inheritance types
 - `internal/persistence` — versioned config, secret blob, migrations, backups
 - `internal/import/mremoteng` — XML/CSV importer with per-row warnings
-- `internal/extlaunch` — generic external-process launcher (RDP/VNC/TN5250/MOSH/PowerShell)
 - `internal/eventbus` — typed pub/sub used by hosts and app core
 - `internal/logging` — structured-logger wrapper with secret redaction (file sink + rotation)
 - `internal/platform` — paths, keychain abstraction, clipboard, notifications
@@ -45,10 +44,9 @@ Use a **Go monorepo with a shared `go.work`** and a thin desktop shell backed by
 - `app/update`, `app/diagnostics`, `app/marketplace`, `app/extplugin`, `app/sync` — app-level features (auto-update, diagnostic bundle, plugin marketplace, external-plugin loader, git-sync)
 - `sdk/plugin`, `sdk/protocol`, `sdk/credential` — versioned plugin contracts
 - `host/plugin`, `host/protocol`, `host/credential` — in-process plugin hosts
-- `host/plugin/ipc/` + `proto/plugin/v1/` — out-of-process IPC contract (length-prefixed JSON over Unix domain sockets)
-- `plugins/protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial,tn5250,rdp,vnc,http,powershell,mosh}` — built-in protocols
+- `proto/plugin/v1/` — IPC contract for credential provider plugins only (length-prefixed JSON over Unix domain sockets)
+- `plugins/protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial,tn5250,rdp,vnc,http,powershell,mosh}` — built-in protocols (all Go-native packages, compiled into binary)
 - `plugins/credential-{file,keychain,1password,bitwarden}` — built-in providers
-- `plugins/external-example` — reference out-of-process plugin
 - `installers/` — Windows WiX MSI sources (and platform packaging stubs)
 - `test/integration` — fake-plugin integration harness
 
@@ -112,18 +110,12 @@ Use a versioned, human-inspectable format:
 
 ## 7. Protocol System
 ### Design choice
-Do **not** rely on Go's native `plugin` package for third-party extensions. It is not a good fit for a cross-platform desktop product and is especially problematic on Windows.
+Do **not** rely on Go's native `plugin` package for cross-platform extensions. It is not a good fit for a cross-platform desktop product and is especially problematic on Windows.
 
-Use an **out-of-process plugin model** with a stable IPC contract.
+All protocol implementations are **Go-native packages** compiled directly into the application binary. There is no out-of-process IPC layer, no external service dependency, and no runtime-loaded plugin for protocol sessions.
 
-### Recommended plugin transport
-- gRPC or Connect RPC over local IPC
-- named pipes on Windows
-- Unix domain sockets on Linux/macOS
-- optional sandboxing later for highly constrained plugins
-
-### Protocol plugin contract
-Each protocol module should expose:
+### Protocol interface contract
+Each protocol module must implement the shared `sdk/protocol` interface and expose:
 - manifest metadata
 - settings schema
 - supported auth types
@@ -133,15 +125,13 @@ Each protocol module should expose:
 - reconnect/resize/clipboard hooks
 - diagnostics hooks
 
-### Built-in vs external protocols
-- Built-in protocols can live in the same repository and use direct Go interfaces internally.
-- External protocols should go through the stable IPC boundary.
-- The host should present both through one unified registry.
+### Built-in protocols
+All supported protocols (`ssh`, `sftp`, `telnet`, `rlogin`, `rawsocket`, `serial`, `tn5250`, `rdp`, `vnc`, `http`, `powershell`, `mosh`) are implemented as Go packages under `plugins/protocol-*` and registered at compile time via the protocol host. No subprocess or IPC path exists for any of these.
 
 ### Session rendering modes
 - **Terminal mode** for SSH, Telnet, TN5250, Raw Socket, rlogin.
-- **Graphical framebuffer mode** for VNC and future embedded RDP.
-- **External launcher mode** for protocols that still depend on OS-native or third-party clients.
+- **Graphical framebuffer mode** for VNC, RDP, and similar graphical protocols — rendered in-process using Go libraries.
+- **External tool mode** is reserved only for user-configured external tool sessions (where the user explicitly specifies an OS command); it is not a protocol system mechanism.
 
 ## 8. Credential Provider System
 ### Required model
@@ -215,7 +205,7 @@ This avoids scattering OS checks across the UI and protocol code.
 ## 13. Architecture Decisions That Reduce Risk
 - Greenfield rewrite, not line-by-line port.
 - **Fyne v2 (pure Go + OpenGL)** chosen for the UI shell over the original Wails/React plan — enables true cross-platform builds from a single Go toolchain without a browser runtime or Node.js dependency.
-- Stable IPC boundary for third-party extensions.
+- **All protocols are Go-native packages** compiled directly into the binary — no out-of-process IPC, no external service dependency for protocol sessions. This simplifies deployment, eliminates IPC failure modes, and keeps the protocol surface fully testable in-process.
+- Stable IPC boundary retained for credential provider plugins only.
 - Core/domain separation before protocol implementation.
 - Import compatibility treated as a product feature, not a migration script.
-- External-launch fallback allowed for some protocols while embedded implementations mature.

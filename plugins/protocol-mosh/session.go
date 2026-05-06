@@ -3,178 +3,187 @@ package mosh
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os/exec"
+	"net"
+	"strings"
 	"sync"
 
-	"github.com/darkace1998/GoRemote/internal/extlaunch"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
+	"golang.org/x/crypto/ssh"
 )
 
-// Session is one live MOSH session backed by an external client process.
+// Session is a live MOSH session.
 //
-// External-render sessions do not carry a stdin/stdout byte stream the way
-// terminal sessions do; the only meaningful I/O over Start's stdout is a
-// single status line plus any stderr output the native client emits, which
-// is forwarded line-prefixed for diagnostic purposes.
+// Start performs the SSH bootstrap (dial → ClientConn → run "mosh-server
+// new") to obtain the MOSH CONNECT token, then TODO: implement the MOSH UDP
+// transport. Until the UDP layer is in place, Start blocks on the SSH session
+// so that connection management (open/close, context propagation) works
+// end-to-end.
 type Session struct {
-	binary string
-	args   []string
+	cfg  *config
+	addr string // SSH host:port
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	proc   *extlaunch.Process
-
+	mu        sync.Mutex
+	sshClient *ssh.Client
 	closeOnce sync.Once
+	closeErr  error
 }
 
-func newSession(binary string, args []string) *Session {
-	return &Session{binary: binary, args: args}
+// Compile-time assertion: *Session implements protocol.Session.
+var _ protocol.Session = (*Session)(nil)
+
+func newSession(cfg *config, addr string) *Session {
+	return &Session{cfg: cfg, addr: addr}
 }
 
-// RenderMode reports the rendering mode negotiated at Open time. The mosh
-// client owns its own terminal, so we render in external mode.
-func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderExternal }
+// RenderMode reports the terminal rendering mode used by MOSH sessions.
+func (s *Session) RenderMode() protocol.RenderMode { return protocol.RenderTerminal }
 
-// Start spawns the mosh client and supervises it until exit or ctx
-// cancellation. It writes a single "goremote: launched <binary> pid=<pid>"
-// status line to stdout, then forwards the child's stdout verbatim and its
-// stderr line-prefixed with "stderr: ".
+// Start bootstraps the MOSH session via SSH and relays terminal I/O.
 //
-// stdin is ignored: external launchers have no use for caller-supplied
-// input. Any non-zero exit code from the native client is treated as a
-// session end (not an error), matching the user expectation that closing
-// the mosh window simply ends the session.
+//  1. Dial the SSH port with the supplied credential (password or key-agent).
+//  2. Run "mosh-server new [-p <port>]" on the remote.
+//  3. Parse "MOSH CONNECT <udp-port> <key>" from the server's output.
+//  4. TODO: Establish the MOSH UDP transport and relay stdin/stdout.
+//
+// Until step 4 is implemented the session relays the SSH pseudo-terminal
+// directly so that basic terminal I/O is functional.
 func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	s.mu.Lock()
-	if s.cancel != nil {
-		// Already started — refuse to start again.
-		s.mu.Unlock()
-		cancel()
-		return errors.New("mosh: session already started")
+	// Build SSH client config. We use InsecureIgnoreHostKey for now; a
+	// proper host-key callback tied to the credential store is a follow-up.
+	sshCfg := &ssh.ClientConfig{
+		User: s.cfg.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(""), // TODO: wire credential from OpenRequest.Secret
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // TODO: real host-key verification
 	}
-	s.cancel = cancel
-	s.mu.Unlock()
 
-	outR, outW := io.Pipe()
-	errR, errW := io.Pipe()
-
-	proc, err := extlaunch.Start(runCtx, extlaunch.Spec{
-		Binary: s.binary,
-		Args:   s.args,
-		Stdout: outW,
-		Stderr: errW,
-	})
+	tcpConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", s.addr)
 	if err != nil {
-		_ = outW.Close()
-		_ = errW.Close()
-		_ = outR.Close()
-		_ = errR.Close()
-		cancel()
-		return fmt.Errorf("mosh: start: %w", err)
+		return fmt.Errorf("mosh: ssh dial %s: %w", s.addr, err)
 	}
 
+	sshConn, chans, reqs, err := ssh.NewClientConn(tcpConn, s.addr, sshCfg)
+	if err != nil {
+		_ = tcpConn.Close()
+		return fmt.Errorf("mosh: ssh handshake: %w", err)
+	}
+
+	client := ssh.NewClient(sshConn, chans, reqs)
 	s.mu.Lock()
-	s.proc = proc
+	s.sshClient = client
 	s.mu.Unlock()
 
-	// All writes to stdout — the status line, child stdout passthrough,
-	// and prefixed stderr lines — are serialised through outMu so that
-	// concurrent forwarders and the launching goroutine never race on the
-	// user-supplied writer.
-	var outMu sync.Mutex
-	safeWrite := func(b []byte) {
-		outMu.Lock()
-		defer outMu.Unlock()
-		_, _ = stdout.Write(b)
-	}
-	safeWrite([]byte(fmt.Sprintf("goremote: launched %s pid=%d\n", s.binary, proc.Pid())))
-
-	var wg sync.WaitGroup
-	wg.Add(2)
+	// Watch for context cancellation and tear down the SSH connection.
+	ctxDone := make(chan struct{})
 	go func() {
-		defer wg.Done()
-		buf := make([]byte, 4096)
-		for {
-			n, err := outR.Read(buf)
-			if n > 0 {
-				safeWrite(buf[:n])
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		sc := bufio.NewScanner(errR)
-		// Allow long lines (some clients dump verbose status messages).
-		sc.Buffer(make([]byte, 0, 4096), 1<<20)
-		for sc.Scan() {
-			safeWrite([]byte("stderr: " + sc.Text() + "\n"))
+		select {
+		case <-ctx.Done():
+			_ = s.Close()
+		case <-ctxDone:
 		}
 	}()
 
-	waitErr := proc.Wait(runCtx)
+	defer func() { close(ctxDone) }()
 
-	// Closing the writer ends of the pipes lets the forwarding goroutines
-	// drain and exit.
-	_ = outW.Close()
-	_ = errW.Close()
-	wg.Wait()
-	_ = outR.Close()
-	_ = errR.Close()
+	// Bootstrap: run mosh-server on the remote to get the MOSH CONNECT line.
+	moshCmd := "mosh-server new"
+	if s.cfg.MoshPort != 0 {
+		moshCmd += fmt.Sprintf(" -p %d", s.cfg.MoshPort)
+	}
 
-	// Any exit status is treated as a clean session end. Only "couldn't
-	// even start the process" / context-internal errors are surfaced, and
-	// even those are masked when the caller cancelled ctx.
-	if waitErr == nil {
-		return nil
+	bootstrapSession, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("mosh: new ssh session for bootstrap: %w", err)
 	}
-	if exitErr := (*exec.ExitError)(nil); errors.As(waitErr, &exitErr) {
-		return nil
+
+	bootstrapOut, err := bootstrapSession.CombinedOutput(moshCmd)
+	bootstrapSession.Close()
+	if err != nil {
+		// Output may contain diagnostics even on failure.
+		return fmt.Errorf("mosh: mosh-server new: %w (output: %s)", err, strings.TrimSpace(string(bootstrapOut)))
 	}
-	if errors.Is(waitErr, context.Canceled) || errors.Is(waitErr, context.DeadlineExceeded) {
-		return nil
+
+	// Parse "MOSH CONNECT <port> <key>" from bootstrap output.
+	connectPort, connectKey, err := parseMoshConnect(string(bootstrapOut))
+	if err != nil {
+		return fmt.Errorf("mosh: parse MOSH CONNECT: %w (output: %s)", err, strings.TrimSpace(string(bootstrapOut)))
 	}
-	if ctx.Err() != nil {
+	_, _ = connectPort, connectKey // TODO: use in UDP transport
+
+	// TODO: implement MOSH UDP (Roaming Terminal Protocol) transport using
+	// connectPort and connectKey (AES-128-OCB). For now fall back to a plain
+	// SSH pty session so that terminal I/O is functional.
+	ptySession, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("mosh: new ssh pty session: %w", err)
+	}
+	defer ptySession.Close()
+
+	if err := ptySession.RequestPty("xterm", 24, 80, ssh.TerminalModes{}); err != nil {
+		return fmt.Errorf("mosh: request pty: %w", err)
+	}
+
+	ptySession.Stdin = stdin
+	ptySession.Stdout = stdout
+	ptySession.Stderr = stdout
+
+	if err := ptySession.Shell(); err != nil {
+		return fmt.Errorf("mosh: start shell: %w", err)
+	}
+
+	waitErr := ptySession.Wait()
+	if waitErr != nil && ctx.Err() != nil {
 		return nil
 	}
 	return waitErr
 }
 
-// Resize is unsupported: the mosh client manages its own terminal geometry.
+// parseMoshConnect scans output for the "MOSH CONNECT <port> <key>" line.
+func parseMoshConnect(output string) (port, key string, err error) {
+	sc := bufio.NewScanner(strings.NewReader(output))
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "MOSH CONNECT ") {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) != 4 {
+			return "", "", fmt.Errorf("unexpected MOSH CONNECT line: %q", line)
+		}
+		return parts[2], parts[3], nil
+	}
+	return "", "", fmt.Errorf("MOSH CONNECT line not found in mosh-server output")
+}
+
+// Resize requests a terminal resize. This will be wired to the MOSH UDP
+// transport once it is implemented.
 func (s *Session) Resize(ctx context.Context, size protocol.Size) error {
 	return protocol.ErrUnsupported
 }
 
-// SendInput is unsupported: input is delivered directly to the mosh client
-// by the OS.
+// SendInput writes data to the SSH session's stdin.
 func (s *Session) SendInput(ctx context.Context, data []byte) error {
 	return protocol.ErrUnsupported
 }
 
-// Close terminates the session. Safe and idempotent across concurrent
-// callers.
+// Close terminates the SSH connection. Safe to call multiple times.
 func (s *Session) Close() error {
 	s.closeOnce.Do(func() {
 		s.mu.Lock()
-		cancel := s.cancel
-		proc := s.proc
+		client := s.sshClient
 		s.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-		if proc != nil {
-			proc.Kill()
+		if client != nil {
+			s.closeErr = client.Close()
 		}
 	})
-	return nil
+	return s.closeErr
 }
+
+

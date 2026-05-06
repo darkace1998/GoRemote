@@ -7,14 +7,12 @@ import (
 )
 
 // IPCTransport is the boundary interface between the in-process plugin host
-// and an external, out-of-process plugin. External plugin IPC
-// (gRPC/Connect over named pipes / Unix sockets) is planned; this file
-// declares the boundary so in-process and out-of-process plugins can share
-// the same Host semantics.
+// and an external, out-of-process credential provider. IPC is used
+// exclusively for credential providers; all protocol sessions are implemented
+// as Go-native in-process packages and do not use this transport.
 //
-// The in-process host above is sufficient for built-in plugins. No concrete
-// IPC implementation is shipped yet in order to avoid pulling in gRPC as a
-// dependency before the contract stabilizes.
+// No concrete IPC implementation is shipped yet in order to avoid pulling in
+// gRPC as a dependency before the contract stabilizes.
 type IPCTransport interface {
 	// Connect establishes a transport to the external plugin identified by
 	// endpoint (e.g. a Unix socket path or named-pipe name).
