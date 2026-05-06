@@ -229,5 +229,39 @@ func TestInstallRejectsBadListing(t *testing.T) {
 	}
 }
 
+// BUG-M1: an inline manifest that is invalid must cause Install to fail
+// before the plugin directory is committed to disk.
+func TestInstallRejectsInvalidInlineManifest(t *testing.T) {
+	payload := []byte("PKG_BLOB_v1")
+	sum := sha256.Sum256(payload)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(payload)
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+
+	// Manifest is missing required fields (name, kind, version, api_version).
+	badManifest := []byte(`{"id":"io.example.alpha"}`)
+	l := Listing{
+		ID:          "io.example.alpha",
+		Version:     "1.0.0",
+		DownloadURL: srv.URL,
+		SHA256:      hex.EncodeToString(sum[:]),
+		Manifest:    badManifest,
+	}
+	err := newClient().Install(context.Background(), l, dest)
+	if err == nil {
+		t.Fatal("expected error for invalid inline manifest, got nil")
+	}
+	if !strings.Contains(err.Error(), "manifest") {
+		t.Errorf("expected manifest-related error, got: %v", err)
+	}
+	// The plugin directory must not have been committed.
+	if _, serr := os.Stat(filepath.Join(dest, "io.example.alpha")); serr == nil {
+		t.Error("plugin dir must not exist after failed install")
+	}
+}
+
 // fmt is here to keep go-vet happy with potential future use.
 var _ = fmt.Sprintf

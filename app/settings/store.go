@@ -97,6 +97,13 @@ func (s *fileStore) Get(ctx context.Context) (Settings, error) {
 		s.logger.Error("settings: read", "path", s.path, "err", err.Error())
 		return Default(), nil
 	}
+	// BUG-ST1: decode the raw JSON map so we can tell which keys are
+	// explicitly present. An explicit zero (e.g. reconnectMaxN=0) in the
+	// file must not be overridden by the defaults — only truly absent keys
+	// should fall back to their default values.
+	var raw map[string]any
+	_ = json.Unmarshal(data, &raw) // best-effort; nil map is safe below
+
 	var out Settings
 	if err := json.Unmarshal(data, &out); err != nil {
 		s.logger.Error("settings: corrupt file, returning defaults",
@@ -105,7 +112,7 @@ func (s *fileStore) Get(ctx context.Context) (Settings, error) {
 	}
 	// Ensure unset/zero fields fall back to defaults so older files keep
 	// working when new fields are added.
-	merged := mergeWithDefaults(out)
+	merged := mergeWithDefaults(out, raw)
 	return merged, nil
 }
 
@@ -178,9 +185,13 @@ func writeAtomic(path string, data []byte, mode os.FileMode) (err error) {
 	return nil
 }
 
-// mergeWithDefaults fills in any zero-valued required fields with their
-// defaults so an old or partial file still produces a valid Settings.
-func mergeWithDefaults(in Settings) Settings {
+// mergeWithDefaults fills in any absent required fields with their defaults so
+// an old or partial file still produces a valid Settings. The present map
+// contains the keys actually found in the raw JSON; keys absent from present
+// are treated as missing and get the default value. Explicit zeros written by
+// the user (e.g. reconnectMaxN=0) are preserved because their keys appear in
+// present.
+func mergeWithDefaults(in Settings, present map[string]any) Settings {
 	d := Default()
 	if in.Theme == "" {
 		in.Theme = d.Theme
@@ -188,8 +199,11 @@ func mergeWithDefaults(in Settings) Settings {
 	if in.FontSizePx == 0 {
 		in.FontSizePx = d.FontSizePx
 	}
-	if in.ReconnectMaxN == 0 && in.ReconnectDelayMs == 0 && !in.AutoReconnect {
-		// keep the defaults pair coherent on a brand-new file
+	// Only apply reconnect defaults when both fields are absent from the JSON.
+	// If either is present (even as 0) the user's intent is preserved.
+	_, hasMaxN := present["reconnectMaxN"]
+	_, hasDelayMs := present["reconnectDelayMs"]
+	if !hasMaxN && !hasDelayMs {
 		in.ReconnectMaxN = d.ReconnectMaxN
 		in.ReconnectDelayMs = d.ReconnectDelayMs
 	}

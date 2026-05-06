@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -58,7 +59,7 @@ func Build(ctx context.Context, w io.Writer, in Inputs) (*Result, error) {
 		return nil, err
 	}
 	if in.SettingsPath != "" {
-		if err := copyFile(zw, in.SettingsPath, "settings.json"); err != nil {
+		if err := writeRedactedSettings(zw, in.SettingsPath); err != nil {
 			addNote("settings.json: " + err.Error())
 		}
 	}
@@ -120,7 +121,45 @@ func copyFile(zw *zip.Writer, src, dst string) error {
 	return err
 }
 
-// SecretKeys lists JSON object keys whose values are stripped from the
+// writeRedactedSettings loads the settings file, redacts sensitive fields
+// (any key containing "token" or "password", case-insensitive), and strips
+// user-info from URL-valued fields (e.g. gitSyncRemote may embed credentials
+// in the URL authority component), then writes the sanitised JSON.
+func writeRedactedSettings(zw *zip.Writer, src string) error {
+	raw, err := readRegularFile(src)
+	if err != nil {
+		return err
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		w, werr := zw.Create("settings.json")
+		if werr != nil {
+			return werr
+		}
+		_, werr = fmt.Fprintf(w, "{\"_note\":\"settings.json not parseable as JSON\",\"err\":%q}\n", err.Error())
+		return werr
+	}
+	for k, v := range doc {
+		kl := strings.ToLower(k)
+		if strings.Contains(kl, "token") || strings.Contains(kl, "password") {
+			if v != nil && v != "" {
+				doc[k] = redactedPlaceholder
+			}
+			continue
+		}
+		// Sanitise user-info from any URL-valued field (covers gitSyncRemote
+		// and similar fields that may contain embedded credentials).
+		if s, ok := v.(string); ok && s != "" {
+			if u, perr := url.Parse(s); perr == nil && u.User != nil {
+				u.User = nil
+				doc[k] = u.String()
+			}
+		}
+	}
+	return writeJSON(zw, "settings.json", doc)
+}
+
+
 // workspace before bundling. The match is case-insensitive.
 var SecretKeys = []string{
 	"password", "passphrase", "secret", "token", "apiKey", "api_key",
@@ -272,11 +311,19 @@ func currentExecutable() string {
 	return ""
 }
 
-// bundledEnv returns env vars whose name starts with GOREMOTE_, plus a
-// small allowlist of debug-relevant ones. Anything that could leak
-// credentials (PATH, AWS_*, etc.) is omitted.
+// bundledEnv returns a small allowlist of debug-relevant env vars.
+// Only explicitly listed GOREMOTE_* variables are included; wholesale
+// inclusion of all GOREMOTE_* vars is avoided because some may carry
+// credentials or sensitive server addresses. Non-GOREMOTE_ vars that
+// are useful for diagnosing rendering / locale issues are also included.
 func bundledEnv() map[string]string {
+	// Explicit allowlist: only vars known to be debug-relevant and safe.
 	allow := map[string]bool{
+		// Application-level vars actually read by the binary.
+		"GOREMOTE_LOG_LEVEL": true,
+		"GOREMOTE_STATE_DIR": true,
+		"GOREMOTE_BW_BINARY": true,
+		// System / locale vars that affect display but carry no credentials.
 		"GOOS": true, "GOARCH": true, "LANG": true, "LC_ALL": true, "TERM": true,
 	}
 	out := map[string]string{}
@@ -286,7 +333,7 @@ func bundledEnv() map[string]string {
 			continue
 		}
 		k, v := kv[:eq], kv[eq+1:]
-		if strings.HasPrefix(k, "GOREMOTE_") || allow[k] {
+		if allow[k] {
 			out[k] = v
 		}
 	}

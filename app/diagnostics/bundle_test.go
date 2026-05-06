@@ -197,7 +197,7 @@ func TestBuild_NonJSONWorkspaceFallsBack(t *testing.T) {
 
 func TestBuild_EnvAllowlistDoesNotLeakArbitraryVars(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "do-not-leak")
-	t.Setenv("GOREMOTE_TEST_VAR", "ok")
+	t.Setenv("GOREMOTE_LOG_LEVEL", "debug") // on allowlist — should be present
 
 	var buf bytes.Buffer
 	if _, err := Build(context.Background(), &buf, Inputs{}); err != nil {
@@ -207,7 +207,49 @@ func TestBuild_EnvAllowlistDoesNotLeakArbitraryVars(t *testing.T) {
 	if strings.Contains(osInfo, "do-not-leak") {
 		t.Errorf("env allowlist leaked AWS secret: %s", osInfo)
 	}
-	if !strings.Contains(osInfo, "GOREMOTE_TEST_VAR") {
-		t.Errorf("expected GOREMOTE_ var in env: %s", osInfo)
+	if !strings.Contains(osInfo, "GOREMOTE_LOG_LEVEL") {
+		t.Errorf("expected allowlisted GOREMOTE_LOG_LEVEL in env: %s", osInfo)
+	}
+}
+
+// BUG-D3: arbitrary GOREMOTE_* vars not on the allowlist must not appear.
+func TestBuild_EnvAllowlistDropsUnknownGOREMOTEVars(t *testing.T) {
+	t.Setenv("GOREMOTE_SECRET_THING", "should-not-appear")
+
+	var buf bytes.Buffer
+	if _, err := Build(context.Background(), &buf, Inputs{}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	osInfo := readFromZip(t, buf.Bytes(), "os-info.json")
+	if strings.Contains(osInfo, "GOREMOTE_SECRET_THING") {
+		t.Errorf("non-allowlisted GOREMOTE_ var leaked into bundle: %s", osInfo)
+	}
+}
+
+// BUG-D1: settings.json must be redacted before inclusion in the bundle.
+func TestBuild_SettingsRedactsTokenFields(t *testing.T) {
+	dir := t.TempDir()
+	settingsP := filepath.Join(dir, "settings.json")
+	// A fake settings file with a token field and a URL with embedded credentials.
+	writeFile(t, settingsP, `{"theme":"dark","myToken":"secret-token","gitSyncRemote":"https://user:pass@github.com/org/repo"}`)
+
+	var buf bytes.Buffer
+	if _, err := Build(context.Background(), &buf, Inputs{SettingsPath: settingsP}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	s := readFromZip(t, buf.Bytes(), "settings.json")
+	if strings.Contains(s, "secret-token") {
+		t.Errorf("token field not redacted: %s", s)
+	}
+	if strings.Contains(s, "user:pass") {
+		t.Errorf("URL user-info not sanitised: %s", s)
+	}
+	// Non-sensitive field must survive.
+	if !strings.Contains(s, "dark") {
+		t.Errorf("non-sensitive theme field lost: %s", s)
+	}
+	// URL must still be present, just without the credentials.
+	if !strings.Contains(s, "github.com") {
+		t.Errorf("URL host lost from gitSyncRemote: %s", s)
 	}
 }

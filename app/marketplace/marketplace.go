@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
 )
 
 // Listing is one row from the marketplace document.
@@ -306,6 +308,16 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 		mp, err := safeStagePath(stage, "manifest.json")
 		if err != nil {
 			return err
+		}
+		// BUG-M1: validate the inline manifest before persisting it so a
+		// malformed or malicious entry cannot install a broken manifest.json
+		// that confuses the local extplugin Registry.
+		var m sdkplugin.Manifest
+		if err := json.Unmarshal(l.Manifest, &m); err != nil {
+			return fmt.Errorf("marketplace: inline manifest json: %w", err)
+		}
+		if err := m.Validate(); err != nil {
+			return fmt.Errorf("marketplace: inline manifest invalid: %w", err)
 		}
 		if err := os.WriteFile(mp, []byte(l.Manifest), 0o600); err != nil {
 			return err

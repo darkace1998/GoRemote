@@ -235,3 +235,31 @@ func TestFileStore_PartialFileGetsDefaultsMerged(t *testing.T) {
 		t.Errorf("LogLevel = %q, want default %q", got.LogLevel, Default().LogLevel)
 	}
 }
+
+// BUG-ST1: explicit zero values written to disk for reconnect fields must
+// survive a round-trip through Get() without being replaced by defaults.
+func TestFileStore_ExplicitZeroReconnectPreserved(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	store := NewFileStore(path)
+
+	// Write settings with reconnect fields explicitly set to 0.
+	s := Default()
+	s.ReconnectMaxN = 0
+	s.ReconnectDelayMs = 0
+
+	if _, err := store.Update(context.Background(), s); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ReconnectMaxN != 0 {
+		t.Errorf("ReconnectMaxN = %d after round-trip, want 0 (user's explicit value)", got.ReconnectMaxN)
+	}
+	if got.ReconnectDelayMs != 0 {
+		t.Errorf("ReconnectDelayMs = %d after round-trip, want 0 (user's explicit value)", got.ReconnectDelayMs)
+	}
+}

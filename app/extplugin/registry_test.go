@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	sdkplugin "github.com/darkace1998/GoRemote/sdk/plugin"
@@ -217,4 +218,83 @@ func TestSetStatusRejectsInvalid(t *testing.T) {
 	if err := r.SetStatus("any", "garbage"); err == nil {
 		t.Error("expected error for invalid status")
 	}
+}
+
+// BUG-E1: a manifest whose id field differs from the containing directory
+// name must be rejected as a possible spoofing attempt.
+func TestSpoofedManifestIDRejected(t *testing.T) {
+	root := t.TempDir()
+	// Directory is named "io.example.legit" but the manifest claims a different id.
+	spoofed := validManifest("io.evil.spoof")
+	writeManifest(t, filepath.Join(root, "io.example.legit"), spoofed)
+
+	r, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// The entry must be discoverable under the directory name…
+	e, ok := r.Get("io.example.legit")
+	if !ok {
+		t.Fatal("expected entry to be present (as broken)")
+	}
+	// …and must be marked broken with a descriptive error.
+	if e.Status != StatusBroken {
+		t.Errorf("spoofed manifest status = %q, want %q", e.Status, StatusBroken)
+	}
+	if !strings.Contains(e.Error, "does not match directory name") {
+		t.Errorf("expected mismatch error, got: %q", e.Error)
+	}
+	// The evil id must not appear as a separate entry.
+	if _, ok := r.Get("io.evil.spoof"); ok {
+		t.Error("spoofed id must not be registered as a separate entry")
+	}
+}
+
+// BUG-E2: a manifest.json that is a symlink (potentially pointing outside
+// the plugin root) must be rejected during discovery.
+func TestSymlinkedManifestRejected(t *testing.T) {
+	if !symlinkSupported() {
+		t.Skip("symlinks not supported on this platform")
+	}
+	root := t.TempDir()
+	pluginDir := filepath.Join(root, "io.example.sym")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create a real manifest file outside the plugin root.
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "real-manifest.json")
+	m := validManifest("io.example.sym")
+	data, _ := json.MarshalIndent(m, "", "  ")
+	if err := os.WriteFile(outside, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Create a symlink inside the plugin dir pointing to the outside file.
+	link := filepath.Join(pluginDir, "manifest.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// The symlinked plugin must not appear in the registry.
+	if _, ok := r.Get("io.example.sym"); ok {
+		t.Error("plugin with symlinked manifest.json must not be registered")
+	}
+	if len(r.Entries()) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(r.Entries()))
+	}
+}
+
+func symlinkSupported() bool {
+	tmp := os.TempDir()
+	link := filepath.Join(tmp, ".goremote-symlink-probe")
+	target := filepath.Join(tmp, ".goremote-symlink-target")
+	_ = os.WriteFile(target, nil, 0o600)
+	err := os.Symlink(target, link)
+	_ = os.Remove(link)
+	_ = os.Remove(target)
+	return err == nil
 }

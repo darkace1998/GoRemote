@@ -315,6 +315,14 @@ func (r *Registry) refreshLocked() error {
 		if err != nil {
 			continue
 		}
+		// BUG-E2: safeJoinWithinRoot uses filepath.Abs but does not resolve
+		// symlinks. Lstat the path (without following any symlink) to ensure
+		// manifest.json is a regular file; reject device files, pipes, and
+		// symbolic links that could point outside the plugin root.
+		if lfi, lserr := os.Lstat(manifestPath); lserr != nil || !lfi.Mode().IsRegular() {
+			_ = f.Close()
+			continue
+		}
 		entry := r.loadOneLocked(d.Name(), manifestPath, f)
 		_ = f.Close()
 		r.entries[entry.ID] = entry
@@ -337,8 +345,14 @@ func (r *Registry) loadOneLocked(dirName, manifestPath string, src io.Reader) *E
 		e.Error = fmt.Sprintf("manifest invalid: %v", err)
 		return e
 	}
-	if m.ID != "" {
-		e.ID = m.ID
+	// BUG-E1: use the on-disk directory name as the canonical id. A spoofed
+	// manifest could claim a different id to evade Forget() (which constructs
+	// the removal path from the id). If the manifest declares an id that
+	// differs from the directory name, reject the plugin.
+	if m.ID != "" && m.ID != dirName {
+		e.Status = StatusBroken
+		e.Error = fmt.Sprintf("manifest id %q does not match directory name %q; possible spoofing attempt", m.ID, dirName)
+		return e
 	}
 	e.Manifest = m
 	v := r.verifierLocked()
