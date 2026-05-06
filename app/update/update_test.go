@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -76,10 +78,7 @@ func TestFetchManifestAndDownload(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		var srv *httptest.Server
-		_ = srv
-		// We can't reference srv before it exists; reconstruct URL from r.Host.
-		assetURL := "http://" + r.Host + "/asset.bin"
+		assetURL := "https://" + r.Host + "/asset.bin"
 		shaHex := hex.EncodeToString(digest[:])
 		payload := canonicalPayload("9.9.9", runtime.GOOS, runtime.GOARCH, shaHex, assetURL)
 		sig := base64.StdEncoding.EncodeToString(ed25519.Sign(priv, payload))
@@ -91,10 +90,10 @@ func TestFetchManifestAndDownload(t *testing.T) {
 	mux.HandleFunc("/asset.bin", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(body)
 	})
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewTLSServer(mux)
 	defer srv.Close()
 
-	m, err := FetchManifest(context.Background(), srv.URL+"/manifest.json")
+	m, err := FetchManifest(context.Background(), srv.URL+"/manifest.json", srv.Client())
 	if err != nil {
 		t.Fatalf("FetchManifest: %v", err)
 	}
@@ -108,11 +107,91 @@ func TestFetchManifestAndDownload(t *testing.T) {
 	if err := tgt.VerifySignature(m.Version, base64.StdEncoding.EncodeToString(pub)); err != nil {
 		t.Fatalf("VerifySignature: %v", err)
 	}
-	path, err := Download(context.Background(), tgt, t.TempDir())
+	path, err := Download(context.Background(), tgt, t.TempDir(), srv.Client())
 	if err != nil {
 		t.Fatalf("Download: %v", err)
 	}
 	if !strings.Contains(path, "goremote-update-") {
 		t.Errorf("path = %q", path)
+	}
+}
+
+func TestFetchManifestHTTPRejected(t *testing.T) {
+	t.Parallel()
+	_, err := FetchManifest(context.Background(), "http://example.com/manifest.json")
+	if err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("expected https-only error, got %v", err)
+	}
+}
+
+func TestManifestEmptySha256Rejected(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m := Manifest{Version: "1.0.0", Targets: []ManifestTarget{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			URL:    "https://" + r.Host + "/bin",
+			Sha256: "", // invalid: empty
+		}}}
+		_ = json.NewEncoder(w).Encode(m)
+	}))
+	defer srv.Close()
+	_, err := FetchManifest(context.Background(), srv.URL+"/manifest.json", srv.Client())
+	if err == nil || !strings.Contains(err.Error(), "sha256") {
+		t.Fatalf("expected sha256 validation error, got %v", err)
+	}
+}
+
+func TestCopyFileAtomic(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.bin")
+	dst := filepath.Join(dir, "dst.bin")
+	if err := os.WriteFile(src, []byte("update content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-existing dst should be replaced atomically.
+	if err := os.WriteFile(dst, []byte("original"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(src, dst, 0o700); err != nil {
+		t.Fatalf("copyFile: %v", err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "update content" {
+		t.Errorf("dst content = %q, want 'update content'", got)
+	}
+	// Verify no leftover temp files in dir.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".update-") {
+			t.Errorf("leftover temp file: %s", e.Name())
+		}
+	}
+}
+
+func TestWindowsSwapRollsBack(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "live.exe")
+	if err := os.WriteFile(dst, []byte("live"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// downloaded does not exist → both Rename and copyFile fail.
+	downloaded := filepath.Join(dir, "nonexistent.bin")
+	err := windowsSwap(dst, downloaded)
+	if err == nil {
+		t.Fatal("expected error when downloaded file does not exist")
+	}
+	// dst must be restored from the .old backup.
+	got, rerr := os.ReadFile(dst)
+	if rerr != nil {
+		t.Fatalf("dst not restored after failed swap: %v", rerr)
+	}
+	if string(got) != "live" {
+		t.Errorf("dst content after rollback = %q, want 'live'", got)
 	}
 }

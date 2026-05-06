@@ -55,14 +55,27 @@ type ManifestTarget struct {
 // FetchManifest downloads and decodes the manifest at url. The HTTP
 // client uses a short timeout and refuses redirects to non-HTTPS
 // schemes.
-func FetchManifest(ctx context.Context, url string) (*Manifest, error) {
+func FetchManifest(ctx context.Context, url string, cl ...*http.Client) (*Manifest, error) {
 	if url == "" {
 		return nil, errors.New("update: empty manifest url")
 	}
-	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
-		return nil, fmt.Errorf("update: manifest url must be http(s): %s", url)
+	if !strings.HasPrefix(url, "https://") {
+		return nil, fmt.Errorf("update: manifest url must use https: %s", url)
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	var client *http.Client
+	if len(cl) > 0 && cl[0] != nil {
+		client = cl[0]
+	} else {
+		client = &http.Client{
+			Timeout: 30 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if req.URL.Scheme != "https" {
+					return fmt.Errorf("update: refusing redirect to non-https URL")
+				}
+				return nil
+			},
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -82,6 +95,12 @@ func FetchManifest(ctx context.Context, url string) (*Manifest, error) {
 	}
 	if m.Version == "" {
 		return nil, errors.New("update: manifest has no version")
+	}
+	for i := range m.Targets {
+		if !isValidSHA256(m.Targets[i].Sha256) {
+			return nil, fmt.Errorf("update: target %s/%s has invalid sha256 %q",
+				m.Targets[i].OS, m.Targets[i].Arch, m.Targets[i].Sha256)
+		}
 	}
 	return &m, nil
 }
@@ -136,14 +155,30 @@ func decodeKey(b64 string) (ed25519.PublicKey, error) {
 // verifying the SHA-256 as it goes. The returned path is the absolute
 // path to the downloaded file. The caller is responsible for moving or
 // removing it.
-func Download(ctx context.Context, t *ManifestTarget, destDir string) (string, error) {
+func Download(ctx context.Context, t *ManifestTarget, destDir string, cl ...*http.Client) (string, error) {
 	if t == nil {
 		return "", errors.New("update: nil target")
+	}
+	if !strings.HasPrefix(t.URL, "https://") {
+		return "", fmt.Errorf("update: download url must use https: %s", t.URL)
 	}
 	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return "", err
 	}
-	client := &http.Client{Timeout: 10 * time.Minute}
+	var client *http.Client
+	if len(cl) > 0 && cl[0] != nil {
+		client = cl[0]
+	} else {
+		client = &http.Client{
+			Timeout: 10 * time.Minute,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if req.URL.Scheme != "https" {
+					return fmt.Errorf("update: refusing redirect to non-https URL")
+				}
+				return nil
+			},
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.URL, nil)
 	if err != nil {
 		return "", err
@@ -174,7 +209,7 @@ func Download(ctx context.Context, t *ManifestTarget, destDir string) (string, e
 	}
 	got := hex.EncodeToString(hasher.Sum(nil))
 	want := strings.ToLower(strings.TrimSpace(t.Sha256))
-	if want != "" && got != want {
+	if got != want {
 		_ = os.Remove(tmp.Name())
 		return "", fmt.Errorf("update: sha256 mismatch: got %s want %s", got, want)
 	}
@@ -258,17 +293,11 @@ func SwapInPlace(downloaded string) error {
 		return err
 	}
 	if runtime.GOOS == "windows" {
-		old := dst + ".old"
-		_ = os.Remove(old)
-		if err := os.Rename(dst, old); err != nil {
-			return fmt.Errorf("update: rename old: %w", err)
-		}
+		return windowsSwap(dst, downloaded)
 	}
-	// Make sure the new file is executable (Unix permissions).
+	// Unix: atomic rename, with cross-filesystem copy fallback.
 	mode := installedExecutableMode(dst)
-	if runtime.GOOS != "windows" {
-		_ = os.Chmod(downloaded, mode)
-	}
+	_ = os.Chmod(downloaded, mode)
 	if err := os.Rename(downloaded, dst); err != nil {
 		// Try a copy+remove if rename across filesystems failed.
 		if cerr := copyFile(downloaded, dst, mode); cerr != nil {
@@ -276,6 +305,32 @@ func SwapInPlace(downloaded string) error {
 		}
 		_ = os.Remove(downloaded)
 	}
+	return nil
+}
+
+// windowsSwap performs the Windows-specific three-step swap (dst → .old,
+// new → dst) with automatic rollback on failure so the live binary is
+// never left missing.
+func windowsSwap(dst, downloaded string) error {
+	old := dst + ".old"
+	_ = os.Remove(old)
+	if err := os.Rename(dst, old); err != nil {
+		return fmt.Errorf("update: rename old: %w", err)
+	}
+	success := false
+	defer func() {
+		if !success {
+			_ = os.Rename(old, dst)
+		}
+	}()
+	mode := installedExecutableMode(old)
+	if err := os.Rename(downloaded, dst); err != nil {
+		if cerr := copyFile(downloaded, dst, mode); cerr != nil {
+			return fmt.Errorf("update: install: %w", cerr)
+		}
+	}
+	success = true
+	_ = os.Remove(downloaded)
 	return nil
 }
 
@@ -308,15 +363,29 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	defer in.Close()
-	// #nosec G304 -- src is a temp update payload and dst is the current executable path.
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	// Write to a temp file in the same directory as dst, then rename atomically
+	// so a mid-copy failure never corrupts the live binary.
+	tmpDst, err := os.CreateTemp(filepath.Dir(dst), ".update-*.bin")
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		return joinCleanupError(err, out.Close())
+	tmpName := tmpDst.Name()
+	defer os.Remove(tmpName) // no-op after a successful rename
+	if _, err := io.Copy(tmpDst, in); err != nil {
+		_ = tmpDst.Close()
+		return err
 	}
-	return out.Close()
+	if err := tmpDst.Sync(); err != nil {
+		_ = tmpDst.Close()
+		return err
+	}
+	if err := tmpDst.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, mode); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, dst)
 }
 
 func joinCleanupError(base error, errs ...error) error {
@@ -335,4 +404,16 @@ func removeIfExists(path string) error {
 		return nil
 	}
 	return err
+}
+
+func isValidSHA256(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
 }

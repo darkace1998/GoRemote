@@ -18,9 +18,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,10 +35,12 @@ const defaultTimeout = 30 * time.Second
 // GitSync wraps a workspace directory that should be mirrored as a git
 // repository. The zero value is unusable — use New.
 type GitSync struct {
-	dir     string
-	remote  string
-	branch  string
-	gitPath string
+	dir          string
+	remote       string
+	branch       string
+	gitPathOnce  sync.Once
+	gitPath      string
+	gitPathErr   error
 }
 
 // Config configures a GitSync. Remote may be empty (commits stay local).
@@ -117,14 +122,21 @@ func (g *GitSync) CommitAndPush(ctx context.Context, msg string) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(st) == "" {
-		return nil
-	}
-	if msg == "" {
-		msg = "goremote: workspace update"
-	}
-	if _, err := g.run(ctx, "commit", "-m", msg); err != nil {
-		return err
+	clean := strings.TrimSpace(st) == ""
+	if clean {
+		ahead, _ := g.hasUnpushedCommits(ctx)
+		if !ahead {
+			return nil
+		}
+		// Tree is clean but ahead of upstream: a previous push failed.
+		// Fall through to push only.
+	} else {
+		if msg == "" {
+			msg = "goremote: workspace update"
+		}
+		if _, err := g.run(ctx, "commit", "-m", msg); err != nil {
+			return err
+		}
 	}
 	if g.remote == "" {
 		return nil
@@ -143,15 +155,15 @@ func (g *GitSync) isRepo(ctx context.Context) bool {
 }
 
 func (g *GitSync) locate() (string, error) {
-	if g.gitPath != "" {
-		return g.gitPath, nil
-	}
-	p, err := exec.LookPath("git")
-	if err != nil {
-		return "", fmt.Errorf("sync: git binary not found on PATH: %w", err)
-	}
-	g.gitPath = p
-	return p, nil
+	g.gitPathOnce.Do(func() {
+		p, err := exec.LookPath("git")
+		if err != nil {
+			g.gitPathErr = fmt.Errorf("sync: git binary not found on PATH: %w", err)
+			return
+		}
+		g.gitPath = p
+	})
+	return g.gitPath, g.gitPathErr
 }
 
 func (g *GitSync) run(ctx context.Context, args ...string) (string, error) {
@@ -175,7 +187,7 @@ func (g *GitSync) run(ctx context.Context, args ...string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return stdout.String(), fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		return stdout.String(), fmt.Errorf("git %s: %s", strings.Join(sanitizeArgs(args), " "), msg)
 	}
 	return stdout.String(), nil
 }
@@ -187,4 +199,34 @@ func lineContains(out, needle string) bool {
 		}
 	}
 	return false
+}
+
+func (g *GitSync) hasUnpushedCommits(ctx context.Context) (bool, error) {
+	out, err := g.run(ctx, "rev-list", "--count", "@{upstream}..HEAD")
+	if err != nil {
+		return false, nil // no upstream tracked → nothing to push
+	}
+	n, _ := strconv.Atoi(strings.TrimSpace(out))
+	return n > 0, nil
+}
+
+func sanitizeArgs(args []string) []string {
+	out := make([]string, len(args))
+	for i, arg := range args {
+		out[i] = sanitizeURL(arg)
+	}
+	return out
+}
+
+func sanitizeURL(s string) string {
+	u, err := url.Parse(s)
+	if err != nil || u.User == nil {
+		return s
+	}
+	switch u.Scheme {
+	case "https", "http", "git+ssh":
+		u.User = nil
+		return u.String()
+	}
+	return s
 }
