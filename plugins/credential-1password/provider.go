@@ -276,10 +276,11 @@ func (p *Provider) Resolve(ctx context.Context, ref credential.Reference) (*cred
 	if ref.EntryID == "" {
 		return nil, credential.ErrNotFound
 	}
-	args := []string{"item", "get", ref.EntryID, "--format=json"}
+	args := []string{"item", "get", "--format=json"}
 	if v := ref.Hints["vault"]; v != "" {
 		args = append(args, "--vault="+v)
 	}
+	args = append(args, "--", ref.EntryID)
 	stdout, stderr, exitCode, err := p.runOp(ctx, args, nil)
 	if err != nil {
 		return nil, fmt.Errorf("invoke op item get: %w", err)

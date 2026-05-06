@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/darkace1998/GoRemote/sdk/credential"
 	"github.com/darkace1998/GoRemote/sdk/plugin"
@@ -31,23 +33,21 @@ func (execRunner) Run(ctx context.Context, name string, args []string, stdin []b
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
-	if env != nil {
-		cmd.Env = env
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	exitCode := 0
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
+			return stdout.Bytes(), stderr.Bytes(), exitErr.ExitCode(), nil
 		}
+		return stdout.Bytes(), stderr.Bytes(), -1, err
 	}
-	return stdout.Bytes(), stderr.Bytes(), exitCode, err
+	return stdout.Bytes(), stderr.Bytes(), 0, nil
 }
 
 // Options configures a Provider.
@@ -96,9 +96,13 @@ func New(opts Options) *Provider {
 	}
 	p := &Provider{bin: bin, runner: r}
 	if bin != "" && opts.ServerURL != "" {
-		// One-shot config; ignore failures so that a misconfigured
-		// server URL does not prevent the provider from being created.
-		_, _, _, _ = r.Run(context.Background(), bin, []string{"config", "server", opts.ServerURL}, nil, nil)
+		// Best-effort one-shot config; a 10-second timeout prevents an
+		// unresponsive bw binary from blocking the constructor forever.
+		// Errors are intentionally ignored so that a misconfigured server
+		// URL does not prevent the provider from being created.
+		cfgCtx, cfgCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cfgCancel()
+		_, _, _, _ = r.Run(cfgCtx, bin, []string{"config", "server", opts.ServerURL}, nil, nil)
 	}
 	return p
 }
@@ -170,7 +174,10 @@ func (p *Provider) Unlock(ctx context.Context, passphrase string) error {
 		return fmt.Errorf("bitwarden: bw binary not found")
 	}
 	stdout, stderr, code, err := p.runner.Run(ctx, p.bin, []string{"unlock", "--raw"}, []byte(passphrase), nil)
-	if err != nil || code != 0 {
+	if err != nil {
+		return fmt.Errorf("bitwarden: bw unlock: %w", err)
+	}
+	if code != 0 {
 		// Distinguish bad passphrase from other errors when bw says so.
 		if bytes.Contains(stderr, []byte("Invalid master password")) {
 			return credential.ErrInvalidPassphrase
@@ -196,7 +203,10 @@ func (p *Provider) Lock(ctx context.Context) error {
 		return nil
 	}
 	_, stderr, code, err := p.runner.Run(ctx, p.bin, []string{"lock"}, nil, p.envWithSession())
-	if err != nil || code != 0 {
+	if err != nil {
+		return fmt.Errorf("bitwarden: bw lock: %w", err)
+	}
+	if code != 0 {
 		return fmt.Errorf("bitwarden: bw lock failed (exit %d): %s", code, strings.TrimSpace(string(stderr)))
 	}
 	return nil
@@ -240,8 +250,11 @@ func (p *Provider) Resolve(ctx context.Context, ref credential.Reference) (*cred
 	if ref.EntryID == "" {
 		return nil, credential.ErrNotFound
 	}
-	stdout, stderr, code, err := p.runner.Run(ctx, p.bin, []string{"get", "item", ref.EntryID}, nil, p.envWithSession())
-	if err != nil || code != 0 {
+	stdout, stderr, code, err := p.runner.Run(ctx, p.bin, []string{"get", "item", "--", ref.EntryID}, nil, p.envWithSession())
+	if err != nil {
+		return nil, fmt.Errorf("bitwarden: bw get item: %w", err)
+	}
+	if code != 0 {
 		// `bw get item` exits non-zero on miss with "Not found." on stderr.
 		if bytes.Contains(stderr, []byte("Not found")) {
 			return nil, credential.ErrNotFound
@@ -287,7 +300,10 @@ func (p *Provider) List(ctx context.Context) ([]credential.Reference, error) {
 		return nil, credential.ErrLocked
 	}
 	stdout, stderr, code, err := p.runner.Run(ctx, p.bin, []string{"list", "items", "--search", ""}, nil, p.envWithSession())
-	if err != nil || code != 0 {
+	if err != nil {
+		return nil, fmt.Errorf("bitwarden: bw list items: %w", err)
+	}
+	if code != 0 {
 		return nil, fmt.Errorf("bitwarden: bw list items failed (exit %d): %s", code, strings.TrimSpace(string(stderr)))
 	}
 	var items []bwItem
@@ -315,7 +331,10 @@ func (p *Provider) Sync(ctx context.Context) error {
 		return fmt.Errorf("bitwarden: bw binary not found")
 	}
 	_, stderr, code, err := p.runner.Run(ctx, p.bin, []string{"sync"}, nil, p.envWithSession())
-	if err != nil || code != 0 {
+	if err != nil {
+		return fmt.Errorf("bitwarden: bw sync: %w", err)
+	}
+	if code != 0 {
 		return fmt.Errorf("bitwarden: bw sync failed (exit %d): %s", code, strings.TrimSpace(string(stderr)))
 	}
 	return nil

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 )
 
@@ -30,8 +31,8 @@ type execRunner struct{}
 func (execRunner) Run(ctx context.Context, name string, args []string, stdin []byte, env []string) ([]byte, []byte, int, error) {
 	// #nosec G204 -- name is a resolved CLI path and args are passed directly without a shell.
 	cmd := exec.CommandContext(ctx, name, args...)
-	if env != nil {
-		cmd.Env = env
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
 	}
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)

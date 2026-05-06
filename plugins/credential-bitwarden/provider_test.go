@@ -3,9 +3,11 @@ package bitwarden
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/darkace1998/GoRemote/sdk/credential"
 )
@@ -141,7 +143,7 @@ func TestUnlockInvalidPassphrase(t *testing.T) {
 	f.push([]string{"unlock", "--raw"}, fakeResp{
 		stderr: []byte("Invalid master password.\n"),
 		code:   1,
-		err:    errors.New("exit 1"),
+		// no err: matches execRunner contract (ExitError → nil err)
 	})
 	p := newProvider(f)
 	err := p.Unlock(context.Background(), "wrong")
@@ -190,7 +192,7 @@ func TestResolveHappyPath(t *testing.T) {
         ]
     }`
 	f := &fakeRunner{}
-	f.push([]string{"get", "item", "Production DB"}, fakeResp{stdout: []byte(itemJSON)})
+	f.push([]string{"get", "item", "--", "Production DB"}, fakeResp{stdout: []byte(itemJSON)})
 
 	p := newProvider(f)
 	p.session = "tok"
@@ -222,10 +224,10 @@ func TestResolveHappyPath(t *testing.T) {
 
 func TestResolveNotFound(t *testing.T) {
 	f := &fakeRunner{}
-	f.push([]string{"get", "item", "missing"}, fakeResp{
+	f.push([]string{"get", "item", "--", "missing"}, fakeResp{
 		stderr: []byte("Not found."),
 		code:   1,
-		err:    errors.New("exit 1"),
+		// no err: matches execRunner contract (ExitError → nil err)
 	})
 	p := newProvider(f)
 	p.session = "tok"
@@ -307,4 +309,117 @@ func containsEnv(env []string, kv string) bool {
 		}
 	}
 	return false
+}
+
+// ctxCapturingRunner captures the context passed to the first Run call.
+type ctxCapturingRunner struct {
+	capturedCtx context.Context
+}
+
+func (r *ctxCapturingRunner) Run(ctx context.Context, _ string, _ []string, _ []byte, _ []string) ([]byte, []byte, int, error) {
+	r.capturedCtx = ctx
+	return nil, nil, 0, nil
+}
+
+// F11: execRunner must extend os.Environ rather than replace it.
+func TestExecRunnerInheritsEnv(t *testing.T) {
+	envBin := "/usr/bin/env"
+	if _, err := exec.LookPath(envBin); err != nil {
+		t.Skipf("%s not available: %v", envBin, err)
+	}
+	r := execRunner{}
+	stdout, _, code, err := r.Run(context.Background(), envBin, nil, nil, []string{"FOO=bar_bitwarden"})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code: %d", code)
+	}
+	out := string(stdout)
+	if !strings.Contains(out, "FOO=bar_bitwarden") {
+		t.Fatalf("expected FOO=bar_bitwarden in output, got: %s", out)
+	}
+	// HOME (or at least PATH) must be present — inherited from parent env.
+	if !strings.Contains(out, "PATH=") && !strings.Contains(out, "HOME=") {
+		t.Fatalf("expected inherited env vars (PATH or HOME) in output, got: %s", out)
+	}
+}
+
+// F12: bw get item must place EntryID after -- to prevent flag injection.
+func TestResolveFlagInjectionPrevented(t *testing.T) {
+	const maliciousID = "--vault=evil"
+	f := &fakeRunner{}
+	f.push([]string{"get", "item", "--", maliciousID}, fakeResp{
+		stdout: []byte(`{
+			"id": "real-id",
+			"name": "Item",
+			"login": {"username": "u", "password": "p"}
+		}`),
+	})
+	p := newProvider(f)
+	p.session = "tok"
+	_, err := p.Resolve(context.Background(), credential.Reference{EntryID: maliciousID})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	args := f.calls[0].args
+	// Find the -- separator.
+	dashIdx := -1
+	for i, a := range args {
+		if a == "--" {
+			dashIdx = i
+			break
+		}
+	}
+	if dashIdx < 0 {
+		t.Fatalf("expected -- separator in args, got %v", args)
+	}
+	// The malicious entry ID must appear after --.
+	found := false
+	for _, a := range args[dashIdx+1:] {
+		if a == maliciousID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected %q after --, got args %v", maliciousID, args)
+	}
+}
+
+// F13: context.Canceled from the runner must propagate via errors.Is.
+func TestResolveCancelledContextPropagates(t *testing.T) {
+	f := &fakeRunner{}
+	// Return context.Canceled regardless of entry ID; simulates cancellation.
+	f.push([]string{"get", "item"}, fakeResp{err: context.Canceled, code: -1})
+	p := newProvider(f)
+	p.session = "tok"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := p.Resolve(ctx, credential.Reference{EntryID: "x"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected errors.Is(err, context.Canceled), got %v", err)
+	}
+}
+
+// F15: New() must set a deadline on the bw config server call so a
+// slow or hung bw binary does not block the constructor indefinitely.
+func TestNewServerURLHasTimeout(t *testing.T) {
+	r := &ctxCapturingRunner{}
+	New(Options{BWBinary: "/usr/bin/bw", ServerURL: "https://vault.example.com", Runner: r})
+	if r.capturedCtx == nil {
+		t.Fatal("expected runner to be called for bw config server")
+	}
+	deadline, ok := r.capturedCtx.Deadline()
+	if !ok {
+		t.Fatal("expected context passed to bw config server to have a deadline")
+	}
+	// Deadline should be set to roughly 10s from when New() was called;
+	// by the time we check it some ms have elapsed so remaining < 10s.
+	remaining := time.Until(deadline)
+	if remaining < 0 || remaining > 11*time.Second {
+		t.Fatalf("unexpected deadline: %v remaining (expected 0–11s)", remaining)
+	}
 }

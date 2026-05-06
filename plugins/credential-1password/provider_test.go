@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -408,3 +409,65 @@ func contains(xs []string, s string) bool {
 // debugDump is a no-op import shim ensuring fmt is referenced even if a
 // future test edit removes its only usage.
 var _ = fmt.Sprintf
+
+// F7: execRunner must extend os.Environ instead of replacing it.
+func TestExecRunnerInheritsEnv(t *testing.T) {
+	envBin := "/usr/bin/env"
+	if _, err := exec.LookPath(envBin); err != nil {
+		t.Skipf("%s not available: %v", envBin, err)
+	}
+	r := execRunner{}
+	stdout, _, code, err := r.Run(context.Background(), envBin, nil, nil, []string{"FOO=bar_onepassword"})
+	if err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code: %d", code)
+	}
+	out := string(stdout)
+	if !strings.Contains(out, "FOO=bar_onepassword") {
+		t.Fatalf("expected FOO=bar_onepassword in output, got: %s", out)
+	}
+	// PATH or HOME must be present — inherited from parent env.
+	if !strings.Contains(out, "PATH=") && !strings.Contains(out, "HOME=") {
+		t.Fatalf("expected inherited env vars (PATH or HOME) in output, got: %s", out)
+	}
+}
+
+// F8: op item get must place EntryID after -- to prevent flag injection.
+func TestResolveEntryIDFlagInjectionPrevented(t *testing.T) {
+	const maliciousID = "--vault=evil"
+	r := newFakeRunner()
+	r.Responses["item get"] = fakeResponse{Stdout: sampleItemJSON(t), ExitCode: 0}
+
+	p := New(Options{OpBinary: "/op", Runner: r})
+	_, err := p.Resolve(context.Background(), credential.Reference{
+		EntryID: maliciousID,
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	args := r.Calls[0].Args
+	// Find the -- separator.
+	dashIdx := -1
+	for i, a := range args {
+		if a == "--" {
+			dashIdx = i
+			break
+		}
+	}
+	if dashIdx < 0 {
+		t.Fatalf("expected -- separator in args, got %v", args)
+	}
+	// The malicious entry ID must appear after --.
+	found := false
+	for _, a := range args[dashIdx+1:] {
+		if a == maliciousID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected %q after --, got args %v", maliciousID, args)
+	}
+}
