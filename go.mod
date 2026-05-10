@@ -1,8 +1,7 @@
 module github.com/darkace1998/GoRemote
 
-go 1.26
+go 1.24
 
-toolchain go1.26.2
 
 require (
 	fyne.io/fyne/v2 v2.7.4-0.20260404155105-c53f9d6e424e

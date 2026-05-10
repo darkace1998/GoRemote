@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/darkace1998/GoRemote/sdk/credential"
@@ -357,4 +358,97 @@ func TestTemplateApply(t *testing.T) {
 	if n.Settings["keepalive"] != 30 {
 		t.Fatalf("template settings not isolated")
 	}
+}
+
+func TestTreeAddConnection(t *testing.T) {
+	t.Run("nil connection", func(t *testing.T) {
+		tr := NewTree()
+		err := tr.AddConnection(nil)
+		if err == nil || !strings.Contains(err.Error(), "nil connection") {
+			t.Fatalf("expected nil connection error, got %v", err)
+		}
+	})
+
+	t.Run("nil id", func(t *testing.T) {
+		tr := NewTree()
+		c := &ConnectionNode{ID: NilID}
+		err := tr.AddConnection(c)
+		if err == nil || !strings.Contains(err.Error(), "connection id is required") {
+			t.Fatalf("expected id required error, got %v", err)
+		}
+	})
+
+	t.Run("duplicate connection id", func(t *testing.T) {
+		tr := NewTree()
+		c1 := mkConn("c1", NilID)
+		_ = tr.AddConnection(c1)
+		c2 := mkConn("c2", NilID)
+		c2.ID = c1.ID
+		err := tr.AddConnection(c2)
+		if !errors.Is(err, ErrDuplicateID) || !strings.Contains(err.Error(), "connection") {
+			t.Fatalf("expected ErrDuplicateID for connection, got %v", err)
+		}
+	})
+
+	t.Run("id used by folder", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f", NilID)
+		_ = tr.AddFolder(f)
+		c := mkConn("c", NilID)
+		c.ID = f.ID
+		err := tr.AddConnection(c)
+		if !errors.Is(err, ErrDuplicateID) || !strings.Contains(err.Error(), "used by a folder") {
+			t.Fatalf("expected ErrDuplicateID for folder, got %v", err)
+		}
+	})
+
+	t.Run("parent not found", func(t *testing.T) {
+		tr := NewTree()
+		c := mkConn("c", NewID())
+		err := tr.AddConnection(c)
+		if !errors.Is(err, ErrParentNotFolder) {
+			t.Fatalf("expected ErrParentNotFolder, got %v", err)
+		}
+	})
+
+	t.Run("parent is a connection", func(t *testing.T) {
+		tr := NewTree()
+		c1 := mkConn("c1", NilID)
+		_ = tr.AddConnection(c1)
+		c2 := mkConn("c2", c1.ID)
+		err := tr.AddConnection(c2)
+		if !errors.Is(err, ErrParentNotFolder) {
+			t.Fatalf("expected ErrParentNotFolder, got %v", err)
+		}
+	})
+
+	t.Run("success at root", func(t *testing.T) {
+		tr := NewTree()
+		c := mkConn("c", NilID)
+		if err := tr.AddConnection(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tr.connections[c.ID] != c {
+			t.Fatal("connection not in map")
+		}
+		if len(tr.connectionChildren[NilID]) != 1 || tr.connectionChildren[NilID][0] != c.ID {
+			t.Fatal("connection id not in children index")
+		}
+	})
+
+	t.Run("success under folder", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f", NilID)
+		_ = tr.AddFolder(f)
+		c := mkConn("c", f.ID)
+		if err := tr.AddConnection(c); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if tr.connections[c.ID] != c {
+			t.Fatal("connection not in map")
+		}
+		if len(tr.connectionChildren[f.ID]) != 1 || tr.connectionChildren[f.ID][0] != c.ID {
+			t.Fatal("connection id not in children index")
+		}
+	})
 }
