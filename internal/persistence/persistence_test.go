@@ -489,6 +489,29 @@ func TestBackupRestore(t *testing.T) {
 	}
 }
 
+func TestBackup_RejectsOversizedFile(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir)
+
+	oldFileBytes := maxRestoreFileBytes
+	maxRestoreFileBytes = 32
+	defer func() { maxRestoreFileBytes = oldFileBytes }()
+
+	// Create a file that exceeds the limit.
+	path := filepath.Join(dir, "large.txt")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("a"), 64), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.Backup(context.Background())
+	if err == nil {
+		t.Fatal("expected backup to fail due to oversized file")
+	}
+	if !strings.Contains(err.Error(), "exceeds size limit") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestBackupRetention(t *testing.T) {
 	dir := t.TempDir()
 	s := New(dir)

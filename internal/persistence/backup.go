@@ -109,6 +109,8 @@ func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 	}()
 
 	zw := zip.NewWriter(out)
+	var entries int
+	var total uint64
 	walkErr := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, werr error) error {
 		if werr != nil {
 			return werr
@@ -137,6 +139,20 @@ func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 		if !info.Mode().IsRegular() {
 			return nil
 		}
+
+		entries++
+		if entries > maxRestoreEntries {
+			return fmt.Errorf("persistence: backup contains too many entries (%d > %d)", entries, maxRestoreEntries)
+		}
+		sz := uint64(info.Size())
+		if sz > maxRestoreFileBytes {
+			return fmt.Errorf("persistence: backup entry %q exceeds size limit", path)
+		}
+		if total > maxRestoreBytes-sz {
+			return fmt.Errorf("persistence: backup exceeds total size limit")
+		}
+		total += sz
+
 		zipName := filepath.ToSlash(path)
 		hdr, hErr := zip.FileInfoHeader(info)
 		if hErr != nil {
@@ -152,7 +168,7 @@ func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 		if ferr != nil {
 			return ferr
 		}
-		_, cpErr := io.Copy(w, f)
+		_, cpErr := copyZipEntry(w, f, sz)
 		_ = f.Close()
 		return cpErr
 	})
