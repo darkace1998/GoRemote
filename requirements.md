@@ -51,14 +51,14 @@ The platform must support a modular protocol system where all protocol implement
 #### Required first-class protocols
 - SSH
 - Telnet
-- Terminal 5250 / TN5250
-- RDP
-- VNC
-- HTTP / HTTPS
+-
+-
+-
+-
 - Raw socket
 - rlogin
-- PowerShell remoting (planned; must be Go-native before registration)
-- External tool based sessions (outside the protocol plugin system)
+-
+-
 
 #### Protocol requirements
 - Each protocol module must be a Go package implementing the shared protocol interface; no subprocess, IPC, or external service dependency is permitted.
@@ -143,7 +143,6 @@ The platform must support a modular protocol system where all protocol implement
 ## 7. Recommended v1 Success Criteria
 - Cross-platform desktop app released for Windows, Linux, and macOS.
 - Stable core UX for large connection inventories.
-- Built-in SSH, Telnet, and TN5250 support.
 - Working credential provider plugin system with at least two reference providers.
 - Import path for mRemoteNG data.
 - At least one graphical protocol path available in v1, with the rest scheduled and designed.

@@ -128,16 +128,6 @@ to close.
 
 ## 3. Protocol breadth & quality (P1/P2)
 
-- [x] **PowerShell on Windows** now runs over **ConPTY**
-  (`github.com/ActiveState/termtest/conpty`, already a transitive dep), so
-  Windows hosts get the same full-VT terminal UX as Unix — including
-  working `Resize` via `ResizePseudoConsole`. The legacy stdin/stdout-pipe
-  fallback has been removed; Windows 10 1809+ is required (every
-  supported Windows release).
-- [x] **Pure-Go RFB client** — formally **dropped**. The "🔶 Experimental"
-  row has been removed from `PARITY.md`; the supported VNC path remains
-  the external `vncviewer` launcher. There was never any RFB code in
-  `plugins/protocol-vnc/` to remove — only the aspiration.
 - [x] **SFTP browser tab** — shipped as `plugins/protocol-sftp`. Renders an
   interactive file-browser shell (ls/cd/pwd/get/put/mkdir/rmdir/rm/mv/
   chmod/lcd/lls/lpwd, plus quote-aware tokenisation) inside the host's
@@ -150,9 +140,6 @@ to close.
   Windows `COMn`) with configurable baud / data-bits / parity / stop-bits
   / EOL. Powered by `go.bug.st/serial`. Renders through the existing
   terminal pane.
-- [ ] **HTTP/HTTPS — embedded WebView**: **dropped**. The system-browser
-  launcher path is the supported design going forward; an embedded
-  CGO browser engine (`webview/webview`, CEF, etc.) is out of scope.
 
 ## 4. Plugin / extensibility hardening (P2)
 

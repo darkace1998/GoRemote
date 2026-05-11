@@ -40,17 +40,12 @@ import (
 	credbw "github.com/darkace1998/GoRemote/plugins/credential-bitwarden"
 	credfile "github.com/darkace1998/GoRemote/plugins/credential-file"
 	credkeychain "github.com/darkace1998/GoRemote/plugins/credential-keychain"
-	protohttp "github.com/darkace1998/GoRemote/plugins/protocol-http"
-	protomosh "github.com/darkace1998/GoRemote/plugins/protocol-mosh"
 	protoraw "github.com/darkace1998/GoRemote/plugins/protocol-rawsocket"
-	protordp "github.com/darkace1998/GoRemote/plugins/protocol-rdp"
 	protorlogin "github.com/darkace1998/GoRemote/plugins/protocol-rlogin"
 	protoserial "github.com/darkace1998/GoRemote/plugins/protocol-serial"
 	protosftp "github.com/darkace1998/GoRemote/plugins/protocol-sftp"
 	protossh "github.com/darkace1998/GoRemote/plugins/protocol-ssh"
 	prototelnet "github.com/darkace1998/GoRemote/plugins/protocol-telnet"
-	prototn5250 "github.com/darkace1998/GoRemote/plugins/protocol-tn5250"
-	protovnc "github.com/darkace1998/GoRemote/plugins/protocol-vnc"
 )
 
 // Bindings is the stable surface exposed to the UI. Every method accepts and
@@ -1081,11 +1076,6 @@ func registerBuiltins(ctx context.Context, a *app.App, dir string) error {
 		{"telnet", prototelnet.New()},
 		{"rlogin", protorlogin.New()},
 		{"rawsocket", protoraw.New()},
-		{"http", protohttp.New()},
-		{"rdp", protordp.New()},
-		{"vnc", protovnc.New()},
-		{"tn5250", prototn5250.New()},
-		{"mosh", protomosh.New()},
 		{"serial", protoserial.New()},
 	}
 	for _, p := range protos {

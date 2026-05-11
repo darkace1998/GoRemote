@@ -15,23 +15,13 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | Telnet       | ✅        | ✅ **Ready**       | RFC 854 negotiation; NAWS; TTYPE; configurable encoding. |
 | Rlogin       | ✅        | ✅ **Ready**       | RFC 1282 handshake; in-band window-size updates. |
 | Raw socket   | ✅        | ✅ **Ready**       | Configurable EOL (lf / crlf / none), keepalive, configurable encoding. |
-| PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned before registration. |
-| HTTP / HTTPS | ✅        | 🔶 **Experimental** | In-process `net/http` GET/probe session. Browser/webview integration is not part of the protocol system. |
-| RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
-| VNC          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full RFB negotiation/auth/framebuffer pipeline still planned. |
-| IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
-| External app | ✅        | 🔶 **Planned**     | External tool launching is outside the protocol plugin system. |
-| MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
 | SFTP         | (3rd-party) | ✅ **Ready**       | Interactive SFTP file-browser shell (ls/cd/get/put/mkdir/rm/mv/chmod/...) over an SSH connection. Reuses the SSH plugin's auth + known-hosts machinery. |
 | Serial / COM | ✅ (PuTTY)  | ✅ **Ready**       | Local serial-console terminal sessions. Configurable baud/data-bits/parity/stop-bits/EOL. Cross-platform (Linux/macOS `/dev/tty*`, Windows `COMn`). |
 
 Plugins shipped today (`plugins/`):
 
 ```
-protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
-protocol-rawsocket  protocol-http       protocol-rdp
-protocol-vnc        protocol-tn5250     protocol-mosh       protocol-serial
-protocol-powershell (planned, not registered)
+protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin     protocol-rawsocket  protocol-serial
 ```
 
 ## Credential providers
@@ -72,11 +62,11 @@ Source of truth for the feature list: `requirements.md`, `architecture.md`, `sta
 | Per-session colors / icons / labels              | 🟡 **Partial**  | Color/label persisted; icon picker deferred |
 | Notifications / status indicators                | ✅ **Ready**    | Event bus + UI banner |
 | Workspace persistence across restarts            | ✅ **Ready**    | `app/workspace` |
-| Embedded Go-native protocol modules             | 🟡 **Partial**  | Ready terminal protocols plus experimental RDP / VNC / TN5250 / HTTP / MOSH scaffolding |
+| Embedded Go-native protocol modules             | 🟡 **Partial**  | Ready terminal protocols |
 
 ### 4.3 Protocols
 
-See the protocols table above. Ready terminal protocols are available today; graphical protocols, TN5250, HTTP, MOSH, and PowerShell remoting are tracked as experimental or planned until their Go-native engines are complete.
+See the protocols table above. Ready terminal protocols are available today.
 
 ### 4.4 Credential providers
 
