@@ -137,7 +137,7 @@ func (s *Session) SendInput(ctx context.Context, data []byte) error {
 	case EOLModeLF:
 		if !bytes.HasSuffix(data, []byte("\n")) {
 			// Bolt: Optimization to avoid double allocation in nested append.
-			payload = make([]byte, 0, len(data)+1)
+			payload = make([]byte, 0, int64(len(data))+1)
 			payload = append(payload, data...)
 			payload = append(payload, '\n')
 		}
@@ -146,12 +146,12 @@ func (s *Session) SendInput(ctx context.Context, data []byte) error {
 			// If it ends with a bare LF, upgrade to CRLF; otherwise append CRLF.
 			if bytes.HasSuffix(data, []byte("\n")) {
 				// Bolt: Optimization to avoid double allocation in nested append.
-				payload = make([]byte, 0, len(data)+1)
+				payload = make([]byte, 0, int64(len(data))+1)
 				payload = append(payload, data[:len(data)-1]...)
 				payload = append(payload, '\r', '\n')
 			} else {
 				// Bolt: Optimization to avoid double allocation in nested append.
-				payload = make([]byte, 0, len(data)+2)
+				payload = make([]byte, 0, int64(len(data))+2)
 				payload = append(payload, data...)
 				payload = append(payload, '\r', '\n')
 			}
