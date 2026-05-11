@@ -139,22 +139,37 @@ func (s *Session) SendInput(ctx context.Context, data []byte) error {
 	switch s.eolMode {
 	case EOLModeLF:
 		if !bytes.HasSuffix(data, []byte("\n")) {
-			payload = append(append([]byte(nil), data...), '\n')
+			// Bolt: Optimization to avoid double allocation in nested append.
+			payload = make([]byte, 0, len(data)+1)
+			payload = append(payload, data...)
+			payload = append(payload, '\n')
 		}
 	case EOLModeCR:
 		if !bytes.HasSuffix(data, []byte("\r")) {
 			if bytes.HasSuffix(data, []byte("\n")) {
-				payload = append(append([]byte(nil), data[:len(data)-1]...), '\r')
+				// Bolt: Optimization to avoid double allocation in nested append.
+				payload = make([]byte, 0, len(data))
+				payload = append(payload, data[:len(data)-1]...)
+				payload = append(payload, '\r')
 			} else {
-				payload = append(append([]byte(nil), data...), '\r')
+				// Bolt: Optimization to avoid double allocation in nested append.
+				payload = make([]byte, 0, len(data)+1)
+				payload = append(payload, data...)
+				payload = append(payload, '\r')
 			}
 		}
 	case EOLModeCRLF:
 		if !bytes.HasSuffix(data, []byte("\r\n")) {
 			if bytes.HasSuffix(data, []byte("\n")) {
-				payload = append(append([]byte(nil), data[:len(data)-1]...), '\r', '\n')
+				// Bolt: Optimization to avoid double allocation in nested append.
+				payload = make([]byte, 0, len(data)+1)
+				payload = append(payload, data[:len(data)-1]...)
+				payload = append(payload, '\r', '\n')
 			} else {
-				payload = append(append([]byte(nil), data...), '\r', '\n')
+				// Bolt: Optimization to avoid double allocation in nested append.
+				payload = make([]byte, 0, len(data)+2)
+				payload = append(payload, data...)
+				payload = append(payload, '\r', '\n')
 			}
 		}
 	case EOLModeNone:
