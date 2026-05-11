@@ -108,7 +108,17 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	// Search bar above tree.
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Filter (name, host, tag)…")
+	clearBtn := widget.NewButtonWithIcon("", theme.CancelIcon(), func() {
+		searchEntry.SetText("")
+	})
+	clearBtn.Hide()
+	searchEntry.ActionItem = tooltip.WrapButton(clearBtn, "Clear filter")
 	searchEntry.OnChanged = func(text string) {
+		if text == "" {
+			clearBtn.Hide()
+		} else {
+			clearBtn.Show()
+		}
 		tree.setFilter(text)
 	}
 
@@ -2644,7 +2654,7 @@ func showNewFolderDialog(w fyne.Window, b *Bindings, tree *connTree) {
 	tagsEntry.SetPlaceHolder("comma,separated,tags")
 
 	items := []*widget.FormItem{
-		widget.NewFormItem("Name", nameEntry),
+		widget.NewFormItem("Name *", nameEntry),
 		widget.NewFormItem("Description", descEntry),
 		widget.NewFormItem("Tags", tagsEntry),
 	}
@@ -2679,7 +2689,7 @@ func showEditFolderDialog(w fyne.Window, b *Bindings, tree *connTree, n *iapp.No
 	tagsEntry.SetText(strings.Join(n.Tags, ", "))
 
 	items := []*widget.FormItem{
-		widget.NewFormItem("Name", nameEntry),
+		widget.NewFormItem("Name *", nameEntry),
 		widget.NewFormItem("Description", descEntry),
 		widget.NewFormItem("Tags", tagsEntry),
 	}
@@ -2902,9 +2912,9 @@ func newConnectionForm(b *Bindings, in ConnectionInput) *connectionForm {
 	})
 
 	topForm := widget.NewForm(
-		widget.NewFormItem("Name", cf.nameEntry),
-		widget.NewFormItem("Protocol", cf.protoSelect),
-		widget.NewFormItem("Host", cf.hostEntry),
+		widget.NewFormItem("Name *", cf.nameEntry),
+		widget.NewFormItem("Protocol *", cf.protoSelect),
+		widget.NewFormItem("Host *", cf.hostEntry),
 		widget.NewFormItem("Port", cf.portEntry),
 		widget.NewFormItem("Username", cf.userEntry),
 		widget.NewFormItem("Auth method", cf.authSelect),
