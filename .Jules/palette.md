@@ -1,3 +1,0 @@
-## 2026-05-11 - Add required indicators and clear filter button
-**Learning:** Fyne's widget.Entry doesn't have an ARIA equivalent, but Fyne's ActionItem feature allows for easily attaching buttons to the right side of an entry, which is great for quick actions like clearing text. Also, standard UX rules like indicating required fields with an asterisk (*) apply equally to native desktop widgets as they do on the web. Fyne form elements do not explicitly label required items by default.
-**Action:** When working on Fyne forms, manually append asterisks to the labels of required fields for better clarity. Make use of ActionItem for clearable input forms.
