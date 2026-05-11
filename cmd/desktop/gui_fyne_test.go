@@ -7,8 +7,8 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 
-	iapp "github.com/darkace1998/GoRemote/internal/app"
 	"github.com/darkace1998/GoRemote/internal/domain"
+	iapp "github.com/darkace1998/GoRemote/internal/app"
 )
 
 func TestTreeRowDoubleTappedOpensConnection(t *testing.T) {

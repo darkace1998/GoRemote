@@ -159,6 +159,7 @@ func writeRedactedSettings(zw *zip.Writer, src string) error {
 	return writeJSON(zw, "settings.json", doc)
 }
 
+
 // workspace before bundling. The match is case-insensitive.
 var SecretKeys = []string{
 	"password", "passphrase", "secret", "token", "apiKey", "api_key",
