@@ -282,143 +282,143 @@ func TestImportXML_UnsupportedInheritFlag(t *testing.T) {
 // TestImportCSV_BOM verifies that a UTF-8 BOM at the start of a CSV file does
 // not corrupt the first column header, causing connections to have an empty Name.
 func TestImportCSV_BOM(t *testing.T) {
-const bomCSV = "\xEF\xBB\xBFName,Type,Hostname,Protocol,Port,Username\n" +
-"myhost,Connection,myhost.example.com,SSH2,22,admin\n"
-r, err := ImportCSV(strings.NewReader(bomCSV))
-if err != nil {
-t.Fatalf("ImportCSV: %v", err)
-}
-if r.Stats.Connections != 1 {
-t.Fatalf("want 1 connection, got %d", r.Stats.Connections)
-}
-conns := collectConnections(t, r.Tree)
-if _, ok := conns["myhost"]; !ok {
-var ks []string
-for k := range conns {
-ks = append(ks, k)
-}
-t.Errorf("connection name not found after BOM strip; got keys: %v", ks)
-}
+	const bomCSV = "\xEF\xBB\xBFName,Type,Hostname,Protocol,Port,Username\n" +
+		"myhost,Connection,myhost.example.com,SSH2,22,admin\n"
+	r, err := ImportCSV(strings.NewReader(bomCSV))
+	if err != nil {
+		t.Fatalf("ImportCSV: %v", err)
+	}
+	if r.Stats.Connections != 1 {
+		t.Fatalf("want 1 connection, got %d", r.Stats.Connections)
+	}
+	conns := collectConnections(t, r.Tree)
+	if _, ok := conns["myhost"]; !ok {
+		var ks []string
+		for k := range conns {
+			ks = append(ks, k)
+		}
+		t.Errorf("connection name not found after BOM strip; got keys: %v", ks)
+	}
 }
 
 // TestImportXML_ContainerInheritance verifies that Container-level attributes
 // are stored in FolderNode.Defaults and that children with Inherit* flags
 // resolve to folder defaults via domain.InheritanceProfile.Resolve.
 func TestImportXML_ContainerInheritance(t *testing.T) {
-r, err := ImportXML(openFixture(t, "container_inherit.xml"))
-if err != nil {
-t.Fatalf("ImportXML: %v", err)
-}
+	r, err := ImportXML(openFixture(t, "container_inherit.xml"))
+	if err != nil {
+		t.Fatalf("ImportXML: %v", err)
+	}
 
-folders := collectFolders(t, r.Tree)
-folder := folders["DevFolder"]
-if folder == nil {
-t.Fatal("DevFolder not found")
-}
-if folder.Defaults.Username != "devuser" {
-t.Errorf("Defaults.Username want %q, got %q", "devuser", folder.Defaults.Username)
-}
-if folder.Defaults.Host != "dev.example.com" {
-t.Errorf("Defaults.Host want %q, got %q", "dev.example.com", folder.Defaults.Host)
-}
-if folder.Defaults.ProtocolID != "io.goremote.protocol.ssh" {
-t.Errorf("Defaults.ProtocolID want %q, got %q", "io.goremote.protocol.ssh", folder.Defaults.ProtocolID)
-}
-if folder.Defaults.Port != 22 {
-t.Errorf("Defaults.Port want 22, got %d", folder.Defaults.Port)
-}
+	folders := collectFolders(t, r.Tree)
+	folder := folders["DevFolder"]
+	if folder == nil {
+		t.Fatal("DevFolder not found")
+	}
+	if folder.Defaults.Username != "devuser" {
+		t.Errorf("Defaults.Username want %q, got %q", "devuser", folder.Defaults.Username)
+	}
+	if folder.Defaults.Host != "dev.example.com" {
+		t.Errorf("Defaults.Host want %q, got %q", "dev.example.com", folder.Defaults.Host)
+	}
+	if folder.Defaults.ProtocolID != "io.goremote.protocol.ssh" {
+		t.Errorf("Defaults.ProtocolID want %q, got %q", "io.goremote.protocol.ssh", folder.Defaults.ProtocolID)
+	}
+	if folder.Defaults.Port != 22 {
+		t.Errorf("Defaults.Port want 22, got %d", folder.Defaults.Port)
+	}
 
-conns := collectConnections(t, r.Tree)
+	conns := collectConnections(t, r.Tree)
 
-explicit := conns["child-explicit"]
-if explicit == nil {
-t.Fatal("child-explicit not found")
-}
-if explicit.Inheritance.Inherit[domain.FieldUsername] {
-t.Error("child-explicit should NOT inherit username")
-}
+	explicit := conns["child-explicit"]
+	if explicit == nil {
+		t.Fatal("child-explicit not found")
+	}
+	if explicit.Inheritance.Inherit[domain.FieldUsername] {
+		t.Error("child-explicit should NOT inherit username")
+	}
 
-child := conns["child-inherit"]
-if child == nil {
-t.Fatal("child-inherit not found")
-}
-if !child.Inheritance.Inherit[domain.FieldUsername] {
-t.Error("child-inherit should inherit username")
-}
-if !child.Inheritance.Inherit[domain.FieldPort] {
-t.Error("child-inherit should inherit port")
-}
-if !child.Inheritance.Inherit[domain.FieldProtocolID] {
-t.Error("child-inherit should inherit protocol")
-}
+	child := conns["child-inherit"]
+	if child == nil {
+		t.Fatal("child-inherit not found")
+	}
+	if !child.Inheritance.Inherit[domain.FieldUsername] {
+		t.Error("child-inherit should inherit username")
+	}
+	if !child.Inheritance.Inherit[domain.FieldPort] {
+		t.Error("child-inherit should inherit port")
+	}
+	if !child.Inheritance.Inherit[domain.FieldProtocolID] {
+		t.Error("child-inherit should inherit protocol")
+	}
 
-ancestors, err := r.Tree.Ancestors(child.ID)
-if err != nil {
-t.Fatalf("Ancestors: %v", err)
-}
-resolved := child.Inheritance.Resolve(child, ancestors)
-if resolved.Username != "devuser" {
-t.Errorf("resolved Username want %q, got %q", "devuser", resolved.Username)
-}
-if resolved.Port != 22 {
-t.Errorf("resolved Port want 22, got %d", resolved.Port)
-}
-if resolved.ProtocolID != "io.goremote.protocol.ssh" {
-t.Errorf("resolved ProtocolID want %q, got %q", "io.goremote.protocol.ssh", resolved.ProtocolID)
-}
+	ancestors, err := r.Tree.Ancestors(child.ID)
+	if err != nil {
+		t.Fatalf("Ancestors: %v", err)
+	}
+	resolved := child.Inheritance.Resolve(child, ancestors)
+	if resolved.Username != "devuser" {
+		t.Errorf("resolved Username want %q, got %q", "devuser", resolved.Username)
+	}
+	if resolved.Port != 22 {
+		t.Errorf("resolved Port want 22, got %d", resolved.Port)
+	}
+	if resolved.ProtocolID != "io.goremote.protocol.ssh" {
+		t.Errorf("resolved ProtocolID want %q, got %q", "io.goremote.protocol.ssh", resolved.ProtocolID)
+	}
 }
 
 // TestImportXML_EncryptedProxyPasswords verifies that VNCProxyPassword and
 // RDGatewayPassword are treated as encrypted blobs (CodeEncryptedPassword)
 // and not stored as plain protocol settings.
 func TestImportXML_EncryptedProxyPasswords(t *testing.T) {
-const doc = `<?xml version="1.0"?><Connections Name="x" ConfVersion="2.7">
+	const doc = `<?xml version="1.0"?><Connections Name="x" ConfVersion="2.7">
   <Node Name="vnc-proxy" Type="Connection" Hostname="h" Protocol="VNC"
         VNCProxyPassword="AES-GCM:dmNwcm94eQ==" />
   <Node Name="rdgw" Type="Connection" Hostname="h" Protocol="RDP"
         RDGatewayPassword="AES-GCM:cmRndA==" />
 </Connections>`
-r, err := ImportXML(strings.NewReader(doc))
-if err != nil {
-t.Fatalf("ImportXML: %v", err)
-}
-conns := collectConnections(t, r.Tree)
+	r, err := ImportXML(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("ImportXML: %v", err)
+	}
+	conns := collectConnections(t, r.Tree)
 
-vnc := conns["vnc-proxy"]
-if vnc == nil {
-t.Fatal("missing vnc-proxy")
-}
-if _, ok := vnc.Settings["vnc_proxy_password"]; ok {
-t.Error("VNCProxyPassword must NOT be stored as plain vnc_proxy_password")
-}
-if blob, _ := vnc.Settings["legacy_vnc_proxy_password_blob"].(string); blob == "" {
-t.Errorf("legacy_vnc_proxy_password_blob missing; settings: %#v", vnc.Settings)
-}
+	vnc := conns["vnc-proxy"]
+	if vnc == nil {
+		t.Fatal("missing vnc-proxy")
+	}
+	if _, ok := vnc.Settings["vnc_proxy_password"]; ok {
+		t.Error("VNCProxyPassword must NOT be stored as plain vnc_proxy_password")
+	}
+	if blob, _ := vnc.Settings["legacy_vnc_proxy_password_blob"].(string); blob == "" {
+		t.Errorf("legacy_vnc_proxy_password_blob missing; settings: %#v", vnc.Settings)
+	}
 
-rdgw := conns["rdgw"]
-if rdgw == nil {
-t.Fatal("missing rdgw")
-}
-if _, ok := rdgw.Settings["rd_gateway_password"]; ok {
-t.Error("RDGatewayPassword must NOT be stored as plain rd_gateway_password")
-}
-if rdBlob, _ := rdgw.Settings["legacy_rd_gateway_password_blob"].(string); rdBlob == "" {
-t.Errorf("legacy_rd_gateway_password_blob missing; settings: %#v", rdgw.Settings)
-}
+	rdgw := conns["rdgw"]
+	if rdgw == nil {
+		t.Fatal("missing rdgw")
+	}
+	if _, ok := rdgw.Settings["rd_gateway_password"]; ok {
+		t.Error("RDGatewayPassword must NOT be stored as plain rd_gateway_password")
+	}
+	if rdBlob, _ := rdgw.Settings["legacy_rd_gateway_password_blob"].(string); rdBlob == "" {
+		t.Errorf("legacy_rd_gateway_password_blob missing; settings: %#v", rdgw.Settings)
+	}
 
-var gotVNC, gotRD bool
-for _, w := range r.Warnings {
-if w.Code == CodeEncryptedPassword && w.Field == "VNCProxyPassword" {
-gotVNC = true
-}
-if w.Code == CodeEncryptedPassword && w.Field == "RDGatewayPassword" {
-gotRD = true
-}
-}
-if !gotVNC {
-t.Error("missing CodeEncryptedPassword warning for VNCProxyPassword")
-}
-if !gotRD {
-t.Error("missing CodeEncryptedPassword warning for RDGatewayPassword")
-}
+	var gotVNC, gotRD bool
+	for _, w := range r.Warnings {
+		if w.Code == CodeEncryptedPassword && w.Field == "VNCProxyPassword" {
+			gotVNC = true
+		}
+		if w.Code == CodeEncryptedPassword && w.Field == "RDGatewayPassword" {
+			gotRD = true
+		}
+	}
+	if !gotVNC {
+		t.Error("missing CodeEncryptedPassword warning for VNCProxyPassword")
+	}
+	if !gotRD {
+		t.Error("missing CodeEncryptedPassword warning for RDGatewayPassword")
+	}
 }

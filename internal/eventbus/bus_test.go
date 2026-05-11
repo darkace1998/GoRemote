@@ -280,28 +280,28 @@ func TestRegistryTypeMismatchPanics(t *testing.T) {
 // non-cancellable context (context.Background()) was passed. Without the
 // b.done channel the goroutine would leak indefinitely.
 func TestCloseUnblocksNonCancellableContext(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-// Heuristic: spawn several bus+subscribe+close cycles and verify that
-// goroutines do not accumulate — each goroutine must exit after Close().
-before := runtime.NumGoroutine()
-const n = 20
-for i := 0; i < n; i++ {
-b := New[int]()
-_ = b.Subscribe(context.Background(), 0)
-b.Close()
-}
-// Give goroutines a moment to exit.
-for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
-runtime.Gosched()
-if runtime.NumGoroutine() <= before+3 {
-break
-}
-time.Sleep(5 * time.Millisecond)
-}
-after := runtime.NumGoroutine()
-// Allow up to 3 extra goroutines for test-framework overhead.
-if after > before+3 {
-t.Errorf("goroutines before=%d after=%d — %d goroutines appear to have leaked", before, after, after-before)
-}
+	// Heuristic: spawn several bus+subscribe+close cycles and verify that
+	// goroutines do not accumulate — each goroutine must exit after Close().
+	before := runtime.NumGoroutine()
+	const n = 20
+	for i := 0; i < n; i++ {
+		b := New[int]()
+		_ = b.Subscribe(context.Background(), 0)
+		b.Close()
+	}
+	// Give goroutines a moment to exit.
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		runtime.Gosched()
+		if runtime.NumGoroutine() <= before+3 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	after := runtime.NumGoroutine()
+	// Allow up to 3 extra goroutines for test-framework overhead.
+	if after > before+3 {
+		t.Errorf("goroutines before=%d after=%d — %d goroutines appear to have leaked", before, after, after-before)
+	}
 }
