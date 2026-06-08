@@ -26,12 +26,54 @@ func MatchName(substr string) Predicate {
 	return PredicateFunc(func(n Node) bool {
 		switch v := n.(type) {
 		case *FolderNode:
-			return strings.Contains(strings.ToLower(v.Name), needle)
+			return containsFoldASCII(v.Name, needle)
 		case *ConnectionNode:
-			return strings.Contains(strings.ToLower(v.Name), needle)
+			return containsFoldASCII(v.Name, needle)
 		}
 		return false
 	})
+}
+
+// containsFoldASCII checks if s contains substr (which MUST be already lowercased).
+func containsFoldASCII(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(s) < len(substr) {
+		return false
+	}
+
+	// Fast path for ASCII strings
+	isASCII := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 128 {
+			isASCII = false
+			break
+		}
+	}
+
+	if isASCII {
+		for i := 0; i <= len(s)-len(substr); i++ {
+			match := true
+			for j := 0; j < len(substr); j++ {
+				c := s[i+j]
+				if c >= 'A' && c <= 'Z' {
+					c += 'a' - 'A'
+				}
+				if c != substr[j] {
+					match = false
+					break
+				}
+			}
+			if match {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Fallback for non-ASCII
+	return strings.Contains(strings.ToLower(s), substr)
 }
 
 // MatchTag returns a predicate that matches nodes carrying the given tag.
