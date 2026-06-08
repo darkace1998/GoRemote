@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -193,16 +194,27 @@ func writeAtomic(path string, data []byte, mode os.FileMode) (err error) {
 // present.
 func mergeWithDefaults(in Settings, present map[string]any) Settings {
 	d := Default()
+
+	// JSON unmarshaling into structs matches keys case-insensitively.
+	// We normalize the raw keys to lower-case to accurately check presence.
+	normalized := make(map[string]any, len(present))
+	for k, v := range present {
+		normalized[strings.ToLower(k)] = v
+	}
+
 	if in.Theme == "" {
 		in.Theme = d.Theme
 	}
 	if in.FontSizePx == 0 {
 		in.FontSizePx = d.FontSizePx
 	}
+	if _, has := normalized["confirmonclose"]; !has {
+		in.ConfirmOnClose = d.ConfirmOnClose
+	}
 	// Only apply reconnect defaults when both fields are absent from the JSON.
 	// If either is present (even as 0) the user's intent is preserved.
-	_, hasMaxN := present["reconnectMaxN"]
-	_, hasDelayMs := present["reconnectDelayMs"]
+	_, hasMaxN := normalized["reconnectmaxn"]
+	_, hasDelayMs := normalized["reconnectdelayms"]
 	if !hasMaxN && !hasDelayMs {
 		in.ReconnectMaxN = d.ReconnectMaxN
 		in.ReconnectDelayMs = d.ReconnectDelayMs

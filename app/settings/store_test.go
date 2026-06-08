@@ -225,6 +225,9 @@ func TestFileStore_PartialFileGetsDefaultsMerged(t *testing.T) {
 	if !got.TelemetryEnabled {
 		t.Errorf("TelemetryEnabled = false, want true")
 	}
+	if got.ConfirmOnClose != Default().ConfirmOnClose {
+		t.Errorf("ConfirmOnClose = %v, want default %v", got.ConfirmOnClose, Default().ConfirmOnClose)
+	}
 	if got.FontSizePx != Default().FontSizePx {
 		t.Errorf("FontSizePx = %d, want default %d", got.FontSizePx, Default().FontSizePx)
 	}
@@ -261,5 +264,34 @@ func TestFileStore_ExplicitZeroReconnectPreserved(t *testing.T) {
 	}
 	if got.ReconnectDelayMs != 0 {
 		t.Errorf("ReconnectDelayMs = %d after round-trip, want 0 (user's explicit value)", got.ReconnectDelayMs)
+	}
+}
+
+// TestFileStore_ExplicitZeroCaseInsensitive verifies that explicit zeroes are
+// correctly preserved even if the JSON keys have different casing than the tags.
+func TestFileStore_ExplicitZeroCaseInsensitive(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	// Write settings with different casing.
+	data := []byte(`{"ReconnectMaxN": 0, "RECONNECTDELAYMS": 0, "confirmonclose": false}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	store := NewFileStore(path)
+	got, err := store.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ReconnectMaxN != 0 {
+		t.Errorf("ReconnectMaxN = %d, want 0 (user's explicit value)", got.ReconnectMaxN)
+	}
+	if got.ReconnectDelayMs != 0 {
+		t.Errorf("ReconnectDelayMs = %d, want 0 (user's explicit value)", got.ReconnectDelayMs)
+	}
+	if got.ConfirmOnClose != false {
+		t.Errorf("ConfirmOnClose = %v, want false (user's explicit value)", got.ConfirmOnClose)
 	}
 }
