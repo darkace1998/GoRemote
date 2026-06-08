@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"sort"
@@ -278,7 +279,7 @@ func (t *Tree) walkFrom(parent ID, v Visitor) error {
 		if a.Name != b.Name {
 			return a.Name < b.Name
 		}
-		return a.ID.String() < b.ID.String()
+		return bytes.Compare(a.ID[:], b.ID[:]) < 0
 	})
 	for _, fid := range folderIDs {
 		if err := v(t.folders[fid]); err != nil {
@@ -294,7 +295,7 @@ func (t *Tree) walkFrom(parent ID, v Visitor) error {
 		if a.Name != b.Name {
 			return a.Name < b.Name
 		}
-		return a.ID.String() < b.ID.String()
+		return bytes.Compare(a.ID[:], b.ID[:]) < 0
 	})
 	for _, cid := range connIDs {
 		if err := v(t.connections[cid]); err != nil {
