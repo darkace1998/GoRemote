@@ -9,7 +9,7 @@ require (
 	github.com/fyne-io/terminal v0.0.0-20260426193242-b58db860086d
 	github.com/pkg/sftp v1.13.10
 	github.com/zalando/go-keyring v0.2.8
-	go.bug.st/serial v1.6.4
+	go.bug.st/serial v1.7.1
 	golang.org/x/crypto v0.50.0
 	golang.org/x/sys v0.43.0
 )
