@@ -173,6 +173,7 @@ func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 // into a root directory. It is a field on Store so tests can inject a failing
 // implementation to verify atomicity guarantees.
 type extractEntryFunc func(f *zip.File, root string) error
+
 // keep files remain. Non-zip entries are ignored.
 func pruneBackups(backupsDir string, keep int) error {
 	entries, err := os.ReadDir(backupsDir)
@@ -264,8 +265,11 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 
 	// Extract into a sibling temp directory so that a mid-extraction failure
 	// does not corrupt the live store.
-	tmpDir := s.dir + ".restore-new"
-	oldDir := s.dir + ".restore-old"
+	// On Windows, temp folders can sometimes end up locked by test framework or AV,
+	// generating random characters allows parallel tests/retries to work better.
+	ts := s.now().UTC().Format(backupTimestampLayout)
+	tmpDir := s.dir + ".restore-new-" + ts
+	oldDir := s.dir + ".restore-old-" + ts
 	// Clean up any debris from a previous interrupted restore.
 	_ = os.RemoveAll(tmpDir)
 	_ = os.RemoveAll(oldDir)
@@ -290,7 +294,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err := os.Rename(tmpDir, s.dir); err != nil {
 		// Roll back: restore the original directory.
 		if rerr := os.Rename(oldDir, s.dir); rerr != nil {
-			return fmt.Errorf("persistence: rename new store failed (%w); rollback also failed: %v", err, rerr)
+			return fmt.Errorf("persistence: rename new store failed (%v); rollback also failed: %w", err, rerr)
 		}
 		return fmt.Errorf("persistence: rename new store: %w", err)
 	}
@@ -305,6 +309,8 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		}
 	}
 
+	// On Windows, this removal might fail if tests or the OS hold a handle.
+	// The temp directory cleanup will handle it eventually, so we best-effort it.
 	_ = os.RemoveAll(oldDir)
 	return nil
 }
