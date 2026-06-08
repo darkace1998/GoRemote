@@ -173,6 +173,7 @@ func zipStoreDir(ctx context.Context, dir, outPath string) (err error) {
 // into a root directory. It is a field on Store so tests can inject a failing
 // implementation to verify atomicity guarantees.
 type extractEntryFunc func(f *zip.File, root string) error
+
 // keep files remain. Non-zip entries are ignored.
 func pruneBackups(backupsDir string, keep int) error {
 	entries, err := os.ReadDir(backupsDir)
@@ -246,7 +247,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err != nil {
 		return fmt.Errorf("persistence: open backup %s: %w", backupPath, err)
 	}
-	defer func() { _ = zr.Close() }()
+
 
 	if err := validateRestoreArchive(zr.File); err != nil {
 		return err
@@ -282,6 +283,10 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		}
 	}
 
+	// Close the zip reader explicitly before renaming to avoid "Access is denied" on Windows
+	// since backupPath is typically inside s.dir.
+	_ = zr.Close()
+
 	// Atomic swap: rename current dir to .old, rename temp to current.
 	if err := os.Rename(s.dir, oldDir); err != nil {
 		_ = os.RemoveAll(tmpDir)
@@ -290,7 +295,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err := os.Rename(tmpDir, s.dir); err != nil {
 		// Roll back: restore the original directory.
 		if rerr := os.Rename(oldDir, s.dir); rerr != nil {
-			return fmt.Errorf("persistence: rename new store failed (%w); rollback also failed: %v", err, rerr)
+			return fmt.Errorf("persistence: rename new store failed (%w); rollback also failed: %w", err, rerr)
 		}
 		return fmt.Errorf("persistence: rename new store: %w", err)
 	}

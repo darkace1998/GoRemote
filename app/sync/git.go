@@ -35,12 +35,12 @@ const defaultTimeout = 30 * time.Second
 // GitSync wraps a workspace directory that should be mirrored as a git
 // repository. The zero value is unusable — use New.
 type GitSync struct {
-	dir          string
-	remote       string
-	branch       string
-	gitPathOnce  sync.Once
-	gitPath      string
-	gitPathErr   error
+	dir         string
+	remote      string
+	branch      string
+	gitPathOnce sync.Once
+	gitPath     string
+	gitPathErr  error
 }
 
 // Config configures a GitSync. Remote may be empty (commits stay local).
@@ -204,7 +204,7 @@ func lineContains(out, needle string) bool {
 func (g *GitSync) hasUnpushedCommits(ctx context.Context) (bool, error) {
 	out, err := g.run(ctx, "rev-list", "--count", "@{upstream}..HEAD")
 	if err != nil {
-		return false, nil // no upstream tracked → nothing to push
+		return false, nil //nolint:nilerr // no upstream tracked → nothing to push
 	}
 	n, _ := strconv.Atoi(strings.TrimSpace(out))
 	return n > 0, nil

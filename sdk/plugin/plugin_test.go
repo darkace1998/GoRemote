@@ -60,7 +60,6 @@ func TestValidate_ProtocolForbiddenCaps(t *testing.T) {
 	forbiddenCaps := []Capability{CapProcessSpawn, CapExternalLauncher}
 
 	for _, cap := range forbiddenCaps {
-		cap := cap
 		t.Run("protocol_rejects_"+string(cap), func(t *testing.T) {
 			m := base(KindProtocol)
 			m.Capabilities = []Capability{cap}
