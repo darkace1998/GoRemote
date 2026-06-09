@@ -680,3 +680,49 @@ func TestRestore_AtomicOnExtractFailure(t *testing.T) {
 		t.Errorf(".restore-new temp dir not cleaned up: %v", err)
 	}
 }
+
+func TestValidate_NilSnapshot(t *testing.T) {
+	if issues := Validate(nil); issues != nil {
+		t.Errorf("expected nil issues for nil snapshot, got %+v", issues)
+	}
+}
+
+func TestValidate_MissingConnectionParent(t *testing.T) {
+	missingParent := domain.NewID()
+	raw := RawSnapshot{
+		Connections: []domain.ConnectionNode{
+			{ID: domain.NewID(), ParentID: missingParent, Name: "orphan_conn"},
+		},
+	}
+	issues := ValidateRawSnapshot(raw)
+	if len(issues) == 0 {
+		t.Fatal("expected issue")
+	}
+	found := false
+	for _, i := range issues {
+		if i.Code == CodeMissingConnectionParent && i.Severity == SeverityError {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no missing_connection_parent issue: %+v", issues)
+	}
+}
+
+func TestValidate_OrphanFocusedTab(t *testing.T) {
+	snap := sampleSnapshot(t)
+	snap.Workspace.FocusedTab = domain.NewID()
+	issues := Validate(snap)
+	var found bool
+	for _, i := range issues {
+		if i.Code == CodeOrphanFocusedTab {
+			if i.Severity != SeverityWarn {
+				t.Errorf("orphan focused tab should be warn, got %s", i.Severity)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no orphan_focused_tab issue: %+v", issues)
+	}
+}
