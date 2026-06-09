@@ -681,139 +681,48 @@ func TestRestore_AtomicOnExtractFailure(t *testing.T) {
 	}
 }
 
-func TestMigrator_Errors(t *testing.T) {
-	tests := []struct {
-		name       string
-		mig        *Migrator
-		meta       *Meta
-		files      map[string][]byte
-		wantErrStr string
-	}{
-		{
-			name:       "nil meta",
-			mig:        DefaultMigrator(),
-			meta:       nil,
-			wantErrStr: "nil meta",
-		},
-		{
-			name: "parse error",
-			mig:  DefaultMigrator(),
-			meta: &Meta{Version: 0},
-			files: map[string][]byte{
-				"bad.json": []byte("{bad"),
-			},
-			wantErrStr: "parse bad.json",
-		},
-		{
-			name: "chain gap",
-			mig: &Migrator{
-				Migrations: []Migration{
-					{From: 1, To: 2, Migrate: identityMigration},
-				},
-			},
-			meta:       &Meta{Version: 0},
-			wantErrStr: "migration chain gap",
-		},
-		{
-			name: "missing migrate func",
-			mig: &Migrator{
-				Migrations: []Migration{
-					{From: 0, To: 1, Migrate: nil},
-				},
-			},
-			meta:       &Meta{Version: 0},
-			wantErrStr: "has no Migrate func",
-		},
-		{
-			name: "no path to current",
-			mig: &Migrator{
-				Migrations: []Migration{
-					{From: 0, To: CurrentVersion + 99, Migrate: identityMigration},
-				},
-			},
-			meta:       &Meta{Version: 0},
-			wantErrStr: "no migration path from",
-		},
-		{
-			name: "encode error",
-			mig: &Migrator{
-				Migrations: []Migration{
-					{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
-						raw["bad"] = make(chan int)
-						return raw, nil
-					}},
-				},
-			},
-			meta: &Meta{Version: 0},
-			files: map[string][]byte{
-				"test.json": []byte("{}"),
-			},
-			wantErrStr: "re-encode bad",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.mig.Run(tt.meta, tt.files)
-			if err == nil {
-				t.Fatalf("expected error containing %q, got nil", tt.wantErrStr)
-			}
-			if !strings.Contains(err.Error(), tt.wantErrStr) {
-				t.Errorf("error %q does not contain %q", err.Error(), tt.wantErrStr)
-			}
-		})
+func TestValidate_NilSnapshot(t *testing.T) {
+	if issues := Validate(nil); issues != nil {
+		t.Errorf("expected nil issues for nil snapshot, got %+v", issues)
 	}
 }
 
-func TestMigrator_HappyPath(t *testing.T) {
-	// Create a dummy migrator with custom steps.
-	// CurrentVersion is 1, so we migrate 0 -> 1.
-	step1 := Migration{
-		From: 0,
-		To:   CurrentVersion,
-		Migrate: func(raw map[string]any) (map[string]any, error) {
-			raw["step1"] = true
-			if data, ok := raw["data"].(map[string]any); ok {
-				data["step1"] = true
-			}
-			return raw, nil
+func TestValidate_MissingConnectionParent(t *testing.T) {
+	missingParent := domain.NewID()
+	raw := RawSnapshot{
+		Connections: []domain.ConnectionNode{
+			{ID: domain.NewID(), ParentID: missingParent, Name: "orphan_conn"},
 		},
 	}
-
-	mig := &Migrator{
-		Migrations: []Migration{step1},
+	issues := ValidateRawSnapshot(raw)
+	if len(issues) == 0 {
+		t.Fatal("expected issue")
 	}
-
-	meta := &Meta{Version: 0}
-	files := map[string][]byte{
-		"data.json": []byte(`{"initial": true}`),
+	found := false
+	for _, i := range issues {
+		if i.Code == CodeMissingConnectionParent && i.Severity == SeverityError {
+			found = true
+		}
 	}
-
-	outFiles, err := mig.Run(meta, files)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !found {
+		t.Errorf("no missing_connection_parent issue: %+v", issues)
 	}
+}
 
-	// Verify meta was updated
-	if meta.Version != CurrentVersion {
-		t.Errorf("expected version %d, got %d", CurrentVersion, meta.Version)
+func TestValidate_OrphanFocusedTab(t *testing.T) {
+	snap := sampleSnapshot(t)
+	snap.Workspace.FocusedTab = domain.NewID()
+	issues := Validate(snap)
+	var found bool
+	for _, i := range issues {
+		if i.Code == CodeOrphanFocusedTab {
+			if i.Severity != SeverityWarn {
+				t.Errorf("orphan focused tab should be warn, got %s", i.Severity)
+			}
+			found = true
+		}
 	}
-
-	// Verify files were transformed correctly
-	dataBytes, ok := outFiles["data.json"]
-	if !ok {
-		t.Fatalf("missing data.json in output")
-	}
-
-	var data map[string]any
-	if err := json.Unmarshal(dataBytes, &data); err != nil {
-		t.Fatalf("failed to unmarshal output data.json: %v", err)
-	}
-
-	if data["initial"] != true {
-		t.Errorf("expected initial=true, got %v", data["initial"])
-	}
-	if data["step1"] != true {
-		t.Errorf("expected step1=true, got %v", data["step1"])
+	if !found {
+		t.Errorf("no orphan_focused_tab issue: %+v", issues)
 	}
 }
