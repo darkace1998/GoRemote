@@ -182,23 +182,22 @@ func writeRedactedWorkspace(zw *zip.Writer, src string) error {
 		_, werr = fmt.Fprintf(w, "{\"_note\":\"workspace.json not parseable as JSON\",\"err\":%q}\n", err.Error())
 		return werr
 	}
-	doc = redactValue(doc, secretKeySet())
+	doc = redactValue(doc, SecretKeys)
 	return writeJSON(zw, "workspace.json", doc)
 }
 
-func secretKeySet() map[string]struct{} {
-	out := make(map[string]struct{}, len(SecretKeys))
-	for _, k := range SecretKeys {
-		out[strings.ToLower(k)] = struct{}{}
-	}
-	return out
-}
-
-func redactValue(v any, keys map[string]struct{}) any {
+func redactValue(v any, keys []string) any {
 	switch x := v.(type) {
 	case map[string]any:
 		for k, vv := range x {
-			if _, ok := keys[strings.ToLower(k)]; ok {
+			isSecret := false
+			for _, sk := range keys {
+				if len(k) == len(sk) && strings.EqualFold(k, sk) {
+					isSecret = true
+					break
+				}
+			}
+			if isSecret {
 				if vv == nil || vv == "" {
 					x[k] = vv
 				} else {
