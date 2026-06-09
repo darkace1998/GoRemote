@@ -119,7 +119,7 @@ func TestCommitAndPushRetryAfterPushFailure(t *testing.T) {
 	}
 
 	// Verify the bare repo received the orphan commit.
-	out, err := exec.Command("git", "-C", bare, "log", "--oneline").Output()
+	out, err := exec.Command("git", "--git-dir", bare, "log", "--oneline").Output()
 	if err != nil {
 		t.Fatalf("git log on bare: %v", err)
 	}
