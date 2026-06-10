@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -241,13 +242,18 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		return fmt.Errorf("persistence: pre-restore safety backup: %w", err)
 	}
 
-	// Validate archive before touching the existing files.
+	// Validate archive before touching the existing files. Read the archive
+	// into memory first so the source zip file handle can be closed before we
+	// swap the live store directory on Windows.
 	// #nosec G304 -- backupPath is an explicit user-selected restore source.
-	zr, err := zip.OpenReader(backupPath)
+	data, err := os.ReadFile(backupPath)
+	if err != nil {
+		return fmt.Errorf("persistence: read backup %s: %w", backupPath, err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("persistence: open backup %s: %w", backupPath, err)
 	}
-	defer func() { _ = zr.Close() }()
 
 	if err := validateRestoreArchive(zr.File); err != nil {
 		return err
