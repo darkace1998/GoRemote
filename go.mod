@@ -6,7 +6,7 @@ toolchain go1.26.2
 
 require (
 	fyne.io/fyne/v2 v2.7.4
-	github.com/fyne-io/terminal v0.0.0-20260426193242-b58db860086d
+	github.com/fyne-io/terminal v0.0.0-20251017200530-824028ddaa5b
 	github.com/pkg/sftp v1.13.10
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.7.1
