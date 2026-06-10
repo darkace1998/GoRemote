@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -241,13 +242,31 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		return fmt.Errorf("persistence: pre-restore safety backup: %w", err)
 	}
 
-	// Validate archive before touching the existing files.
+	// Validate archive before touching the existing files. Read the archive
+	// into memory first so the source zip file handle can be closed before we
+	// swap the live store directory on Windows. The restore archive is already
+	// bounded by the package-level restore size limits.
 	// #nosec G304 -- backupPath is an explicit user-selected restore source.
-	zr, err := zip.OpenReader(backupPath)
+	st, err := os.Stat(backupPath)
+	if err != nil {
+		return fmt.Errorf("persistence: stat backup %s: %w", backupPath, err)
+	}
+	size := st.Size()
+	if size < 0 {
+		return fmt.Errorf("persistence: backup %s has invalid size", backupPath)
+	}
+	if uint64(size) > maxRestoreBytes {
+		return fmt.Errorf("persistence: backup %s exceeds archive size limit", backupPath)
+	}
+	//nolint:gosec // backupPath is an explicit user-selected restore source.
+	data, err := os.ReadFile(backupPath)
+	if err != nil {
+		return fmt.Errorf("persistence: read backup %s: %w", backupPath, err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("persistence: open backup %s: %w", backupPath, err)
 	}
-	defer func() { _ = zr.Close() }()
 
 	if err := validateRestoreArchive(zr.File); err != nil {
 		return err
@@ -294,7 +313,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err := os.Rename(tmpDir, s.dir); err != nil {
 		// Roll back: restore the original directory.
 		if rerr := os.Rename(oldDir, s.dir); rerr != nil {
-			return fmt.Errorf("persistence: rename new store failed (%v); rollback also failed: %v", err, rerr)
+			return fmt.Errorf("persistence: rename new store failed: %w", errors.Join(err, rerr))
 		}
 		return fmt.Errorf("persistence: rename new store: %w", err)
 	}

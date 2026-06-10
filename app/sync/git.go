@@ -124,7 +124,7 @@ func (g *GitSync) CommitAndPush(ctx context.Context, msg string) error {
 	}
 	clean := strings.TrimSpace(st) == ""
 	if clean {
-		ahead, _ := g.hasUnpushedCommits(ctx)
+		ahead := g.hasUnpushedCommits(ctx)
 		if !ahead {
 			return nil
 		}
@@ -201,13 +201,22 @@ func lineContains(out, needle string) bool {
 	return false
 }
 
-func (g *GitSync) hasUnpushedCommits(ctx context.Context) (bool, error) {
+func (g *GitSync) hasUnpushedCommits(ctx context.Context) bool {
+	// No upstream means there is nothing to re-push after a failed push.
+	if _, err := g.run(ctx, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"); err != nil {
+		// This retry path is advisory; if git metadata is unavailable, we skip the push retry
+		// rather than turning a save-time sync hiccup into a hard failure.
+		return false
+	}
 	out, err := g.run(ctx, "rev-list", "--count", "@{upstream}..HEAD")
 	if err != nil {
-		return false, nil // no upstream tracked → nothing to push
+		return false
 	}
-	n, _ := strconv.Atoi(strings.TrimSpace(out))
-	return n > 0, nil
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return false
+	}
+	return n > 0
 }
 
 func sanitizeArgs(args []string) []string {
