@@ -67,16 +67,10 @@ func waitFor(t *testing.T, timeout time.Duration, cond func() bool, msg string) 
 	t.Fatalf("waitFor timeout: %s", msg)
 }
 
-// drainEcho subscribes to a session's output and returns the first chunk
+// drainEcho consumes a subscribed output channel and returns the first chunk
 // containing the given substring (or fails on timeout).
-func drainEcho(t *testing.T, h *Harness, sess app.SessionHandle, substr string, timeout time.Duration) string {
+func drainEcho(t *testing.T, ch <-chan []byte, substr string, timeout time.Duration) string {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	ch, err := h.App.SubscribeOutput(ctx, sess, 16)
-	if err != nil {
-		t.Fatalf("SubscribeOutput: %v", err)
-	}
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	var got []byte
@@ -197,10 +191,16 @@ func TestOpenConnection_PasswordAuth(t *testing.T) {
 	}
 
 	// SendInput → echo round-trip.
+	outCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	outCh, err := h.App.SubscribeOutput(outCtx, sess, 16)
+	if err != nil {
+		t.Fatalf("SubscribeOutput: %v", err)
+	}
 	if err := h.App.SendInput(testCtx(t), sess, []byte("hello")); err != nil {
 		t.Fatalf("SendInput: %v", err)
 	}
-	echo := drainEcho(t, h, sess, "> hello\n", 2*time.Second)
+	echo := drainEcho(t, outCh, "> hello\n", 2*time.Second)
 	if !containsSubstr([]byte(echo), "> hello\n") {
 		t.Errorf("echo = %q, want it to contain %q", echo, "> hello\n")
 	}
