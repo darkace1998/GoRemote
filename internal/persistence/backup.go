@@ -251,9 +251,10 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err != nil {
 		return fmt.Errorf("persistence: stat backup %s: %w", backupPath, err)
 	}
-	if st.Size() > int64(maxRestoreBytes) {
+	if st.Size() < 0 || uint64(st.Size()) > maxRestoreBytes {
 		return fmt.Errorf("persistence: backup %s exceeds archive size limit", backupPath)
 	}
+	// #nosec G304 -- backupPath is an explicit user-selected restore source.
 	data, err := os.ReadFile(backupPath)
 	if err != nil {
 		return fmt.Errorf("persistence: read backup %s: %w", backupPath, err)
