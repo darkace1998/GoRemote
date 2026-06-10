@@ -244,8 +244,16 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 
 	// Validate archive before touching the existing files. Read the archive
 	// into memory first so the source zip file handle can be closed before we
-	// swap the live store directory on Windows.
+	// swap the live store directory on Windows. The restore archive is already
+	// bounded by the package-level restore size limits.
 	// #nosec G304 -- backupPath is an explicit user-selected restore source.
+	st, err := os.Stat(backupPath)
+	if err != nil {
+		return fmt.Errorf("persistence: stat backup %s: %w", backupPath, err)
+	}
+	if st.Size() > int64(maxRestoreBytes) {
+		return fmt.Errorf("persistence: backup %s exceeds archive size limit", backupPath)
+	}
 	data, err := os.ReadFile(backupPath)
 	if err != nil {
 		return fmt.Errorf("persistence: read backup %s: %w", backupPath, err)
