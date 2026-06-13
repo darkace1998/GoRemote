@@ -358,3 +358,96 @@ func TestTemplateApply(t *testing.T) {
 		t.Fatalf("template settings not isolated")
 	}
 }
+
+func TestTreeAddConnection(t *testing.T) {
+	t.Run("NilConnection", func(t *testing.T) {
+		tr := NewTree()
+		err := tr.AddConnection(nil)
+		if err == nil {
+			t.Fatalf("expected error for nil connection, got nil")
+		}
+	})
+
+	t.Run("NilID", func(t *testing.T) {
+		tr := NewTree()
+		c := &ConnectionNode{ID: NilID}
+		err := tr.AddConnection(c)
+		if err == nil {
+			t.Fatalf("expected error for NilID, got nil")
+		}
+	})
+
+	t.Run("DuplicateConnectionID", func(t *testing.T) {
+		tr := NewTree()
+		c := mkConn("c1", NilID)
+		if err := tr.AddConnection(c); err != nil {
+			t.Fatalf("setup failed: %v", err)
+		}
+
+		c2 := mkConn("c2", NilID)
+		c2.ID = c.ID // Duplicate ID
+
+		err := tr.AddConnection(c2)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("DuplicateFolderID", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NilID)
+		if err := tr.AddFolder(f); err != nil {
+			t.Fatalf("setup failed: %v", err)
+		}
+
+		c := mkConn("c1", NilID)
+		c.ID = f.ID // Duplicate ID from folder
+
+		err := tr.AddConnection(c)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("ParentNotFolder", func(t *testing.T) {
+		tr := NewTree()
+		c := mkConn("c1", NewID()) // Parent ID doesn't exist
+
+		err := tr.AddConnection(c)
+		if !errors.Is(err, ErrParentNotFolder) {
+			t.Fatalf("expected ErrParentNotFolder, got %v", err)
+		}
+	})
+
+	t.Run("Success", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NilID)
+		if err := tr.AddFolder(f); err != nil {
+			t.Fatalf("setup failed: %v", err)
+		}
+
+		c := mkConn("c1", f.ID)
+		err := tr.AddConnection(c)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Verify connection was added
+		if got, ok := tr.connections[c.ID]; !ok || got != c {
+			t.Fatalf("connection not properly added to connections map")
+		}
+
+		// Verify child linkage
+		children := tr.connectionChildren[f.ID]
+		found := false
+		for _, childID := range children {
+			if childID == c.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("connection ID not added to parent's connectionChildren")
+		}
+	})
+}
