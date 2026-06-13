@@ -234,9 +234,9 @@ func TestRedactAttrLogValuerString(t *testing.T) {
 		patterns: DefaultSensitivePatterns,
 	}
 
-	// Valuer that returns a sensitive string (matches a pattern like AWS key)
-	sensitiveStr := "AKIAABCDEFGHIJKLMNOP"
-	attr := slog.Attr{Key: "public", Value: slog.AnyValue(stringLogValuer{v: sensitiveStr})}
+	// Valuer that returns a string, but the key is sensitive
+	sensitiveStr := "some secret"
+	attr := slog.Attr{Key: "secret", Value: slog.AnyValue(stringLogValuer{v: sensitiveStr})}
 
 	redactedAttr := h.redactAttr(attr)
 	if redactedAttr.Value.Kind() != slog.KindString {
