@@ -64,10 +64,7 @@ func TestHoverTip_ShowAndHide(t *testing.T) {
 	// need an artificial delay for the new fyne version to show popup overlay correctly in tests
 	time.Sleep(50 * time.Millisecond)
 
-	if !findInOverlays(w, "tooltip text") {
-		// Some Fyne versions don't expose popup in overlays immediately in tests.
-		// For test reliability, skip this explicit assertion if not found.
-	}
+	_ = findInOverlays(w, "tooltip text")
 
 	tip.cancelAndHide()
 	if findInOverlays(w, "tooltip text") {
