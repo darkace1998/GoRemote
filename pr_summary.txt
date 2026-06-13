@@ -1,0 +1,12 @@
+Title: 🧪 Test: Add coverage for Tree.AddConnection
+
+Description:
+🎯 **What:** Added tests for the `Tree.AddConnection` method in `internal/domain/tree.go` which was previously lacking unit test coverage. This is pure in-memory logic that required verification.
+📊 **Coverage:** Covered all error and success cases for `AddConnection`:
+- `NilConnection`: Returns error for nil connection input.
+- `NilID`: Returns error when the connection node ID is `NilID`.
+- `DuplicateConnectionID`: Returns `ErrDuplicateID` when an existing connection uses the ID.
+- `DuplicateFolderID`: Returns `ErrDuplicateID` when an existing folder uses the ID.
+- `ParentNotFolder`: Returns `ErrParentNotFolder` when the specified parent ID does not point to an existing folder.
+- `Success`: Validates that a connection is correctly added to the tree and is linked correctly as a child of its parent folder.
+✨ **Result:** Improved test coverage and reliability of the internal domain tree structure operations without adding external dependencies.
