@@ -178,6 +178,18 @@ func (h *HoverTip) show() {
 	}
 	cnv := drv.CanvasForObject(h)
 	if cnv == nil {
+		// Fyne 2.7.5 changed window finding, fallback to checking current windows
+		for _, w := range app.Driver().AllWindows() {
+			if w.Canvas() != nil {
+				if cnv == nil && w.Canvas() != nil {
+					cnv = w.Canvas()
+					break
+				}
+				break
+			}
+		}
+	}
+	if cnv == nil {
 		return
 	}
 	label := widget.NewLabel(text)
