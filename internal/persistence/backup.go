@@ -286,6 +286,11 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 		}
 	}
 
+	// Close the zip reader before attempting directory operations on Windows.
+	// If backupPath is inside s.dir (e.g. in the backups folder), holding it open
+	// prevents os.Rename from succeeding with 'Access is denied'.
+	_ = zr.Close()
+
 	// Atomic swap: rename current dir to .old, rename temp to current.
 	if err := os.Rename(s.dir, oldDir); err != nil {
 		_ = os.RemoveAll(tmpDir)
@@ -294,7 +299,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err := os.Rename(tmpDir, s.dir); err != nil {
 		// Roll back: restore the original directory.
 		if rerr := os.Rename(oldDir, s.dir); rerr != nil {
-			return fmt.Errorf("persistence: rename new store failed (%v); rollback also failed: %v", err, rerr)
+			return fmt.Errorf("persistence: rename new store failed (%w); rollback also failed: %w", err, rerr)
 		}
 		return fmt.Errorf("persistence: rename new store: %w", err)
 	}
