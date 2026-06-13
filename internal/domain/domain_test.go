@@ -358,3 +358,40 @@ func TestTemplateApply(t *testing.T) {
 		t.Fatalf("template settings not isolated")
 	}
 }
+
+func TestAndPredicate(t *testing.T) {
+	node := mkFolder("dummy", NilID)
+
+	t.Run("Empty", func(t *testing.T) {
+		p := And()
+		if !p.Match(node) {
+			t.Error("expected empty And to match")
+		}
+	})
+
+	t.Run("NilPredicate", func(t *testing.T) {
+		p := And(nil, MatchAll)
+		if !p.Match(node) {
+			t.Error("expected And with nil and MatchAll to match")
+		}
+
+		p2 := And(MatchNone, nil)
+		if p2.Match(node) {
+			t.Error("expected And with MatchNone and nil to not match")
+		}
+	})
+
+	t.Run("AllMatch", func(t *testing.T) {
+		p := And(MatchAll, MatchAll)
+		if !p.Match(node) {
+			t.Error("expected all MatchAll to match")
+		}
+	})
+
+	t.Run("OneNotMatch", func(t *testing.T) {
+		p := And(MatchAll, MatchNone, MatchAll)
+		if p.Match(node) {
+			t.Error("expected one MatchNone to fail the And")
+		}
+	})
+}
