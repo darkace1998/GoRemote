@@ -5,8 +5,8 @@ go 1.26
 toolchain go1.26.2
 
 require (
-	fyne.io/fyne/v2 v2.7.4
-	github.com/fyne-io/terminal v0.0.0-20260426193242-b58db860086d
+	fyne.io/fyne/v2 v2.7.5-0.20260529084154-f5f48d2ab76e
+	github.com/fyne-io/terminal v0.0.0-20260529110433-47cc6acb72ae
 	github.com/pkg/sftp v1.13.10
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.7.1
@@ -19,6 +19,8 @@ require (
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
+	github.com/FyshOS/fancyfs v0.0.0-20251025194026-1f03098ff624 // indirect
+	github.com/anthonynsimon/bild v0.13.0 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
