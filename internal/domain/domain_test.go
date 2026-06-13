@@ -358,3 +358,48 @@ func TestTemplateApply(t *testing.T) {
 		t.Fatalf("template settings not isolated")
 	}
 }
+
+func TestTreeMoveEdgeCases(t *testing.T) {
+	tr := NewTree()
+	f1 := mkFolder("f1", NilID)
+	f2 := mkFolder("f2", NilID)
+	c1 := mkConn("c1", f1.ID)
+
+	for _, f := range []*FolderNode{f1, f2} {
+		if err := tr.AddFolder(f); err != nil {
+			t.Fatalf("add folder: %v", err)
+		}
+	}
+	if err := tr.AddConnection(c1); err != nil {
+		t.Fatalf("add connection: %v", err)
+	}
+
+	// Move root
+	if err := tr.Move(NilID, f1.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound moving root, got %v", err)
+	}
+
+	// Move to non-existent folder
+	nonExistentID := NewID()
+	if err := tr.Move(f1.ID, nonExistentID); !errors.Is(err, ErrParentNotFolder) {
+		t.Fatalf("expected ErrParentNotFolder moving to non-existent folder, got %v", err)
+	}
+
+	// Move to a connection (not a folder)
+	if err := tr.Move(f1.ID, c1.ID); !errors.Is(err, ErrParentNotFolder) {
+		t.Fatalf("expected ErrParentNotFolder moving to connection, got %v", err)
+	}
+
+	// Move connection (successful move)
+	if err := tr.Move(c1.ID, f2.ID); err != nil {
+		t.Fatalf("move connection failed: %v", err)
+	}
+	if got, _ := tr.Connection(c1.ID); got.ParentID != f2.ID {
+		t.Fatalf("connection ParentID not updated: %v", got.ParentID)
+	}
+
+	// Move non-existent ID
+	if err := tr.Move(nonExistentID, f1.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound moving non-existent ID, got %v", err)
+	}
+}

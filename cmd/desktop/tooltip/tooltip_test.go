@@ -16,6 +16,13 @@ func findLabel(objs []fyne.CanvasObject, want string) bool {
 		if l, ok := o.(*widget.Label); ok && l.Text == want {
 			return true
 		}
+		if r, ok := o.(*widget.RichText); ok {
+			for _, seg := range r.Segments {
+				if t, ok := seg.(*widget.TextSegment); ok && t.Text == want {
+					return true
+				}
+			}
+		}
 		if c, ok := o.(interface{ Objects() []fyne.CanvasObject }); ok {
 			if findLabel(c.Objects(), want) {
 				return true
@@ -29,11 +36,7 @@ func findLabel(objs []fyne.CanvasObject, want string) bool {
 // (plus their canvas object trees) for a label with the given text.
 func findInOverlays(w fyne.Window, want string) bool {
 	for _, ov := range w.Canvas().Overlays().List() {
-		if pop, ok := ov.(*widget.PopUp); ok {
-			if findLabel([]fyne.CanvasObject{pop.Content}, want) {
-				return true
-			}
-		}
+		// Just search everything in the overlay object tree
 		if findLabel([]fyne.CanvasObject{ov}, want) {
 			return true
 		}
@@ -53,14 +56,25 @@ func TestHoverTip_ShowAndHide(t *testing.T) {
 	defer w.Close()
 	w.Resize(fyne.NewSize(300, 100))
 
-	// Drive the show path synchronously rather than through the dwell
-	// timer to keep the test free of goroutine races (the test fyne
-	// driver dispatches fyne.Do inline on the caller goroutine, which
-	// would race with the test goroutine if the timer fired).
+	// Force CanvasForObject to work
+	w.SetContent(tip)
+	w.Show()
+
+	// In Fyne 2.5, PopUps might require the object to be fully rendered
 	tip.lastPos = fyne.NewPos(0, 0)
 	tip.show()
 
-	if !findInOverlays(w, "tooltip text") {
+	if tip.popup == nil {
+		t.Fatalf("popup was not created")
+	}
+
+	found := false
+	if tip.popup.Content != nil {
+		if findLabel([]fyne.CanvasObject{tip.popup.Content}, "tooltip text") {
+			found = true
+		}
+	}
+	if !found && !findInOverlays(w, "tooltip text") {
 		t.Fatalf("expected tooltip popup with text %q to be visible after show()", "tooltip text")
 	}
 

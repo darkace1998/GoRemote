@@ -178,7 +178,12 @@ func (h *HoverTip) show() {
 	}
 	cnv := drv.CanvasForObject(h)
 	if cnv == nil {
-		return
+		if len(drv.AllWindows()) > 0 {
+			cnv = drv.AllWindows()[0].Canvas()
+		}
+		if cnv == nil {
+			return
+		}
 	}
 	label := widget.NewLabel(text)
 	pop := widget.NewPopUp(label, cnv)
