@@ -2,6 +2,7 @@ package tooltip
 
 import (
 	"testing"
+	"reflect"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -29,6 +30,17 @@ func findLabel(objs []fyne.CanvasObject, want string) bool {
 // (plus their canvas object trees) for a label with the given text.
 func findInOverlays(w fyne.Window, want string) bool {
 	for _, ov := range w.Canvas().Overlays().List() {
+		val := reflect.ValueOf(ov)
+		if val.Kind() == reflect.Ptr && val.Elem().Kind() == reflect.Struct {
+			contentField := val.Elem().FieldByName("Content")
+			if contentField.IsValid() && contentField.CanInterface() {
+				if pop, ok := contentField.Interface().(*widget.PopUp); ok {
+					if findLabel([]fyne.CanvasObject{pop.Content}, want) {
+						return true
+					}
+				}
+			}
+		}
 		if pop, ok := ov.(*widget.PopUp); ok {
 			if findLabel([]fyne.CanvasObject{pop.Content}, want) {
 				return true

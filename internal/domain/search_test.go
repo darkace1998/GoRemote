@@ -9,13 +9,13 @@ type mockNode struct {
 	id ID
 }
 
-func (m mockNode) NodeID() ID           { return m.id }
-func (m mockNode) NodeParent() ID       { return NilID }
-func (m mockNode) NodeKind() NodeKind   { return NodeKind("mock") }
+func (m mockNode) NodeID() ID         { return m.id }
+func (m mockNode) NodeParent() ID     { return NilID }
+func (m mockNode) NodeKind() NodeKind { return NodeKind("mock") }
 
 func TestMatchTag(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		searchTag string
 		node      Node
 		want      bool
