@@ -1,8 +1,8 @@
 package tooltip
 
 import (
-	"testing"
 	"reflect"
+	"testing"
 	"time"
 
 	"fyne.io/fyne/v2"
