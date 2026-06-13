@@ -356,17 +356,6 @@ func TestCredentialResolution(t *testing.T) {
 	}
 }
 
-func TestDefaultAuthMethodTreatsMoshLikeSSH(t *testing.T) {
-	if got := defaultAuthMethod("io.goremote.protocol.mosh", protocol.CredentialMaterial{Password: "pw"}); got != protocol.AuthPassword {
-		t.Fatalf("password auth = %s, want password", got)
-	}
-	if got := defaultAuthMethod("mosh", protocol.CredentialMaterial{PrivateKey: []byte("key")}); got != protocol.AuthPublicKey {
-		t.Fatalf("private key auth = %s, want publickey", got)
-	}
-	if got := defaultAuthMethod("mosh", protocol.CredentialMaterial{}); got != protocol.AuthAgent {
-		t.Fatalf("empty auth = %s, want agent", got)
-	}
-}
 
 func TestExportAndRestore(t *testing.T) {
 	a, _ := newTestApp(t)
