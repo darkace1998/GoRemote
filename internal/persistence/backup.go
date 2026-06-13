@@ -301,7 +301,7 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err := os.Rename(tmpDir, s.dir); err != nil {
 		// Roll back: restore the original directory.
 		if rerr := os.Rename(oldDir, s.dir); rerr != nil {
-			return fmt.Errorf("persistence: rename new store failed (%v); rollback also failed: %v", err, rerr)
+			return fmt.Errorf("persistence: rename new store failed (%v); rollback also failed: %w", err, rerr)
 		}
 		return fmt.Errorf("persistence: rename new store: %w", err)
 	}
