@@ -1,5 +1,3 @@
-fyne.io/fyne/v2 v2.7.4 h1:OVCI5mT+Onb2kA4wlmGA5pLCqKik9f4NDb5jiR1OMTc=
-fyne.io/fyne/v2 v2.7.4/go.mod h1:ZD1mmhBY75mSa97IXl3MPlICd1uNHfCXYh5hKIlVOII=
 fyne.io/fyne/v2 v2.7.5-0.20260529084154-f5f48d2ab76e h1:Ngr2LsjSW7Gr/lfaAUlBEkV7mYa9JUSPQCuRQ8BmdIc=
 fyne.io/fyne/v2 v2.7.5-0.20260529084154-f5f48d2ab76e/go.mod h1:MEWwWTgsffhd9B79f31GXZLPfnrlXJVavETgNPzrsG0=
 fyne.io/systray v1.12.1 h1:ygBD6aZXwiOmZoY5N+ukbH9pih0Kq6fYgVeMYbr5skQ=
@@ -41,8 +39,6 @@ github.com/fyne-io/image v0.1.1 h1:WH0z4H7qfvNUw5l4p3bC1q70sa5+YWVt6HCj7y4VNyA=
 github.com/fyne-io/image v0.1.1/go.mod h1:xrfYBh6yspc+KjkgdZU/ifUC9sPA5Iv7WYUBzQKK7JM=
 github.com/fyne-io/oksvg v0.2.0 h1:mxcGU2dx6nwjJsSA9PCYZDuoAcsZ/OuJlvg/Q9Njfo8=
 github.com/fyne-io/oksvg v0.2.0/go.mod h1:dJ9oEkPiWhnTFNCmRgEze+YNprJF7YRbpjgpWS4kzoI=
-github.com/fyne-io/terminal v0.0.0-20260426193242-b58db860086d h1:OIssMJuqM7Y4nNv/hjSP+YcKMfKEFLYZrtWaNvX1kBU=
-github.com/fyne-io/terminal v0.0.0-20260426193242-b58db860086d/go.mod h1:5IP3EFL4O8saZA8/o9pJn8vtWti7Giac88/87gCs24k=
 github.com/fyne-io/terminal v0.0.0-20260529110433-47cc6acb72ae h1:9ipzBwqaRG+lRkEL4HfvYTGqmEhYt0OZeB7GkRfMGew=
 github.com/fyne-io/terminal v0.0.0-20260529110433-47cc6acb72ae/go.mod h1:EExhIhaPGBI6PlTGDTWwdbyQ2zD+k0A80O/V4qYNI3w=
 github.com/go-gl/gl v0.0.0-20231021071112-07e5d0ea2e71 h1:5BVwOaUSBTlVZowGO6VZGw2H/zl9nrd3eCZfYV+NfQA=
