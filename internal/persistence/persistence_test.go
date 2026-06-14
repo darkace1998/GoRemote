@@ -321,6 +321,197 @@ func TestCheckedCopyLimitsRejectsOverflow(t *testing.T) {
 	}
 }
 
+
+
+func TestMigrator_NilMeta(t *testing.T) {
+	mig := DefaultMigrator()
+	_, err := mig.Run(nil, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for nil meta")
+	}
+}
+
+func TestMigrator_InvalidJSON(t *testing.T) {
+	mig := DefaultMigrator()
+	meta := &Meta{Version: 0}
+	files := map[string][]byte{
+		FileInventory: []byte("{ invalid json"),
+	}
+	_, err := mig.Run(meta, files)
+	if err == nil {
+		t.Fatal("expected error for invalid json")
+	}
+}
+
+func TestMigrator_EmptyFile(t *testing.T) {
+	mig := DefaultMigrator()
+	meta := &Meta{Version: 0}
+	files := map[string][]byte{
+		FileInventory: []byte(""),
+	}
+	out, err := mig.Run(meta, files)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out) != 0 {
+		t.Errorf("expected empty output, got %v", out)
+	}
+}
+
+func TestMigrator_ChainGap(t *testing.T) {
+	mig := &Migrator{Migrations: []Migration{
+		{From: 1, To: 2, Migrate: identityMigration},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for migration chain gap")
+	}
+}
+
+func TestMigrator_SkipOldStep(t *testing.T) {
+	// Setup a migrator with an old step that should be skipped.
+	calledOld := false
+	calledCurrent := false
+	mig := &Migrator{Migrations: []Migration{
+		{From: -1, To: 0, Migrate: func(raw map[string]any) (map[string]any, error) {
+			calledOld = true
+			return raw, nil
+		}},
+		{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
+			calledCurrent = true
+			return raw, nil
+		}},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calledOld {
+		t.Error("expected old step to be skipped")
+	}
+	if !calledCurrent {
+		t.Error("expected current step to be called")
+	}
+}
+
+func TestMigrator_MissingMigrateFunc(t *testing.T) {
+	mig := &Migrator{Migrations: []Migration{
+		{From: 0, To: CurrentVersion, Migrate: nil},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for missing migrate func")
+	}
+}
+
+func TestMigrator_NoPathToCurrent(t *testing.T) {
+	mig := &Migrator{Migrations: []Migration{
+		{From: 0, To: 0, Migrate: identityMigration},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for no path to current")
+	}
+}
+
+func TestMigrator_ResidualKeys(t *testing.T) {
+	mig := &Migrator{Migrations: []Migration{
+		{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
+			raw["custom_key"] = map[string]any{"a": 1}
+			return raw, nil
+		}},
+	}}
+	meta := &Meta{Version: 0}
+	out, err := mig.Run(meta, map[string][]byte{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(out["custom_key.json"]) != "{\n  \"a\": 1\n}" {
+		t.Errorf("unexpected custom key output: %q", string(out["custom_key.json"]))
+	}
+}
+
+
+
+
+
+func TestMigrator_FromRawStandardError(t *testing.T) {
+	// A known key (like "inventory") fails to re-encode in fromRaw.
+	mig := &Migrator{Migrations: []Migration{
+		{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
+			raw[rawKey(FileInventory)] = make(chan int) // Cannot marshal
+			return raw, nil
+		}},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for unmarshalable standard key")
+	}
+}
+func TestMigrator_FromRawError(t *testing.T) {
+	// To cause fromRaw to error, we insert a value that json.MarshalIndent cannot handle,
+	// such as a function or channel, into a valid key or standard file.
+	mig := &Migrator{Migrations: []Migration{
+		{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
+			raw["custom_key"] = make(chan int) // Cannot be marshaled to JSON
+			return raw, nil
+		}},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for unmarshalable custom key")
+	}
+
+	migStandard := &Migrator{Migrations: []Migration{
+		{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
+			raw[FileInventory] = make(chan int)
+			return raw, nil
+		}},
+	}}
+	_, err = migStandard.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for unmarshalable standard key")
+	}
+}
+
+
+func TestMigrator_FromRawResidualError(t *testing.T) {
+	// A residual key becomes key+".json". If the value is unmarshalable, it should error.
+	mig := &Migrator{Migrations: []Migration{
+		{From: 0, To: CurrentVersion, Migrate: func(raw map[string]any) (map[string]any, error) {
+			raw["residual"] = make(chan int)
+			return raw, nil
+		}},
+	}}
+	meta := &Meta{Version: 0}
+	_, err := mig.Run(meta, map[string][]byte{})
+	if err == nil {
+		t.Fatal("expected error for unmarshalable residual key")
+	}
+}
+func TestMigrator_RawKeyWithoutSuffix(t *testing.T) {
+	mig := DefaultMigrator()
+	meta := &Meta{Version: 0}
+	files := map[string][]byte{
+		"no_suffix_file": []byte("{}"),
+	}
+	out, err := mig.Run(meta, files)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// "no_suffix_file" gets passed to rawKey and back, resulting in "no_suffix_file.json"
+	// since it wasn't a standard file and had no .json suffix originally.
+	if _, ok := out["no_suffix_file.json"]; !ok {
+		t.Errorf("expected no_suffix_file.json in output, got %v", out)
+	}
+}
+
 func TestMigrator_NewerThanSupported(t *testing.T) {
 	mig := DefaultMigrator()
 	meta := &Meta{Version: CurrentVersion + 1}
