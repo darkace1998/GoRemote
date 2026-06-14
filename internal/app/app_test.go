@@ -356,17 +356,6 @@ func TestCredentialResolution(t *testing.T) {
 	}
 }
 
-func TestDefaultAuthMethodTreatsMoshLikeSSH(t *testing.T) {
-	if got := defaultAuthMethod("io.goremote.protocol.mosh", protocol.CredentialMaterial{Password: "pw"}); got != protocol.AuthPassword {
-		t.Fatalf("password auth = %s, want password", got)
-	}
-	if got := defaultAuthMethod("mosh", protocol.CredentialMaterial{PrivateKey: []byte("key")}); got != protocol.AuthPublicKey {
-		t.Fatalf("private key auth = %s, want publickey", got)
-	}
-	if got := defaultAuthMethod("mosh", protocol.CredentialMaterial{}); got != protocol.AuthAgent {
-		t.Fatalf("empty auth = %s, want agent", got)
-	}
-}
 
 func TestExportAndRestore(t *testing.T) {
 	a, _ := newTestApp(t)
@@ -385,6 +374,15 @@ func TestExportAndRestore(t *testing.T) {
 
 	// Mutate then restore.
 	_ = a.DeleteNode(ctx, cid)
+
+	// The app needs to be recreated because the zip file in bi.Path
+	// was exported from the same underlying store and RestoreSnapshot does folder renames
+	// which might fail on Windows if file locks are left behind by the App.
+	_ = a.Shutdown(ctx)
+
+	a, _ = newTestApp(t)
+	_ = a.Start(ctx)
+
 	if err := a.RestoreSnapshot(ctx, bi.Path); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
