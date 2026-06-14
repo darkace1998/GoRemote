@@ -228,6 +228,51 @@ func TestInheritanceCredentialRefAndAuthMethod(t *testing.T) {
 	}
 }
 
+func TestInheritanceResolveNilNode(t *testing.T) {
+	var p InheritanceProfile
+	res := p.Resolve(nil, nil)
+	if res.Trace == nil {
+		t.Fatal("expected Trace to be initialized")
+	}
+	if len(res.Trace) != 0 {
+		t.Fatalf("expected empty Trace, got len %d", len(res.Trace))
+	}
+}
+
+func TestInheritanceResolve(t *testing.T) {
+	gp := &FolderNode{ID: NewID(), Name: "gp", Defaults: FolderDefaults{Host: "gp.example", Username: "gpuser", Port: 22}}
+	parent := &FolderNode{ID: NewID(), Name: "parent", ParentID: gp.ID, Defaults: FolderDefaults{Host: "parent.example"}}
+	node := &ConnectionNode{ID: NewID(), ParentID: parent.ID, Name: "n", Username: "explicit"}
+
+	node.Inheritance.SetInherit(FieldPort)
+
+	ancestors := []*FolderNode{gp, parent}
+
+	res := node.Inheritance.Resolve(node, ancestors)
+
+	if res.ID != node.ID {
+		t.Fatalf("expected ID %v, got %v", node.ID, res.ID)
+	}
+
+	for _, f := range AllInheritableFields {
+		if _, ok := res.Trace[f]; !ok {
+			t.Errorf("missing Trace entry for field: %v", f)
+		}
+	}
+
+	if prov := res.Trace[FieldHost]; prov.Source != ProvenanceFolder || prov.FolderID != parent.ID {
+		t.Errorf("host provenance mismatch: %+v", prov)
+	}
+
+	if prov := res.Trace[FieldUsername]; prov.Source != ProvenanceNode {
+		t.Errorf("username provenance mismatch: %+v", prov)
+	}
+
+	if prov := res.Trace[FieldPort]; prov.Source != ProvenanceFolder || prov.FolderID != gp.ID {
+		t.Errorf("port provenance mismatch: %+v", prov)
+	}
+}
+
 func TestReverseFolders(t *testing.T) {
 	a := &FolderNode{Name: "a"}
 	b := &FolderNode{Name: "b"}
