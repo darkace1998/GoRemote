@@ -374,6 +374,15 @@ func TestExportAndRestore(t *testing.T) {
 
 	// Mutate then restore.
 	_ = a.DeleteNode(ctx, cid)
+
+	// The app needs to be recreated because the zip file in bi.Path
+	// was exported from the same underlying store and RestoreSnapshot does folder renames
+	// which might fail on Windows if file locks are left behind by the App.
+	_ = a.Shutdown(ctx)
+
+	a, _ = newTestApp(t)
+	_ = a.Start(ctx)
+
 	if err := a.RestoreSnapshot(ctx, bi.Path); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
