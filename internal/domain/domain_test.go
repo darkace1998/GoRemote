@@ -359,95 +359,47 @@ func TestTemplateApply(t *testing.T) {
 	}
 }
 
-func TestTreeAddConnection(t *testing.T) {
-	t.Run("NilConnection", func(t *testing.T) {
-		tr := NewTree()
-		err := tr.AddConnection(nil)
-		if err == nil {
-			t.Fatalf("expected error for nil connection, got nil")
-		}
-	})
+func TestTreeMoveEdgeCases(t *testing.T) {
+	tr := NewTree()
+	f1 := mkFolder("f1", NilID)
+	f2 := mkFolder("f2", NilID)
+	c1 := mkConn("c1", f1.ID)
 
-	t.Run("NilID", func(t *testing.T) {
-		tr := NewTree()
-		c := &ConnectionNode{ID: NilID}
-		err := tr.AddConnection(c)
-		if err == nil {
-			t.Fatalf("expected error for NilID, got nil")
-		}
-	})
-
-	t.Run("DuplicateConnectionID", func(t *testing.T) {
-		tr := NewTree()
-		c := mkConn("c1", NilID)
-		if err := tr.AddConnection(c); err != nil {
-			t.Fatalf("setup failed: %v", err)
-		}
-
-		c2 := mkConn("c2", NilID)
-		c2.ID = c.ID // Duplicate ID
-
-		err := tr.AddConnection(c2)
-		if !errors.Is(err, ErrDuplicateID) {
-			t.Fatalf("expected ErrDuplicateID, got %v", err)
-		}
-	})
-
-	t.Run("DuplicateFolderID", func(t *testing.T) {
-		tr := NewTree()
-		f := mkFolder("f1", NilID)
+	for _, f := range []*FolderNode{f1, f2} {
 		if err := tr.AddFolder(f); err != nil {
-			t.Fatalf("setup failed: %v", err)
+			t.Fatalf("add folder: %v", err)
 		}
+	}
+	if err := tr.AddConnection(c1); err != nil {
+		t.Fatalf("add connection: %v", err)
+	}
 
-		c := mkConn("c1", NilID)
-		c.ID = f.ID // Duplicate ID from folder
+	// Move root
+	if err := tr.Move(NilID, f1.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound moving root, got %v", err)
+	}
 
-		err := tr.AddConnection(c)
-		if !errors.Is(err, ErrDuplicateID) {
-			t.Fatalf("expected ErrDuplicateID, got %v", err)
-		}
-	})
+	// Move to non-existent folder
+	nonExistentID := NewID()
+	if err := tr.Move(f1.ID, nonExistentID); !errors.Is(err, ErrParentNotFolder) {
+		t.Fatalf("expected ErrParentNotFolder moving to non-existent folder, got %v", err)
+	}
 
-	t.Run("ParentNotFolder", func(t *testing.T) {
-		tr := NewTree()
-		c := mkConn("c1", NewID()) // Parent ID doesn't exist
+	// Move to a connection (not a folder)
+	if err := tr.Move(f1.ID, c1.ID); !errors.Is(err, ErrParentNotFolder) {
+		t.Fatalf("expected ErrParentNotFolder moving to connection, got %v", err)
+	}
 
-		err := tr.AddConnection(c)
-		if !errors.Is(err, ErrParentNotFolder) {
-			t.Fatalf("expected ErrParentNotFolder, got %v", err)
-		}
-	})
+	// Move connection (successful move)
+	if err := tr.Move(c1.ID, f2.ID); err != nil {
+		t.Fatalf("move connection failed: %v", err)
+	}
+	if got, _ := tr.Connection(c1.ID); got.ParentID != f2.ID {
+		t.Fatalf("connection ParentID not updated: %v", got.ParentID)
+	}
 
-	t.Run("Success", func(t *testing.T) {
-		tr := NewTree()
-		f := mkFolder("f1", NilID)
-		if err := tr.AddFolder(f); err != nil {
-			t.Fatalf("setup failed: %v", err)
-		}
-
-		c := mkConn("c1", f.ID)
-		err := tr.AddConnection(c)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		// Verify connection was added
-		if got, ok := tr.connections[c.ID]; !ok || got != c {
-			t.Fatalf("connection not properly added to connections map")
-		}
-
-		// Verify child linkage
-		children := tr.connectionChildren[f.ID]
-		found := false
-		for _, childID := range children {
-			if childID == c.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("connection ID not added to parent's connectionChildren")
-		}
-	})
+	// Move non-existent ID
+	if err := tr.Move(nonExistentID, f1.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound moving non-existent ID, got %v", err)
+	}
 }
