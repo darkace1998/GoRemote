@@ -1,0 +1,13 @@
+1. We need to add tests for `defaultAuthMethod` in `internal/app/sessions.go`.
+2. The current tests only cover the "mosh" case in `internal/app/app_test.go` (`TestDefaultAuthMethodTreatsMoshLikeSSH`).
+3. We should create a dedicated `TestDefaultAuthMethod` function (or similar) in `internal/app/sessions_test.go` to cover all scenarios:
+   - "ssh" and "mosh" protocols:
+     - With Password -> protocol.AuthPassword
+     - With PrivateKey -> protocol.AuthPublicKey
+     - Empty -> protocol.AuthAgent
+   - Non-SSH protocols (e.g., "rdp", "vnc", "telnet"):
+     - With Password -> protocol.AuthPassword
+     - Empty -> protocol.AuthNone
+   - Ensure the prefix trimming logic works (e.g., "io.goremote.protocol.ssh" -> "ssh").
+4. Let's create `internal/app/sessions_test.go` with table-driven tests for this function.
+5. `TestDefaultAuthMethodTreatsMoshLikeSSH` can be removed or kept, but the new table-driven test will cover its functionality. I will delete it to avoid duplication.
