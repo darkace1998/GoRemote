@@ -310,16 +310,16 @@ func (r *Registry) refreshLocked() error {
 		if err != nil {
 			continue
 		}
+		lfi, lserr := os.Lstat(manifestPath)
+		if lserr != nil || !lfi.Mode().IsRegular() {
+			continue
+		}
 		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
 		if err != nil {
 			continue
 		}
-		// BUG-E2: safeJoinWithinRoot uses filepath.Abs but does not resolve
-		// symlinks. Lstat the path (without following any symlink) to ensure
-		// manifest.json is a regular file; reject device files, pipes, and
-		// symbolic links that could point outside the plugin root.
-		if lfi, lserr := os.Lstat(manifestPath); lserr != nil || !lfi.Mode().IsRegular() {
+		if fi, err := f.Stat(); err != nil || !os.SameFile(lfi, fi) {
 			_ = f.Close()
 			continue
 		}

@@ -17,9 +17,10 @@ require (
 require (
 	fyne.io/systray v1.12.1 // indirect
 	github.com/ActiveState/termtest/conpty v0.5.0 // indirect
-	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/BurntSushi/toml v1.6.0 // indirect
-	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
+	github.com/BurntSushi/toml v1.5.0 // indirect
+	github.com/FyshOS/fancyfs v0.0.0-20251025194026-1f03098ff624 // indirect
+	github.com/anthonynsimon/bild v0.13.0 // indirect
 	github.com/creack/pty v1.1.24 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

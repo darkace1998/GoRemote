@@ -37,7 +37,28 @@ func findLabel(objs []fyne.CanvasObject, want string) bool {
 // (plus their canvas object trees) for a label with the given text.
 func findInOverlays(w fyne.Window, want string) bool {
 	for _, ov := range w.Canvas().Overlays().List() {
-		// Just search everything in the overlay object tree
+		if pop, ok := ov.(*widget.PopUp); ok {
+			if findLabel([]fyne.CanvasObject{pop.Content}, want) {
+				return true
+			}
+		}
+
+		// In Fyne v2.7.5+, widget.PopUp is wrapped in an internal OverlayContainer.
+		// We use reflection to reach into its Content field.
+		val := reflect.ValueOf(ov)
+		if val.Kind() == reflect.Ptr && !val.IsNil() {
+			val = val.Elem()
+			if val.Kind() == reflect.Struct {
+				if contentField := val.FieldByName("Content"); contentField.IsValid() && !contentField.IsNil() {
+					if contentObj, ok := contentField.Interface().(fyne.CanvasObject); ok {
+						if findLabel([]fyne.CanvasObject{contentObj}, want) {
+							return true
+						}
+					}
+				}
+			}
+		}
+
 		if findLabel([]fyne.CanvasObject{ov}, want) {
 			return true
 		}
