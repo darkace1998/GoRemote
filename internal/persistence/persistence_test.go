@@ -466,10 +466,14 @@ func TestBackupRestore(t *testing.T) {
 	if err := s.Save(context.Background(), mutated); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Restore(context.Background(), zipPath); err != nil {
+
+	// Use a new store instance for restoring to prevent file locks holding from the previous backup process
+	// on Windows
+	s2 := New(dir)
+	if err := s2.Restore(context.Background(), zipPath); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	reloaded, err := s.Load(context.Background())
+	reloaded, err := s2.Load(context.Background())
 	if err != nil {
 		t.Fatalf("post-restore load: %v", err)
 	}
