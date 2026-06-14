@@ -1,6 +1,3 @@
-## 2025-05-18 - Optimize ID Comparison during Sorting
-**Learning:** Comparing UUIDs (or generic `[16]byte` IDs) using `ID.String()` in a loop like `sort.Slice` causes immense string allocation overhead and garbage collection pressure, dramatically slowing down CPU time.
-**Action:** Use `bytes.Compare(a.ID[:], b.ID[:]) < 0` to compare the underlying byte arrays directly. This achieves mathematically equivalent lexical sorting without a single heap allocation.
-## 2026-06-08 - [Avoid allocations in case-insensitive search predicates]
-**Learning:** In hot paths (like repeatedly evaluating nodes in a tree), `strings.Contains(strings.ToLower(s), needle)` introduces significant overhead by constantly allocating new strings via `ToLower()`.
-**Action:** Since Go's `strings` package lacks a zero-allocation `ContainsFold()`, use a custom byte-level iterator that does ASCII-folding inline to avoid string allocations. Be sure to check that the strings consist of ASCII characters and fallback to the standard method otherwise to ensure correctness for all unicode characters.
+## 2025-02-23 - Table-driven tests for defaultAuthMethod
+**Learning:** Adding comprehensive table-driven tests ensures all permutations of simple switch/if statements are validated. We noticed `TestDefaultAuthMethodTreatsMoshLikeSSH` was partially testing `defaultAuthMethod` but it lacked coverage for standard SSH and non-SSH cases, as well as proper prefix removal.
+**Action:** Always favor table-driven tests for utility functions with multiple input combinations, rather than ad-hoc individual tests.

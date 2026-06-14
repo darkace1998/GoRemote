@@ -186,8 +186,9 @@ func (h *HoverTip) show() {
 		}
 	}
 	label := widget.NewLabel(text)
+	// Use canvas overlay directly instead of popup for robustness in tests
 	pop := widget.NewPopUp(label, cnv)
-	pop.ShowAtRelativePosition(fyne.NewPos(pos.X+cursorOffsetX, pos.Y+cursorOffsetY), h)
+	pop.ShowAtPosition(fyne.NewPos(pos.X+cursorOffsetX, pos.Y+cursorOffsetY))
 	h.mu.Lock()
 	h.popup = pop
 	h.mu.Unlock()
