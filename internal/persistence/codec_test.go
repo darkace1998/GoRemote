@@ -1,90 +1,127 @@
 package persistence
 
 import (
+	"strings"
 	"testing"
+
 	"github.com/darkace1998/GoRemote/internal/domain"
 )
 
-func TestEncodeInventory_NilTree(t *testing.T) {
-	inv := encodeInventory(nil)
-	if len(inv.Folders) != 0 || len(inv.Connections) != 0 {
-		t.Errorf("Expected empty inventory for nil tree, got %+v", inv)
+func TestDecodeInventory_Errors(t *testing.T) {
+	idA := domain.NewID()
+	idB := domain.NewID()
+
+	tests := []struct {
+		name    string
+		inv     inventoryFile
+		wantErr string
+	}{
+		{
+			name: "orphaned folder",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NewID(), ParentID: idA, Name: "Orphan"},
+				},
+			},
+			wantErr: "unresolvable folder parents: 1 folder(s) orphaned",
+		},
+		{
+			name: "circular dependency",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: idA, ParentID: idB, Name: "A"},
+					{ID: idB, ParentID: idA, Name: "B"},
+				},
+			},
+			wantErr: "unresolvable folder parents: 2 folder(s) orphaned",
+		},
+		{
+			name: "duplicate folder ID",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: idA, ParentID: domain.NilID, Name: "Root1"},
+					{ID: idA, ParentID: domain.NilID, Name: "Root2"},
+				},
+			},
+			wantErr: "persistence: add folder",
+		},
+		{
+			name: "duplicate connection ID",
+			inv: inventoryFile{
+				Connections: []*domain.ConnectionNode{
+					{ID: idA, ParentID: domain.NilID, Name: "Conn1"},
+					{ID: idA, ParentID: domain.NilID, Name: "Conn2"},
+				},
+			},
+			wantErr: "persistence: add connection",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := decodeInventory(tt.inv)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("expected error containing %q, got %v", tt.wantErr, err)
+			}
+		})
 	}
 }
 
-func TestEncodeInventory_EmptyTree(t *testing.T) {
-	tree := domain.NewTree()
-	inv := encodeInventory(tree)
-	if len(inv.Folders) != 0 || len(inv.Connections) != 0 {
-		t.Errorf("Expected empty inventory for empty tree, got %+v", inv)
+func TestDecodeInventory_TopologicalSuccess(t *testing.T) {
+	rootID := domain.NewID()
+	childID := domain.NewID()
+	grandchildID := domain.NewID()
+
+	inv := inventoryFile{
+		Folders: []*domain.FolderNode{
+			// Reverse order to ensure topological sorting works
+			{ID: grandchildID, ParentID: childID, Name: "Grandchild"},
+			{ID: childID, ParentID: rootID, Name: "Child"},
+			{ID: rootID, ParentID: domain.NilID, Name: "Root"},
+		},
+	}
+
+	tree, err := decodeInventory(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if tree == nil {
+		t.Fatal("expected tree, got nil")
+	}
+
+	// Verify they are added
+	f, err := tree.Folder(grandchildID)
+	if err != nil || f.Name != "Grandchild" {
+		t.Errorf("expected to find Grandchild folder, got err=%v", err)
 	}
 }
 
-func TestEncodeInventory_PopulatedTree(t *testing.T) {
-	tree := domain.NewTree()
+func TestDecodeInventory_NilElements(t *testing.T) {
+	rootID := domain.NewID()
 
-	// Create folders
-	f1 := &domain.FolderNode{ID: domain.NewID(), ParentID: domain.NilID, Name: "F1"}
-	f2 := &domain.FolderNode{ID: domain.NewID(), ParentID: f1.ID, Name: "F2"}
-
-	if err := tree.AddFolder(f1); err != nil {
-		t.Fatalf("AddFolder: %v", err)
-	}
-	if err := tree.AddFolder(f2); err != nil {
-		t.Fatalf("AddFolder: %v", err)
-	}
-
-	// Create connections
-	c1 := &domain.ConnectionNode{ID: domain.NewID(), ParentID: f1.ID, Name: "C1"}
-	c2 := &domain.ConnectionNode{ID: domain.NewID(), ParentID: f2.ID, Name: "C2"}
-
-	if err := tree.AddConnection(c1); err != nil {
-		t.Fatalf("AddConnection: %v", err)
-	}
-	if err := tree.AddConnection(c2); err != nil {
-		t.Fatalf("AddConnection: %v", err)
+	inv := inventoryFile{
+		Folders: []*domain.FolderNode{
+			nil,
+			{ID: rootID, ParentID: domain.NilID, Name: "Root"},
+			nil,
+		},
+		Connections: []*domain.ConnectionNode{
+			nil,
+			{ID: domain.NewID(), ParentID: rootID, Name: "Conn"},
+			nil,
+		},
 	}
 
-	inv := encodeInventory(tree)
-
-	if len(inv.Folders) != 2 {
-		t.Errorf("Expected 2 folders, got %d", len(inv.Folders))
-	}
-	if len(inv.Connections) != 2 {
-		t.Errorf("Expected 2 connections, got %d", len(inv.Connections))
+	tree, err := decodeInventory(inv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// The Tree.Walk method guarantees a certain order (parents before children).
-	// We check if all items are present, but might need to sort or search.
-	// Since there are only 2 items we can just verify them.
-
-	foldersSet := make(map[domain.ID]bool)
-	for _, f := range inv.Folders {
-		foldersSet[f.ID] = true
-	}
-	if !foldersSet[f1.ID] || !foldersSet[f2.ID] {
-		t.Errorf("Expected folders F1 and F2 to be encoded, got %v", inv.Folders)
-	}
-
-	connectionsSet := make(map[domain.ID]bool)
-	for _, c := range inv.Connections {
-		connectionsSet[c.ID] = true
-	}
-	if !connectionsSet[c1.ID] || !connectionsSet[c2.ID] {
-		t.Errorf("Expected connections C1 and C2 to be encoded, got %v", inv.Connections)
-	}
-
-	// Test order constraints (parents before children)
-	// F1 should be before F2
-	f1Idx, f2Idx := -1, -1
-	for i, f := range inv.Folders {
-		if f.ID == f1.ID {
-			f1Idx = i
-		} else if f.ID == f2.ID {
-			f2Idx = i
-		}
-	}
-	if f1Idx > f2Idx {
-		t.Errorf("Expected parent folder F1 to be before F2, got F1 at %d, F2 at %d", f1Idx, f2Idx)
+	if tree == nil {
+		t.Fatal("expected tree, got nil")
 	}
 }
