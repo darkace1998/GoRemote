@@ -204,8 +204,7 @@ func lineContains(out, needle string) bool {
 func (g *GitSync) hasUnpushedCommits(ctx context.Context) (bool, error) {
 	out, err := g.run(ctx, "rev-list", "--count", "@{upstream}..HEAD")
 	if err != nil {
-		// no upstream tracked → nothing to push
-		return false, nil //nolint:nilerr
+		return false, err // no upstream tracked → nothing to push
 	}
 	n, _ := strconv.Atoi(strings.TrimSpace(out))
 	return n > 0, nil
