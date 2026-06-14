@@ -466,10 +466,14 @@ func TestBackupRestore(t *testing.T) {
 	if err := s.Save(context.Background(), mutated); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Restore(context.Background(), zipPath); err != nil {
+
+	// Use a new store instance for restoring to prevent file locks holding from the previous backup process
+	// on Windows
+	s2 := New(dir)
+	if err := s2.Restore(context.Background(), zipPath); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	reloaded, err := s.Load(context.Background())
+	reloaded, err := s2.Load(context.Background())
 	if err != nil {
 		t.Fatalf("post-restore load: %v", err)
 	}
@@ -724,5 +728,70 @@ func TestValidate_OrphanFocusedTab(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no orphan_focused_tab issue: %+v", issues)
+	}
+}
+
+func TestFolderCycleDirect(t *testing.T) {
+	id1 := domain.NewID()
+	id2 := domain.NewID()
+	id3 := domain.NewID()
+
+	tests := []struct {
+		name    string
+		node    *domain.FolderNode
+		index   map[domain.ID]*domain.FolderNode
+		wantLen int
+	}{
+		{
+			name:    "no cycle",
+			node:    &domain.FolderNode{ID: id1, ParentID: domain.NilID},
+			index:   map[domain.ID]*domain.FolderNode{},
+			wantLen: 0,
+		},
+		{
+			name: "self cycle",
+			node: &domain.FolderNode{ID: id1, ParentID: id1},
+			index: map[domain.ID]*domain.FolderNode{
+				id1: {ID: id1, ParentID: id1},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "short cycle",
+			node: &domain.FolderNode{ID: id1, ParentID: id2},
+			index: map[domain.ID]*domain.FolderNode{
+				id1: {ID: id1, ParentID: id2},
+				id2: {ID: id2, ParentID: id1},
+			},
+			wantLen: 2,
+		},
+		{
+			name: "missing parent",
+			node: &domain.FolderNode{ID: id1, ParentID: id2},
+			index: map[domain.ID]*domain.FolderNode{
+				id1: {ID: id1, ParentID: id2},
+				// id2 is missing
+			},
+			wantLen: 0,
+		},
+		{
+			name: "long cycle tail",
+			node: &domain.FolderNode{ID: id1, ParentID: id2},
+			index: map[domain.ID]*domain.FolderNode{
+				id1: {ID: id1, ParentID: id2},
+				id2: {ID: id2, ParentID: id3},
+				id3: {ID: id3, ParentID: id2},
+			},
+			wantLen: 2, // only id2 and id3 are in the cycle
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := folderCycle(tc.node, tc.index)
+			if len(got) != tc.wantLen {
+				t.Errorf("folderCycle() returned %d items, want %d", len(got), tc.wantLen)
+			}
+		})
 	}
 }

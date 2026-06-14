@@ -105,10 +105,8 @@ func TestHoverTip_EmptyTextSuppressesPopup(t *testing.T) {
 	tip.lastPos = fyne.NewPos(0, 0)
 	tip.show()
 
-	for _, ov := range w.Canvas().Overlays().List() {
-		if _, ok := ov.(*widget.PopUp); ok {
-			t.Fatalf("no popup expected when tooltip text is empty")
-		}
+	if len(w.Canvas().Overlays().List()) > 0 {
+		t.Fatalf("no popup expected when tooltip text is empty, got %d overlays", len(w.Canvas().Overlays().List()))
 	}
 }
 

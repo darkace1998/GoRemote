@@ -358,3 +358,76 @@ func TestTemplateApply(t *testing.T) {
 		t.Fatalf("template settings not isolated")
 	}
 }
+
+func TestTree_AddFolder(t *testing.T) {
+	tr := NewTree()
+
+	t.Run("nil folder", func(t *testing.T) {
+		err := tr.AddFolder(nil)
+		if err == nil || err.Error() != "domain: nil folder" {
+			t.Fatalf("expected 'domain: nil folder', got %v", err)
+		}
+	})
+
+	t.Run("missing ID", func(t *testing.T) {
+		f := &FolderNode{ID: NilID, Name: "no id"}
+		err := tr.AddFolder(f)
+		if err == nil || err.Error() != "domain: folder id is required" {
+			t.Fatalf("expected 'domain: folder id is required', got %v", err)
+		}
+	})
+
+	t.Run("success root", func(t *testing.T) {
+		f := mkFolder("root", NilID)
+		if err := tr.AddFolder(f); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// check duplicate ID folder
+		t.Run("duplicate ID", func(t *testing.T) {
+			if err := tr.AddFolder(f); !errors.Is(err, ErrDuplicateID) {
+				t.Fatalf("expected ErrDuplicateID, got %v", err)
+			}
+		})
+	})
+
+	t.Run("ID used by connection", func(t *testing.T) {
+		conn := mkConn("c1", NilID)
+		if err := tr.AddConnection(conn); err != nil {
+			t.Fatalf("AddConnection failed: %v", err)
+		}
+
+		// Now try to add a folder with the same ID
+		f := mkFolder("f1", NilID)
+		f.ID = conn.ID // steal ID
+		err := tr.AddFolder(f)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("missing parent folder", func(t *testing.T) {
+		f := mkFolder("f2", NewID()) // random ParentID that doesn't exist
+		err := tr.AddFolder(f)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("success child", func(t *testing.T) {
+		root := mkFolder("root2", NilID)
+		if err := tr.AddFolder(root); err != nil {
+			t.Fatalf("AddFolder root2 failed: %v", err)
+		}
+
+		child := mkFolder("child", root.ID)
+		if err := tr.AddFolder(child); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Verify parent-child relationship in internal map
+		if children := tr.folderChildren[root.ID]; len(children) != 1 || children[0] != child.ID {
+			t.Fatalf("child not added to parent children list correctly")
+		}
+	})
+}
