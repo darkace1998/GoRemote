@@ -54,3 +54,5 @@ require (
 	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/fyne-io/terminal => github.com/fyne-io/terminal v0.0.0-20260529110433-47cc6acb72ae
