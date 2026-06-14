@@ -247,18 +247,20 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	if err != nil {
 		return fmt.Errorf("persistence: open backup %s: %w", backupPath, err)
 	}
-	defer func() { _ = zr.Close() }()
 
 	if err := validateRestoreArchive(zr.File); err != nil {
+		_ = zr.Close()
 		return err
 	}
 
 	for _, f := range zr.File {
 		clean, err := sanitizeRestorePath(f.Name)
 		if err != nil {
+			_ = zr.Close()
 			return fmt.Errorf("persistence: backup contains unsafe path %q", f.Name)
 		}
 		if strings.HasPrefix(clean, BackupsDirName+"/") || clean == BackupsDirName {
+			_ = zr.Close()
 			return fmt.Errorf("persistence: backup contains nested backups/ entry %q", f.Name)
 		}
 	}
@@ -275,12 +277,14 @@ func (s *Store) Restore(ctx context.Context, backupPath string) error {
 	_ = os.RemoveAll(oldDir)
 
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		_ = zr.Close()
 		return fmt.Errorf("persistence: mkdir restore temp: %w", err)
 	}
 
 	extractFn := s.extractEntry
 	for _, f := range zr.File {
 		if err := extractFn(f, tmpDir); err != nil {
+			_ = zr.Close()
 			_ = os.RemoveAll(tmpDir)
 			return fmt.Errorf("persistence: extract %q: %w", f.Name, err)
 		}

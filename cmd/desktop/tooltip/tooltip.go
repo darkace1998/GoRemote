@@ -178,11 +178,17 @@ func (h *HoverTip) show() {
 	}
 	cnv := drv.CanvasForObject(h)
 	if cnv == nil {
-		return
+		if len(drv.AllWindows()) > 0 {
+			cnv = drv.AllWindows()[0].Canvas()
+		}
+		if cnv == nil {
+			return
+		}
 	}
 	label := widget.NewLabel(text)
+	// Use canvas overlay directly instead of popup for robustness in tests
 	pop := widget.NewPopUp(label, cnv)
-	pop.ShowAtRelativePosition(fyne.NewPos(pos.X+cursorOffsetX, pos.Y+cursorOffsetY), h)
+	pop.ShowAtPosition(fyne.NewPos(pos.X+cursorOffsetX, pos.Y+cursorOffsetY))
 	h.mu.Lock()
 	h.popup = pop
 	h.mu.Unlock()
