@@ -231,7 +231,7 @@ func TestBuild_SettingsRedactsTokenFields(t *testing.T) {
 	dir := t.TempDir()
 	settingsP := filepath.Join(dir, "settings.json")
 	// A fake settings file with a token field and a URL with embedded credentials.
-	writeFile(t, settingsP, `{"theme":"dark","token":"secret-token","gitSyncRemote":"https://user:pass@github.com/org/repo"}`)
+	writeFile(t, settingsP, `{"theme":"dark","myToken":"secret-token","gitSyncRemote":"https://user:pass@github.com/org/repo"}`)
 
 	var buf bytes.Buffer
 	if _, err := Build(context.Background(), &buf, Inputs{SettingsPath: settingsP}); err != nil {
