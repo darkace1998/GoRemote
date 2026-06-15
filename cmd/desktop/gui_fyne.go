@@ -63,6 +63,8 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		items:         make(map[domain.ID]*sessionTab),
 		openConns:     make(map[string]struct{}),
 		groups:        make(map[*container.TabItem]*paneGroup),
+		tabToSession:  make(map[*container.TabItem]*sessionTab),
+		connToSession: make(map[string]*sessionTab),
 		statusLabel:   statusLabel,
 		sessionsLabel: sessionsLabel,
 		bindings:      b,
@@ -627,6 +629,8 @@ type sessionRegistry struct {
 	items         map[domain.ID]*sessionTab
 	openConns     map[string]struct{}
 	groups        map[*container.TabItem]*paneGroup
+	tabToSession  map[*container.TabItem]*sessionTab
+	connToSession map[string]*sessionTab
 	tabs          *container.DocTabs
 	statusLabel   *widget.Label
 	sessionsLabel *widget.Label
@@ -660,6 +664,12 @@ func (r *sessionRegistry) releaseConn(connID string) {
 func (r *sessionRegistry) add(st *sessionTab) {
 	r.mu.Lock()
 	r.items[st.hid] = st
+	if st.tabItem != nil {
+		r.tabToSession[st.tabItem] = st
+	}
+	if st.connID != "" {
+		r.connToSession[st.connID] = st
+	}
 	count := len(r.items)
 	var g *paneGroup
 	var newTab bool
@@ -721,6 +731,12 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	if ok {
 		delete(r.items, hid)
 		delete(r.openConns, st.connID)
+		if st.tabItem != nil {
+			delete(r.tabToSession, st.tabItem)
+		}
+		if st.connID != "" {
+			delete(r.connToSession, st.connID)
+		}
 	}
 	count := len(r.items)
 	var g *paneGroup
@@ -792,23 +808,13 @@ func (r *sessionRegistry) findByTab(item *container.TabItem) *sessionTab {
 			return lf.session
 		}
 	}
-	for _, st := range r.items {
-		if st.tabItem == item {
-			return st
-		}
-	}
-	return nil
+	return r.tabToSession[item]
 }
 
 func (r *sessionRegistry) findByConnection(connID string) *sessionTab {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, st := range r.items {
-		if st.connID == connID {
-			return st
-		}
-	}
-	return nil
+	return r.connToSession[connID]
 }
 
 func (r *sessionRegistry) snapshot() []*sessionTab {
