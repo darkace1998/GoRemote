@@ -433,10 +433,6 @@ func TestMigrator_ResidualKeys(t *testing.T) {
 	}
 }
 
-
-
-
-
 func TestMigrator_FromRawStandardError(t *testing.T) {
 	// A known key (like "inventory") fails to re-encode in fromRaw.
 	mig := &Migrator{Migrations: []Migration{

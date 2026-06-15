@@ -53,7 +53,7 @@ func TestRedactingHandlerIsSensitiveKeyEmpty(t *testing.T) {
 func TestRedactingHandlerWithGroupEmptyPending(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
+		inner:   mem,
 		pending: nil,
 	}
 	h.WithGroup("g1")
@@ -103,8 +103,8 @@ func TestRedactAttrLogValuer(t *testing.T) {
 func TestRedactingHandlerLevelFiltering(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
-		level: slog.LevelInfo,
+		inner:   mem,
+		level:   slog.LevelInfo,
 	}
 
 	if h.Enabled(context.Background(), slog.LevelDebug) {
@@ -119,8 +119,8 @@ func TestRedactingHandlerLevelFiltering(t *testing.T) {
 func TestRedactingHandlerHandle(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
-		keys: map[string]struct{}{"secret": {}},
+		inner:   mem,
+		keys:    map[string]struct{}{"secret": {}},
 		pending: []slog.Attr{
 			slog.String("component", "test"),
 		},
@@ -165,8 +165,8 @@ func TestRedactingHandlerHandle(t *testing.T) {
 func TestRedactingHandlerWithAttrsDedup(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
-		keys: map[string]struct{}{"secret": {}},
+		inner:   mem,
+		keys:    map[string]struct{}{"secret": {}},
 		pending: []slog.Attr{
 			slog.String("component", "test"),
 			slog.String("other", "val"),
@@ -201,7 +201,7 @@ func TestRedactingHandlerWithAttrsDedup(t *testing.T) {
 func TestRedactingHandlerWithAttrsDedupNotReplaced(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
+		inner:   mem,
 		pending: []slog.Attr{
 			slog.String("other", "val"),
 		},
