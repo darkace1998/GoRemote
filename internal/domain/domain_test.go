@@ -763,3 +763,34 @@ func TestInheritanceResolve_MiscPaths(t *testing.T) {
 		t.Errorf("expected nils for explicit zero node fields")
 	}
 }
+
+func TestInheritanceResolve_NilAncestor(t *testing.T) {
+	node := &ConnectionNode{ID: NewID(), Name: "n"}
+	node.Inheritance.SetInherit(FieldPort)
+
+	// One valid ancestor, one nil ancestor
+	gp := &FolderNode{ID: NewID(), Name: "gp", Defaults: FolderDefaults{Port: 22}}
+	ancestors := []*FolderNode{gp, nil}
+
+	res := node.Inheritance.Resolve(node, ancestors)
+
+	// Verify that the nil ancestor was skipped and we inherited from gp
+	if res.Port != 22 {
+		t.Errorf("expected port to be inherited from gp, got %v", res.Port)
+	}
+	if prov := res.Trace[FieldPort]; prov.Source != ProvenanceFolder || prov.FolderID != gp.ID {
+		t.Errorf("expected provenance from gp, got %+v", prov)
+	}
+}
+
+func TestInheritance_UnknownField(t *testing.T) {
+	node := &ConnectionNode{}
+	if !isNodeFieldZero(node, Field("unknown")) {
+		t.Errorf("expected isNodeFieldZero to return true for unknown field")
+	}
+
+	folder := &FolderNode{}
+	if !isFolderDefaultZero(folder, Field("unknown")) {
+		t.Errorf("expected isFolderDefaultZero to return true for unknown field")
+	}
+}
