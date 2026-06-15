@@ -265,3 +265,57 @@ func TestInstallRejectsInvalidInlineManifest(t *testing.T) {
 
 // fmt is here to keep go-vet happy with potential future use.
 var _ = fmt.Sprintf
+
+func TestInstallRejectsMismatchedInlineManifestID(t *testing.T) {
+	payload := []byte("PKG_BLOB_v1")
+	sum := sha256.Sum256(payload)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(payload)
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+
+	mismatchedManifest := []byte(`{"id":"io.malicious.alpha","name":"Alpha","kind":"protocol","version":"1.0.0","api_version":"1.0.0"}`)
+	l := Listing{
+		ID:          "io.example.alpha",
+		Version:     "1.0.0",
+		DownloadURL: srv.URL,
+		SHA256:      hex.EncodeToString(sum[:]),
+		Manifest:    mismatchedManifest,
+	}
+	err := newClient().Install(context.Background(), l, dest)
+	if err == nil {
+		t.Fatal("expected error for mismatched inline manifest ID, got nil")
+	}
+	if !strings.Contains(err.Error(), "manifest id mismatch") {
+		t.Errorf("expected manifest id mismatch error, got: %v", err)
+	}
+}
+
+func TestInstallRejectsMismatchedInlineManifestVersion(t *testing.T) {
+	payload := []byte("PKG_BLOB_v1")
+	sum := sha256.Sum256(payload)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(payload)
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+
+	mismatchedManifest := []byte(`{"id":"io.example.alpha","name":"Alpha","kind":"protocol","version":"2.0.0","api_version":"1.0.0"}`)
+	l := Listing{
+		ID:          "io.example.alpha",
+		Version:     "1.0.0",
+		DownloadURL: srv.URL,
+		SHA256:      hex.EncodeToString(sum[:]),
+		Manifest:    mismatchedManifest,
+	}
+	err := newClient().Install(context.Background(), l, dest)
+	if err == nil {
+		t.Fatal("expected error for mismatched inline manifest version, got nil")
+	}
+	if !strings.Contains(err.Error(), "manifest version mismatch") {
+		t.Errorf("expected manifest version mismatch error, got: %v", err)
+	}
+}
