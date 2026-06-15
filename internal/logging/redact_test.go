@@ -26,7 +26,7 @@ func (h *memoryHandler) WithGroup(name string) slog.Handler { return h }
 func TestRedactingHandlerWithGroup(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
+		inner:   mem,
 		pending: []slog.Attr{slog.String("k1", "v1")},
 	}
 	h2 := h.WithGroup("g1")
