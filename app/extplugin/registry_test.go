@@ -250,6 +250,8 @@ func TestSpoofedManifestIDRejected(t *testing.T) {
 	}
 }
 
+// BUG-E2: a manifest.json that is a symlink (potentially pointing outside
+// the plugin root) must be rejected during discovery.
 func TestSymlinkedManifestRejected(t *testing.T) {
 	if !symlinkSupported() {
 		t.Skip("symlinks not supported on this platform")
