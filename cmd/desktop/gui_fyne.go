@@ -64,6 +64,8 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		connItems:     make(map[string]*sessionTab),
 		openConns:     make(map[string]struct{}),
 		groups:        make(map[*container.TabItem]*paneGroup),
+		tabToSession:  make(map[*container.TabItem]*sessionTab),
+		connToSession: make(map[string]*sessionTab),
 		statusLabel:   statusLabel,
 		sessionsLabel: sessionsLabel,
 		bindings:      b,
@@ -629,6 +631,8 @@ type sessionRegistry struct {
 	connItems     map[string]*sessionTab
 	openConns     map[string]struct{}
 	groups        map[*container.TabItem]*paneGroup
+	tabToSession  map[*container.TabItem]*sessionTab
+	connToSession map[string]*sessionTab
 	tabs          *container.DocTabs
 	statusLabel   *widget.Label
 	sessionsLabel *widget.Label
@@ -725,6 +729,12 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 		delete(r.items, hid)
 		delete(r.connItems, st.connID)
 		delete(r.openConns, st.connID)
+		if st.tabItem != nil {
+			delete(r.tabToSession, st.tabItem)
+		}
+		if st.connID != "" {
+			delete(r.connToSession, st.connID)
+		}
 	}
 	count := len(r.items)
 	var g *paneGroup
@@ -796,12 +806,7 @@ func (r *sessionRegistry) findByTab(item *container.TabItem) *sessionTab {
 			return lf.session
 		}
 	}
-	for _, st := range r.items {
-		if st.tabItem == item {
-			return st
-		}
-	}
-	return nil
+	return r.tabToSession[item]
 }
 
 func (r *sessionRegistry) findByConnection(connID string) *sessionTab {

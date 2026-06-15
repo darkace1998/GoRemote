@@ -26,7 +26,7 @@ func (h *memoryHandler) WithGroup(name string) slog.Handler { return h }
 func TestRedactingHandlerWithGroup(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
+		inner:   mem,
 		pending: []slog.Attr{slog.String("k1", "v1")},
 	}
 	h2 := h.WithGroup("g1")
@@ -53,7 +53,7 @@ func TestRedactingHandlerIsSensitiveKeyEmpty(t *testing.T) {
 func TestRedactingHandlerWithGroupEmptyPending(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
-		inner: mem,
+		inner:   mem,
 		pending: nil,
 	}
 	h.WithGroup("g1")
@@ -66,6 +66,7 @@ func TestRedactingHandlerWithGroupEmptyPending(t *testing.T) {
 type testLogValuer struct {
 	v slog.Value
 }
+
 func (t testLogValuer) LogValue() slog.Value {
 	return t.v
 }
@@ -120,7 +121,7 @@ func TestRedactingHandlerHandle(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
 		inner: mem,
-		keys: map[string]struct{}{"secret": {}},
+		keys:  map[string]struct{}{"secret": {}},
 		pending: []slog.Attr{
 			slog.String("component", "test"),
 		},
@@ -161,12 +162,11 @@ func TestRedactingHandlerHandle(t *testing.T) {
 	}
 }
 
-
 func TestRedactingHandlerWithAttrsDedup(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
 		inner: mem,
-		keys: map[string]struct{}{"secret": {}},
+		keys:  map[string]struct{}{"secret": {}},
 		pending: []slog.Attr{
 			slog.String("component", "test"),
 			slog.String("other", "val"),
@@ -224,13 +224,14 @@ func TestRedactingHandlerWithAttrsDedupNotReplaced(t *testing.T) {
 type stringLogValuer struct {
 	v string
 }
+
 func (s stringLogValuer) LogValue() slog.Value {
 	return slog.StringValue(s.v)
 }
 
 func TestRedactAttrLogValuerString(t *testing.T) {
 	h := &redactingHandler{
-		keys: map[string]struct{}{"secret": {}},
+		keys:     map[string]struct{}{"secret": {}},
 		patterns: DefaultSensitivePatterns,
 	}
 
