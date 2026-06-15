@@ -97,6 +97,8 @@ func (s *Session) Start(ctx context.Context, stdin io.Reader, stdout io.Writer) 
 	select {
 	case <-ctx.Done():
 		runErr = ctx.Err()
+		// Ensure we close the session properly on context cancellation
+		_ = s.Close()
 	case err := <-waitCh:
 		if err != nil && !isCleanExit(err) {
 			runErr = err

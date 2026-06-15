@@ -38,13 +38,19 @@ var NilID ID
 
 // ParseID parses a standard hyphenated UUID string (8-4-4-4-12 hex).
 func ParseID(s string) (ID, error) {
+	if s == "" {
+		return NilID, fmt.Errorf("domain: empty id string")
+	}
 	clean := strings.ReplaceAll(s, "-", "")
 	if len(clean) != 32 {
-		return NilID, fmt.Errorf("domain: invalid id %q", s)
+		return NilID, fmt.Errorf("domain: invalid id %q (expected 32 hex chars)", s)
 	}
 	b, err := hex.DecodeString(clean)
 	if err != nil {
 		return NilID, fmt.Errorf("domain: invalid id %q: %w", s, err)
+	}
+	if len(b) != 16 {
+		return NilID, fmt.Errorf("domain: invalid id %q (decoded to %d bytes)", s, len(b))
 	}
 	var id ID
 	copy(id[:], b)

@@ -94,11 +94,17 @@ func (h *Host) List() []protocol.Module {
 // are caught and surfaced as errors, and the plugin is reported as crashed on
 // the host event bus.
 func (h *Host) Open(ctx context.Context, protocolID string, req protocol.OpenRequest) (protocol.Session, error) {
+	if protocolID == "" {
+		return nil, fmt.Errorf("%w: empty protocol ID", ErrProtocolNotFound)
+	}
 	h.mu.RLock()
 	m, ok := h.modules[protocolID]
 	h.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrProtocolNotFound, protocolID)
+	}
+	if m == nil {
+		return nil, fmt.Errorf("protocol %q has nil module", protocolID)
 	}
 
 	var sess protocol.Session

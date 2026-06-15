@@ -77,6 +77,7 @@ func (b *Bus[T]) Subscribe(ctx context.Context, buffer int) <-chan T {
 	return s.ch
 }
 
+// removeSub safely removes a subscription from the bus.
 func (b *Bus[T]) removeSub(s *subscription[T]) {
 	b.mu.Lock()
 	if _, ok := b.subs[s]; !ok {

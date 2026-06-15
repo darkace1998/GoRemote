@@ -156,7 +156,9 @@ func (t *Tree) Remove(id ID) error {
 		return nil
 	}
 	if c, ok := t.connections[id]; ok {
-		t.connectionChildren[c.ParentID] = removeID(t.connectionChildren[c.ParentID], id)
+		if c.ParentID != NilID {
+			t.connectionChildren[c.ParentID] = removeID(t.connectionChildren[c.ParentID], id)
+		}
 		delete(t.connections, id)
 		return nil
 	}
