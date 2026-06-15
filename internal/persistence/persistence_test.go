@@ -321,8 +321,6 @@ func TestCheckedCopyLimitsRejectsOverflow(t *testing.T) {
 	}
 }
 
-
-
 func TestMigrator_NilMeta(t *testing.T) {
 	mig := DefaultMigrator()
 	_, err := mig.Run(nil, map[string][]byte{})
@@ -435,10 +433,6 @@ func TestMigrator_ResidualKeys(t *testing.T) {
 	}
 }
 
-
-
-
-
 func TestMigrator_FromRawStandardError(t *testing.T) {
 	// A known key (like "inventory") fails to re-encode in fromRaw.
 	mig := &Migrator{Migrations: []Migration{
@@ -479,7 +473,6 @@ func TestMigrator_FromRawError(t *testing.T) {
 		t.Fatal("expected error for unmarshalable standard key")
 	}
 }
-
 
 func TestMigrator_FromRawResidualError(t *testing.T) {
 	// A residual key becomes key+".json". If the value is unmarshalable, it should error.
