@@ -163,12 +163,11 @@ func TestFocusExistingSession_DetachedWindow(t *testing.T) {
 	}
 
 	registry := &sessionRegistry{
-		tabs:          tabs,
-		items:         map[domain.ID]*sessionTab{hid: st},
-		openConns:     map[string]struct{}{"conn-detached": {}},
-		groups:        map[*container.TabItem]*paneGroup{},
-		tabToSession:  map[*container.TabItem]*sessionTab{},
-		connToSession: map[string]*sessionTab{"conn-detached": st},
+		tabs:      tabs,
+		items:     map[domain.ID]*sessionTab{hid: st},
+		connItems: map[string]*sessionTab{"conn-detached": st},
+		openConns: map[string]struct{}{"conn-detached": {}},
+		groups:    map[*container.TabItem]*paneGroup{},
 	}
 
 	// Must not panic and must return true (session found).
