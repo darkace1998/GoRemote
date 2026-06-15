@@ -763,3 +763,27 @@ func TestInheritanceResolve_MiscPaths(t *testing.T) {
 		t.Errorf("expected nils for explicit zero node fields")
 	}
 }
+
+func TestInheritanceResolve_EdgeCases(t *testing.T) {
+	// 1. Test nil ancestor
+	gp := &FolderNode{ID: NewID(), Name: "gp", Defaults: FolderDefaults{Host: "gp.example"}}
+	node := &ConnectionNode{ID: NewID(), Name: "n"}
+
+	// Set explicit inherit to force the walk
+	node.Inheritance.SetInherit(FieldHost)
+
+	res := node.Inheritance.Resolve(node, []*FolderNode{gp, nil})
+	if res.Host != "gp.example" {
+		t.Errorf("expected gp.example, got %q", res.Host)
+	}
+
+	// 2. Test unknown field fallback in isNodeFieldZero
+	if !isNodeFieldZero(node, Field("unknown")) {
+		t.Errorf("expected true for unknown field in isNodeFieldZero")
+	}
+
+	// 3. Test unknown field fallback in isFolderDefaultZero
+	if !isFolderDefaultZero(gp, Field("unknown")) {
+		t.Errorf("expected true for unknown field in isFolderDefaultZero")
+	}
+}

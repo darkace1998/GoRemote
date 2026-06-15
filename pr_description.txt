@@ -1,0 +1,7 @@
+🎯 **What:** The `InheritanceProfile.Resolve` function and its unexported helpers (`isNodeFieldZero` and `isFolderDefaultZero`) were missing tests for specific edge cases, leaving incomplete test coverage. This PR introduces a new test case `TestInheritanceResolve_EdgeCases`.
+
+📊 **Coverage:** The new test covers:
+* An ancestor slice containing `nil` entries during resolution, ensuring the defensive check works correctly.
+* Unknown fields passed to `isNodeFieldZero` and `isFolderDefaultZero` via defensive checks.
+
+✨ **Result:** Test coverage for `internal/domain/inheritance.go` has improved to 100%, and the new cases verify correct behaviour when handling unexpected inputs or malformed trees during resolution.
