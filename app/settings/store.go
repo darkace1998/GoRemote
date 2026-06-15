@@ -211,12 +211,10 @@ func mergeWithDefaults(in Settings, present map[string]any) Settings {
 	if _, has := normalized["confirmonclose"]; !has {
 		in.ConfirmOnClose = d.ConfirmOnClose
 	}
-	// Only apply reconnect defaults when both fields are absent from the JSON.
-	// If either is present (even as 0) the user's intent is preserved.
-	_, hasMaxN := normalized["reconnectmaxn"]
-	_, hasDelayMs := normalized["reconnectdelayms"]
-	if !hasMaxN && !hasDelayMs {
+	if _, hasMaxN := normalized["reconnectmaxn"]; !hasMaxN {
 		in.ReconnectMaxN = d.ReconnectMaxN
+	}
+	if _, hasDelayMs := normalized["reconnectdelayms"]; !hasDelayMs {
 		in.ReconnectDelayMs = d.ReconnectDelayMs
 	}
 	if in.LogLevel == "" {
