@@ -145,6 +145,9 @@ func (h *Host) Publish(ctx context.Context, ev Event) { h.publish(ctx, ev) }
 // host. If the module implements sdkplugin.Lifecycle, Init is invoked with a
 // timeout; a failing Init aborts registration and publishes EventCrashed.
 func (h *Host) Register(ctx context.Context, m sdkplugin.Manifest, module any, trust sdkplugin.Trust) error {
+	if module == nil {
+		return fmt.Errorf("module is nil")
+	}
 	if err := m.Validate(); err != nil {
 		return fmt.Errorf("invalid manifest: %w", err)
 	}

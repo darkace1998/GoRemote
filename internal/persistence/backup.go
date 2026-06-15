@@ -431,7 +431,9 @@ func safeJoinWithinRoot(root, rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
+	// Normalize the relative path to handle different separators
+	relToRoot = filepath.ToSlash(relToRoot)
+	if relToRoot == ".." || strings.HasPrefix(relToRoot, "../") {
 		return "", errors.New("path escapes root")
 	}
 	return dest, nil

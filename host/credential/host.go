@@ -218,6 +218,9 @@ func (h *Host) isQuarantinedLocked(id string) bool {
 // window.
 func (h *Host) Resolve(ctx context.Context, ref credential.Reference, timeout time.Duration) (*credential.Material, error) {
 	id := ref.ProviderID
+	if id == "" {
+		return nil, fmt.Errorf("%w: empty provider ID", ErrProviderNotFound)
+	}
 	start := h.now()
 	h.audit.LogAttrs(ctx, slog.LevelInfo, "credential.resolve attempt",
 		slog.String("component", "credential.audit"),
@@ -229,6 +232,16 @@ func (h *Host) Resolve(ctx context.Context, ref credential.Reference, timeout ti
 		h.mu.Unlock()
 		err := fmt.Errorf("%w: %s", ErrProviderNotFound, id)
 		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.resolve denied",
+			slog.String("component", "credential.audit"),
+			slog.String("provider", id),
+			slog.String("entry", ref.EntryID),
+			slog.String("err", err.Error()))
+		return nil, err
+	}
+	if p == nil {
+		h.mu.Unlock()
+		err := fmt.Errorf("%w: %s", ErrProviderNotFound, id)
+		h.audit.LogAttrs(ctx, slog.LevelWarn, "credential.resolve denied (nil provider)",
 			slog.String("component", "credential.audit"),
 			slog.String("provider", id),
 			slog.String("entry", ref.EntryID),

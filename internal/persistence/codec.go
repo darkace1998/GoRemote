@@ -62,7 +62,12 @@ func decodeInventory(inv inventoryFile) (*domain.Tree, error) {
 	// Topologically order folders: parents first. Repeatedly add folders
 	// whose parent is NilID or already present. Any folder whose parent is
 	// missing after no progress is made is reported as an error.
-	remaining := append([]*domain.FolderNode(nil), inv.Folders...)
+	remaining := make([]*domain.FolderNode, 0, len(inv.Folders))
+	for _, f := range inv.Folders {
+		if f != nil {
+			remaining = append(remaining, f)
+		}
+	}
 	added := make(map[domain.ID]bool, len(remaining))
 	for len(remaining) > 0 {
 		progress := false

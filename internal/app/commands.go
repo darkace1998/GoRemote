@@ -407,6 +407,9 @@ func (a *App) GetConnection(ctx context.Context, id domain.ID) (ConnectionView, 
 	if err := ctx.Err(); err != nil {
 		return ConnectionView{}, err
 	}
+	if id == domain.NilID {
+		return ConnectionView{}, fmt.Errorf("%w: nil connection ID", domain.ErrNotFound)
+	}
 	a.treeMu.RLock()
 	defer a.treeMu.RUnlock()
 	c, err := a.tree.Connection(id)
