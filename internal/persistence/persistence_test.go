@@ -321,8 +321,6 @@ func TestCheckedCopyLimitsRejectsOverflow(t *testing.T) {
 	}
 }
 
-
-
 func TestMigrator_NilMeta(t *testing.T) {
 	mig := DefaultMigrator()
 	_, err := mig.Run(nil, map[string][]byte{})

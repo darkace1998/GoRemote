@@ -356,7 +356,6 @@ func TestCredentialResolution(t *testing.T) {
 	}
 }
 
-
 func TestExportAndRestore(t *testing.T) {
 	a, _ := newTestApp(t)
 	ctx := context.Background()
