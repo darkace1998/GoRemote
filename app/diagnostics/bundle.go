@@ -139,14 +139,8 @@ func writeRedactedSettings(zw *zip.Writer, src string) error {
 		_, werr = fmt.Fprintf(w, "{\"_note\":\"settings.json not parseable as JSON\",\"err\":%q}\n", err.Error())
 		return werr
 	}
+	doc = redactValue(doc, SecretKeys).(map[string]any)
 	for k, v := range doc {
-		kl := strings.ToLower(k)
-		if strings.Contains(kl, "token") || strings.Contains(kl, "password") {
-			if v != nil && v != "" {
-				doc[k] = redactedPlaceholder
-			}
-			continue
-		}
 		// Sanitise user-info from any URL-valued field (covers gitSyncRemote
 		// and similar fields that may contain embedded credentials).
 		if s, ok := v.(string); ok && s != "" {
