@@ -319,6 +319,12 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 		if err := m.Validate(); err != nil {
 			return fmt.Errorf("marketplace: inline manifest invalid: %w", err)
 		}
+		if m.ID != l.ID {
+			return fmt.Errorf("marketplace: inline manifest id mismatch (got %q, want %q)", m.ID, l.ID)
+		}
+		if m.Version != l.Version {
+			return fmt.Errorf("marketplace: inline manifest version mismatch (got %q, want %q)", m.Version, l.Version)
+		}
 		if err := os.WriteFile(mp, []byte(l.Manifest), 0o600); err != nil {
 			return err
 		}
