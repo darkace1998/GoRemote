@@ -40,21 +40,13 @@ func TestRegistryTypeMismatchPanics(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
 	_ = RegistryGet[int](r, "x")
-
-	panicked := false
-	func() {
-		defer func() {
-			if p := recover(); p != nil {
-				panicked = true
-				if got, want := p.(string), "eventbus: registry type mismatch for bus x"; got != want {
-					t.Errorf("panic = %q, want %q", got, want)
-				}
-			}
-		}()
-		_ = RegistryGet[string](r, "x")
+	defer func() {
+		p := recover()
+		if p == nil {
+			t.Fatalf("expected panic on type mismatch")
+		} else if got, want := p.(string), "eventbus: registry type mismatch for bus x"; got != want {
+			t.Fatalf("panic = %q, want %q", got, want)
+		}
 	}()
-
-	if !panicked {
-		t.Fatal("expected panic on type mismatch")
-	}
+	_ = RegistryGet[string](r, "x")
 }
