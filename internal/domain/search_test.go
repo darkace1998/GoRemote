@@ -81,62 +81,87 @@ func TestMatchTag(t *testing.T) {
 	}
 }
 
-func TestAnd(t *testing.T) {
-	node := mockNode{id: NewID()}
-
+func TestMatchName(t *testing.T) {
 	tests := []struct {
-		name  string
-		preds []Predicate
-		want  bool
+		name       string
+		searchName string
+		node       Node
+		want       bool
 	}{
 		{
-			name:  "empty And (vacuously true)",
-			preds: []Predicate{},
-			want:  true,
+			name:       "ConnectionNode exact match",
+			searchName: "production-db",
+			node:       &ConnectionNode{Name: "production-db"},
+			want:       true,
 		},
 		{
-			name:  "single true",
-			preds: []Predicate{MatchAll},
-			want:  true,
+			name:       "FolderNode exact match",
+			searchName: "dev servers",
+			node:       &FolderNode{Name: "dev servers"},
+			want:       true,
 		},
 		{
-			name:  "single false",
-			preds: []Predicate{MatchNone},
-			want:  false,
+			name:       "ConnectionNode substring match",
+			searchName: "prod",
+			node:       &ConnectionNode{Name: "production-db"},
+			want:       true,
 		},
 		{
-			name:  "multiple true",
-			preds: []Predicate{MatchAll, MatchAll},
-			want:  true,
+			name:       "FolderNode substring match",
+			searchName: "dev",
+			node:       &FolderNode{Name: "dev servers"},
+			want:       true,
 		},
 		{
-			name:  "multiple with false",
-			preds: []Predicate{MatchAll, MatchNone, MatchAll},
-			want:  false,
+			name:       "ConnectionNode case-insensitive match (search tag uppercase)",
+			searchName: "PROD",
+			node:       &ConnectionNode{Name: "production-db"},
+			want:       true,
 		},
 		{
-			name:  "skip nil (true)",
-			preds: []Predicate{nil, MatchAll},
-			want:  true,
+			name:       "FolderNode case-insensitive match (node tag uppercase)",
+			searchName: "dev",
+			node:       &FolderNode{Name: "DEV SERVERS"},
+			want:       true,
 		},
 		{
-			name:  "skip nil (false)",
-			preds: []Predicate{MatchNone, nil},
-			want:  false,
+			name:       "ConnectionNode no match",
+			searchName: "test",
+			node:       &ConnectionNode{Name: "production-db"},
+			want:       false,
 		},
 		{
-			name:  "all nil",
-			preds: []Predicate{nil, nil},
-			want:  true,
+			name:       "FolderNode no match",
+			searchName: "test",
+			node:       &FolderNode{Name: "dev servers"},
+			want:       false,
+		},
+		{
+			name:       "Empty string match",
+			searchName: "",
+			node:       &ConnectionNode{Name: "production-db"},
+			want:       true,
+		},
+		{
+			name:       "Non-ASCII matching",
+			searchName: "đ",
+			node:       &FolderNode{Name: "đ server"},
+			want:       true,
+		},
+		{
+			name:       "Unknown node type",
+			searchName: "mock",
+			node:       mockNode{id: NewID()},
+			want:       false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			predicate := And(tt.preds...)
-			got := predicate.Match(node)
+			predicate := MatchName(tt.searchName)
+			got := predicate.Match(tt.node)
 			if got != tt.want {
-				t.Errorf("And().Match() = %v, want %v", got, tt.want)
+				t.Errorf("MatchName(%q).Match() = %v, want %v", tt.searchName, got, tt.want)
 			}
 		})
 	}
