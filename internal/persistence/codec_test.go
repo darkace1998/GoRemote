@@ -55,6 +55,48 @@ func TestDecodeInventory_Errors(t *testing.T) {
 			},
 			wantErr: "persistence: add connection",
 		},
+		{
+			name: "partial success but some orphaned",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NewID(), ParentID: domain.NilID, Name: "Valid Root"},
+					{ID: idA, ParentID: idB, Name: "Orphan A"},
+					{ID: idB, ParentID: idA, Name: "Orphan B"},
+					{ID: domain.NewID(), ParentID: domain.NewID(), Name: "Orphan C"},
+				},
+			},
+			wantErr: "unresolvable folder parents: 3 folder(s) orphaned",
+		},
+		{
+			name: "folder parented to a connection",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NewID(), ParentID: idA, Name: "Bad Folder"},
+				},
+				Connections: []*domain.ConnectionNode{
+					{ID: idA, ParentID: domain.NilID, Name: "Root Conn"},
+				},
+			},
+			wantErr: "unresolvable folder parents: 1 folder(s) orphaned",
+		},
+		{
+			name: "folder with nil id",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NilID, ParentID: domain.NilID, Name: "No ID"},
+				},
+			},
+			wantErr: "persistence: add folder",
+		},
+		{
+			name: "connection with nil id",
+			inv: inventoryFile{
+				Connections: []*domain.ConnectionNode{
+					{ID: domain.NilID, ParentID: domain.NilID, Name: "No ID"},
+				},
+			},
+			wantErr: "persistence: add connection",
+		},
 	}
 
 	for _, tt := range tests {
@@ -124,4 +166,51 @@ func TestDecodeInventory_NilElements(t *testing.T) {
 	if tree == nil {
 		t.Fatal("expected tree, got nil")
 	}
+}
+
+func TestEncodeInventory(t *testing.T) {
+	t.Run("nil tree", func(t *testing.T) {
+		inv := encodeInventory(nil)
+		if len(inv.Folders) != 0 || len(inv.Connections) != 0 {
+			t.Errorf("expected empty inventory for nil tree, got %d folders, %d connections", len(inv.Folders), len(inv.Connections))
+		}
+	})
+
+	t.Run("empty tree", func(t *testing.T) {
+		tree := domain.NewTree()
+		inv := encodeInventory(tree)
+		if len(inv.Folders) != 0 || len(inv.Connections) != 0 {
+			t.Errorf("expected empty inventory for empty tree, got %d folders, %d connections", len(inv.Folders), len(inv.Connections))
+		}
+	})
+
+	t.Run("populated tree", func(t *testing.T) {
+		tree := domain.NewTree()
+		rootID := domain.NewID()
+		connID := domain.NewID()
+
+		err := tree.AddFolder(&domain.FolderNode{ID: rootID, Name: "Root"})
+		if err != nil {
+			t.Fatalf("failed to add folder: %v", err)
+		}
+
+		err = tree.AddConnection(&domain.ConnectionNode{ID: connID, ParentID: rootID, Name: "Conn1"})
+		if err != nil {
+			t.Fatalf("failed to add connection: %v", err)
+		}
+
+		inv := encodeInventory(tree)
+
+		if len(inv.Folders) != 1 {
+			t.Errorf("expected 1 folder, got %d", len(inv.Folders))
+		} else if inv.Folders[0].ID != rootID {
+			t.Errorf("expected folder ID %v, got %v", rootID, inv.Folders[0].ID)
+		}
+
+		if len(inv.Connections) != 1 {
+			t.Errorf("expected 1 connection, got %d", len(inv.Connections))
+		} else if inv.Connections[0].ID != connID {
+			t.Errorf("expected connection ID %v, got %v", connID, inv.Connections[0].ID)
+		}
+	})
 }
