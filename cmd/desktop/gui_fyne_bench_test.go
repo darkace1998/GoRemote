@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"testing"
 	"github.com/darkace1998/GoRemote/internal/domain"
+	"testing"
 )
 
 func BenchmarkFindByConnection(b *testing.B) {

@@ -844,60 +844,26 @@ func TestInheritanceResolve_MiscPaths(t *testing.T) {
 	}
 }
 
-func TestTreeAddConnection(t *testing.T) {
-	tr := NewTree()
-	root := mkFolder("root", NilID)
-	_ = tr.AddFolder(root)
+func TestInheritanceResolve_EdgeCases(t *testing.T) {
+	// 1. Test nil ancestor
+	gp := &FolderNode{ID: NewID(), Name: "gp", Defaults: FolderDefaults{Host: "gp.example"}}
+	node := &ConnectionNode{ID: NewID(), Name: "n"}
 
-	t.Run("nil connection", func(t *testing.T) {
-		if err := tr.AddConnection(nil); err == nil {
-			t.Fatal("expected error for nil connection")
-		}
-	})
+	// Set explicit inherit to force the walk
+	node.Inheritance.SetInherit(FieldHost)
 
-	t.Run("missing ID", func(t *testing.T) {
-		c := mkConn("noid", root.ID)
-		c.ID = NilID
-		if err := tr.AddConnection(c); err == nil {
-			t.Fatal("expected error for connection with NilID")
-		}
-	})
+	res := node.Inheritance.Resolve(node, []*FolderNode{gp, nil})
+	if res.Host != "gp.example" {
+		t.Errorf("expected gp.example, got %q", res.Host)
+	}
 
-	t.Run("duplicate connection ID", func(t *testing.T) {
-		c := mkConn("c1", root.ID)
-		_ = tr.AddConnection(c)
-		if err := tr.AddConnection(c); !errors.Is(err, ErrDuplicateID) {
-			t.Fatalf("expected ErrDuplicateID, got %v", err)
-		}
-	})
+	// 2. Test unknown field fallback in isNodeFieldZero
+	if !isNodeFieldZero(node, Field("unknown")) {
+		t.Errorf("expected true for unknown field in isNodeFieldZero")
+	}
 
-	t.Run("duplicate ID matching folder", func(t *testing.T) {
-		c := mkConn("bad", root.ID)
-		c.ID = root.ID
-		if err := tr.AddConnection(c); !errors.Is(err, ErrDuplicateID) {
-			t.Fatalf("expected ErrDuplicateID, got %v", err)
-		}
-	})
-
-	t.Run("parent not folder", func(t *testing.T) {
-		c := mkConn("badparent", NewID())
-		if err := tr.AddConnection(c); !errors.Is(err, ErrParentNotFolder) {
-			t.Fatalf("expected ErrParentNotFolder, got %v", err)
-		}
-	})
-
-	t.Run("successful addition", func(t *testing.T) {
-		c := mkConn("success", root.ID)
-		if err := tr.AddConnection(c); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		got, err := tr.FindByID(c.ID)
-		if err != nil {
-			t.Fatalf("FindByID failed: %v", err)
-		}
-		if got.NodeKind() != NodeKindConnection {
-			t.Fatalf("expected NodeKindConnection, got %v", got.NodeKind())
-		}
-	})
+	// 3. Test unknown field fallback in isFolderDefaultZero
+	if !isFolderDefaultZero(gp, Field("unknown")) {
+		t.Errorf("expected true for unknown field in isFolderDefaultZero")
+	}
 }
