@@ -55,6 +55,48 @@ func TestDecodeInventory_Errors(t *testing.T) {
 			},
 			wantErr: "persistence: add connection",
 		},
+		{
+			name: "partial success but some orphaned",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NewID(), ParentID: domain.NilID, Name: "Valid Root"},
+					{ID: idA, ParentID: idB, Name: "Orphan A"},
+					{ID: idB, ParentID: idA, Name: "Orphan B"},
+					{ID: domain.NewID(), ParentID: domain.NewID(), Name: "Orphan C"},
+				},
+			},
+			wantErr: "unresolvable folder parents: 3 folder(s) orphaned",
+		},
+		{
+			name: "folder parented to a connection",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NewID(), ParentID: idA, Name: "Bad Folder"},
+				},
+				Connections: []*domain.ConnectionNode{
+					{ID: idA, ParentID: domain.NilID, Name: "Root Conn"},
+				},
+			},
+			wantErr: "unresolvable folder parents: 1 folder(s) orphaned",
+		},
+		{
+			name: "folder with nil id",
+			inv: inventoryFile{
+				Folders: []*domain.FolderNode{
+					{ID: domain.NilID, ParentID: domain.NilID, Name: "No ID"},
+				},
+			},
+			wantErr: "persistence: add folder",
+		},
+		{
+			name: "connection with nil id",
+			inv: inventoryFile{
+				Connections: []*domain.ConnectionNode{
+					{ID: domain.NilID, ParentID: domain.NilID, Name: "No ID"},
+				},
+			},
+			wantErr: "persistence: add connection",
+		},
 	}
 
 	for _, tt := range tests {
