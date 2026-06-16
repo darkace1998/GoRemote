@@ -16,6 +16,86 @@ func mkConn(name string, parent ID) *ConnectionNode {
 	return &ConnectionNode{ID: NewID(), ParentID: parent, Name: name}
 }
 
+func TestTreeAddFolder(t *testing.T) {
+	t.Run("nil folder", func(t *testing.T) {
+		tr := NewTree()
+		err := tr.AddFolder(nil)
+		if err == nil || err.Error() != "domain: nil folder" {
+			t.Fatalf("expected 'domain: nil folder', got %v", err)
+		}
+	})
+
+	t.Run("empty ID", func(t *testing.T) {
+		tr := NewTree()
+		f := &FolderNode{ID: NilID, Name: "empty"}
+		err := tr.AddFolder(f)
+		if err == nil || err.Error() != "domain: folder id is required" {
+			t.Fatalf("expected 'domain: folder id is required', got %v", err)
+		}
+	})
+
+	t.Run("duplicate folder ID", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NilID)
+		_ = tr.AddFolder(f)
+
+		err := tr.AddFolder(f)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("duplicate connection ID", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NilID)
+		_ = tr.AddFolder(f)
+		c := mkConn("c1", f.ID)
+		_ = tr.AddConnection(c)
+
+		badF := &FolderNode{ID: c.ID, Name: "bad"}
+		err := tr.AddFolder(badF)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("missing parent", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NewID())
+		err := tr.AddFolder(f)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("success root and child", func(t *testing.T) {
+		tr := NewTree()
+		root := mkFolder("root", NilID)
+		if err := tr.AddFolder(root); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		child := mkFolder("child", root.ID)
+		if err := tr.AddFolder(child); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		gotRoot, err := tr.Folder(root.ID)
+		if err != nil || gotRoot != root {
+			t.Fatalf("expected root folder %v, got %v, err %v", root, gotRoot, err)
+		}
+
+		gotChild, err := tr.Folder(child.ID)
+		if err != nil || gotChild != child {
+			t.Fatalf("expected child folder %v, got %v, err %v", child, gotChild, err)
+		}
+
+		if len(tr.folderChildren[root.ID]) != 1 || tr.folderChildren[root.ID][0] != child.ID {
+			t.Fatalf("expected child %v in root children %v", child.ID, tr.folderChildren[root.ID])
+		}
+	})
+}
+
 func TestTreeAddAndFind(t *testing.T) {
 	tr := NewTree()
 	root := mkFolder("root", NilID)
