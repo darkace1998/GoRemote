@@ -155,7 +155,7 @@ func (b *Bindings) SetLogLevel(level string) {
 func (b *Bindings) ListTree(ctx context.Context) app.TreeView { return b.app.ListTree(ctx) }
 
 // CreateFolder creates a folder under parent (empty parent == root).
-func (b *Bindings) CreateFolder(ctx context.Context, parent string, name string, description string, tags []string) (string, error) {
+func (b *Bindings) CreateFolder(ctx context.Context, parent string, name string, description string, tags []string, icon string, color string, defaults domain.FolderDefaults) (string, error) {
 	pid, err := parseID(parent)
 	if err != nil {
 		return "", err
@@ -165,7 +165,13 @@ func (b *Bindings) CreateFolder(ctx context.Context, parent string, name string,
 		slog.String("name", name),
 		slog.Int("tags", len(tags)),
 	)
-	id, err := b.app.CreateFolder(ctx, pid, name, app.FolderOpts{Description: description, Tags: tags})
+	id, err := b.app.CreateFolder(ctx, pid, name, app.FolderOpts{
+		Description: description,
+		Tags:        tags,
+		Icon:        icon,
+		Color:       color,
+		Defaults:    defaults,
+	})
 	if err != nil {
 		b.logger.Debug("tree.CreateFolder failed",
 			slog.String("parent", parent),
@@ -304,6 +310,15 @@ func (b *Bindings) GetConnection(ctx context.Context, id string) (app.Connection
 }
 
 // Search queries the tree.
+// GetFolder returns a view of a single folder.
+func (b *Bindings) GetFolder(ctx context.Context, id string) (app.FolderView, error) {
+	nid, err := parseID(id)
+	if err != nil {
+		return app.FolderView{}, err
+	}
+	return b.app.GetFolder(ctx, nid)
+}
+
 func (b *Bindings) Search(ctx context.Context, q app.SearchQuery) []app.NodeView {
 	return b.app.Search(ctx, q)
 }
