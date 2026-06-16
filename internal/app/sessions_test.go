@@ -38,6 +38,18 @@ func TestDefaultAuthMethod(t *testing.T) {
 			want:       protocol.AuthPassword,
 		},
 		{
+			name:       "protocol id starting with dot resolves to ssh",
+			protocolID: ".ssh",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthAgent,
+		},
+		{
+			name:       "protocol id with multiple dots resolves to mosh",
+			protocolID: "a.b.c.mosh",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthAgent,
+		},
+		{
 			name:       "plugin.v1.ssh empty material extracts ssh and defaults to agent",
 			protocolID: "plugin.v1.ssh",
 			material:   protocol.CredentialMaterial{},
@@ -78,6 +90,12 @@ func TestDefaultAuthMethod(t *testing.T) {
 			protocolID: "rdp",
 			material:   protocol.CredentialMaterial{Password: "secret", PrivateKey: []byte("keydata")},
 			want:       protocol.AuthPassword,
+		},
+		{
+			name:       "sftp with private key defaults to none",
+			protocolID: "sftp",
+			material:   protocol.CredentialMaterial{PrivateKey: []byte("keydata")},
+			want:       protocol.AuthNone,
 		},
 		{
 			name:       "protocol id ending in dot extracts empty string and defaults to none",
