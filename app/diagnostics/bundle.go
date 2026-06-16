@@ -185,8 +185,9 @@ func redactValue(v any, keys []string) any {
 	case map[string]any:
 		for k, vv := range x {
 			isSecret := false
+			lowerK := strings.ToLower(k)
 			for _, sk := range keys {
-				if len(k) == len(sk) && strings.EqualFold(k, sk) {
+				if strings.Contains(lowerK, strings.ToLower(sk)) {
 					isSecret = true
 					break
 				}
