@@ -80,3 +80,69 @@ func TestMatchTag(t *testing.T) {
 		})
 	}
 }
+
+func TestAnd(t *testing.T) {
+	node := mockNode{id: NewID()}
+
+	tests := []struct {
+		name  string
+		preds []Predicate
+		want  bool
+	}{
+		{
+			name:  "empty And",
+			preds: []Predicate{},
+			want:  true,
+		},
+		{
+			name:  "one MatchAll",
+			preds: []Predicate{MatchAll},
+			want:  true,
+		},
+		{
+			name:  "one MatchNone",
+			preds: []Predicate{MatchNone},
+			want:  false,
+		},
+		{
+			name:  "multiple MatchAll",
+			preds: []Predicate{MatchAll, MatchAll, MatchAll},
+			want:  true,
+		},
+		{
+			name:  "MatchAll and MatchNone",
+			preds: []Predicate{MatchAll, MatchNone},
+			want:  false,
+		},
+		{
+			name:  "MatchNone and MatchAll",
+			preds: []Predicate{MatchNone, MatchAll},
+			want:  false,
+		},
+		{
+			name:  "nil predicate is ignored",
+			preds: []Predicate{nil, MatchAll},
+			want:  true,
+		},
+		{
+			name:  "all nil predicates",
+			preds: []Predicate{nil, nil},
+			want:  true,
+		},
+		{
+			name:  "nil and MatchNone",
+			preds: []Predicate{nil, MatchNone},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			predicate := And(tt.preds...)
+			got := predicate.Match(node)
+			if got != tt.want {
+				t.Errorf("And().Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
