@@ -239,7 +239,7 @@ func TestFileStore_PartialFileGetsDefaultsMerged(t *testing.T) {
 	}
 }
 
-// BUG-ST1: explicit zero values written to disk for reconnect fields must
+// explicit zero values written to disk for reconnect fields must
 // survive a round-trip through Get() without being replaced by defaults.
 func TestFileStore_ExplicitZeroReconnectPreserved(t *testing.T) {
 	t.Parallel()
