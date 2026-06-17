@@ -239,7 +239,7 @@ func TestFileStore_PartialFileGetsDefaultsMerged(t *testing.T) {
 	}
 }
 
-// BUG-ST1: explicit zero values written to disk for reconnect fields must
+// explicit zero values written to disk for reconnect fields must
 // survive a round-trip through Get() without being replaced by defaults.
 func TestFileStore_ExplicitZeroReconnectPreserved(t *testing.T) {
 	t.Parallel()
@@ -293,5 +293,34 @@ func TestFileStore_ExplicitZeroCaseInsensitive(t *testing.T) {
 	}
 	if got.ConfirmOnClose != false {
 		t.Errorf("ConfirmOnClose = %v, want false (user's explicit value)", got.ConfirmOnClose)
+	}
+}
+
+// TestFileStore_PartialReconnectDefaults verifies that if only one reconnect field
+// is provided (e.g. explicitly set to 0), the other one still gets its default
+// value rather than being implicitly zeroed out.
+func TestFileStore_PartialReconnectDefaults(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	// Only provide reconnectMaxN
+	partial := map[string]any{
+		"reconnectMaxN": 0,
+	}
+	data, _ := json.Marshal(partial)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	got, err := NewFileStore(path).Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ReconnectMaxN != 0 {
+		t.Errorf("ReconnectMaxN = %d, want 0", got.ReconnectMaxN)
+	}
+	if got.ReconnectDelayMs != Default().ReconnectDelayMs {
+		t.Errorf("ReconnectDelayMs = %d, want default %d", got.ReconnectDelayMs, Default().ReconnectDelayMs)
 	}
 }

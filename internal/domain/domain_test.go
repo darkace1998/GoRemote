@@ -16,6 +16,86 @@ func mkConn(name string, parent ID) *ConnectionNode {
 	return &ConnectionNode{ID: NewID(), ParentID: parent, Name: name}
 }
 
+func TestTreeAddFolder(t *testing.T) {
+	t.Run("nil folder", func(t *testing.T) {
+		tr := NewTree()
+		err := tr.AddFolder(nil)
+		if err == nil || err.Error() != "domain: nil folder" {
+			t.Fatalf("expected 'domain: nil folder', got %v", err)
+		}
+	})
+
+	t.Run("empty ID", func(t *testing.T) {
+		tr := NewTree()
+		f := &FolderNode{ID: NilID, Name: "empty"}
+		err := tr.AddFolder(f)
+		if err == nil || err.Error() != "domain: folder id is required" {
+			t.Fatalf("expected 'domain: folder id is required', got %v", err)
+		}
+	})
+
+	t.Run("duplicate folder ID", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NilID)
+		_ = tr.AddFolder(f)
+
+		err := tr.AddFolder(f)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("duplicate connection ID", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NilID)
+		_ = tr.AddFolder(f)
+		c := mkConn("c1", f.ID)
+		_ = tr.AddConnection(c)
+
+		badF := &FolderNode{ID: c.ID, Name: "bad"}
+		err := tr.AddFolder(badF)
+		if !errors.Is(err, ErrDuplicateID) {
+			t.Fatalf("expected ErrDuplicateID, got %v", err)
+		}
+	})
+
+	t.Run("missing parent", func(t *testing.T) {
+		tr := NewTree()
+		f := mkFolder("f1", NewID())
+		err := tr.AddFolder(f)
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("success root and child", func(t *testing.T) {
+		tr := NewTree()
+		root := mkFolder("root", NilID)
+		if err := tr.AddFolder(root); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		child := mkFolder("child", root.ID)
+		if err := tr.AddFolder(child); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		gotRoot, err := tr.Folder(root.ID)
+		if err != nil || gotRoot != root {
+			t.Fatalf("expected root folder %v, got %v, err %v", root, gotRoot, err)
+		}
+
+		gotChild, err := tr.Folder(child.ID)
+		if err != nil || gotChild != child {
+			t.Fatalf("expected child folder %v, got %v, err %v", child, gotChild, err)
+		}
+
+		if len(tr.folderChildren[root.ID]) != 1 || tr.folderChildren[root.ID][0] != child.ID {
+			t.Fatalf("expected child %v in root children %v", child.ID, tr.folderChildren[root.ID])
+		}
+	})
+}
+
 func TestTreeAddAndFind(t *testing.T) {
 	tr := NewTree()
 	root := mkFolder("root", NilID)
@@ -446,5 +526,344 @@ func TestTreeMoveEdgeCases(t *testing.T) {
 	// Move non-existent ID
 	if err := tr.Move(nonExistentID, f1.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound moving non-existent ID, got %v", err)
+	}
+}
+
+func TestInheritanceResolve_Comprehensive(t *testing.T) {
+	gpID := NewID()
+	pID := NewID()
+	nID := NewID()
+
+	gp := &FolderNode{
+		ID:   gpID,
+		Name: "Grandparent",
+		Defaults: FolderDefaults{
+			ProtocolID:  "ssh",
+			Host:        "gp.example.com",
+			Port:        22,
+			Environment: "prod",
+			Tags:        []string{"gp-tag"},
+			Color:       "#gpcolor",
+		},
+	}
+
+	parent := &FolderNode{
+		ID:       pID,
+		ParentID: gpID,
+		Name:     "Parent",
+		Defaults: FolderDefaults{
+			Host:        "p.example.com",
+			Username:    "puser",
+			Icon:        "picon",
+			Description: "pdesc",
+		},
+	}
+
+	node := &ConnectionNode{
+		ID:       nID,
+		ParentID: pID,
+		Name:     "Node",
+		Host:     "n.example.com",
+		Username: "nuser",
+		Settings: map[string]any{"timeout": 30},
+	}
+
+	// Setup Inheritance Profile
+	// 1. Force Explicit: Node's value should win even if empty
+	node.Inheritance.SetExplicit(FieldPort) // Node port is 0, should stay 0 despite GP having 22
+
+	// 2. Force Inherit: Node's value should be ignored
+	node.Inheritance.SetInherit(FieldHost) // Node has "n.example.com", Parent has "p.example.com". Parent should win.
+
+	// 3. Force Inherit where no ancestor has value: should trigger zeroNodeField
+	node.Inheritance.SetInherit(FieldSettings) // Node has settings, ancestors do not. Should become nil.
+
+	ancestors := []*FolderNode{gp, parent} // Top-down
+
+	res := node.Inheritance.Resolve(node, ancestors)
+
+	tests := []struct {
+		name    string
+		field   Field
+		wantVal any
+		wantSrc ProvenanceSource
+		wantFld ID
+	}{
+		{
+			name:    "Explicit override on zero value (Port)",
+			field:   FieldPort,
+			wantVal: 0,
+			wantSrc: ProvenanceNode,
+			wantFld: NilID,
+		},
+		{
+			name:    "Inherit override with ancestor value (Host)",
+			field:   FieldHost,
+			wantVal: "p.example.com",
+			wantSrc: ProvenanceFolder,
+			wantFld: pID,
+		},
+		{
+			name:    "Inherit override with no ancestor value (Settings)",
+			field:   FieldSettings,
+			wantVal: (map[string]any)(nil),
+			wantSrc: ProvenanceDefault,
+			wantFld: NilID,
+		},
+		{
+			name:    "Node value wins when not overridden (Username)",
+			field:   FieldUsername,
+			wantVal: "nuser",
+			wantSrc: ProvenanceNode,
+			wantFld: NilID,
+		},
+		{
+			name:    "Fallback to parent (Icon)",
+			field:   FieldIcon,
+			wantVal: "picon",
+			wantSrc: ProvenanceFolder,
+			wantFld: pID,
+		},
+		{
+			name:    "Fallback to grandparent (Environment)",
+			field:   FieldEnvironment,
+			wantVal: "prod",
+			wantSrc: ProvenanceFolder,
+			wantFld: gpID,
+		},
+		{
+			name:    "Default when no one has it (AuthMethod)",
+			field:   FieldAuthMethod,
+			wantVal: protocol.AuthMethod(""),
+			wantSrc: ProvenanceDefault,
+			wantFld: NilID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prov, ok := res.Trace[tt.field]
+			if !ok {
+				t.Fatalf("missing trace for field %v", tt.field)
+			}
+
+			if prov.Source != tt.wantSrc {
+				t.Errorf("got source %v, want %v", prov.Source, tt.wantSrc)
+			}
+			if prov.FolderID != tt.wantFld {
+				t.Errorf("got folder %v, want %v", prov.FolderID, tt.wantFld)
+			}
+
+			// Check actual value
+			var gotVal any
+			switch tt.field {
+			case FieldPort:
+				gotVal = res.Port
+			case FieldHost:
+				gotVal = res.Host
+			case FieldSettings:
+				gotVal = res.Settings
+			case FieldUsername:
+				gotVal = res.Username
+			case FieldIcon:
+				gotVal = res.Icon
+			case FieldEnvironment:
+				gotVal = res.Environment
+			case FieldAuthMethod:
+				gotVal = res.AuthMethod
+			}
+
+			// Simple comparison for non-maps/slices
+			if tt.field == FieldSettings {
+				gotM, gotOk := gotVal.(map[string]any)
+				wantM, wantOk := tt.wantVal.(map[string]any)
+				if gotOk && wantOk {
+					if len(gotM) != len(wantM) {
+						t.Errorf("got settings %v, want %v", gotVal, tt.wantVal)
+					}
+				} else if gotVal != nil || tt.wantVal != nil {
+					t.Errorf("got settings %v, want %v", gotVal, tt.wantVal)
+				}
+			} else {
+				if gotVal != tt.wantVal {
+					t.Errorf("got val %v, want %v", gotVal, tt.wantVal)
+				}
+			}
+		})
+	}
+}
+
+func TestInheritanceResolve_ZeroNodeField_All(t *testing.T) {
+	node := &ConnectionNode{
+		ID:            NewID(),
+		ProtocolID:    "ssh",
+		Host:          "host",
+		Port:          22,
+		Username:      "user",
+		AuthMethod:    protocol.AuthPassword,
+		CredentialRef: credential.Reference{ProviderID: "p"},
+		Settings:      map[string]any{"a": "b"},
+		Tags:          []string{"tag"},
+		Color:         "color",
+		Icon:          "icon",
+		Environment:   "env",
+		Description:   "desc",
+	}
+
+	for _, f := range AllInheritableFields {
+		node.Inheritance.SetInherit(f)
+	}
+
+	res := node.Inheritance.Resolve(node, nil)
+
+	if res.ProtocolID != "" {
+		t.Errorf("ProtocolID not zeroed")
+	}
+	if res.Host != "" {
+		t.Errorf("Host not zeroed")
+	}
+	if res.Port != 0 {
+		t.Errorf("Port not zeroed")
+	}
+	if res.Username != "" {
+		t.Errorf("Username not zeroed")
+	}
+	if res.AuthMethod != "" {
+		t.Errorf("AuthMethod not zeroed")
+	}
+	if !isRefZero(res.CredentialRef) {
+		t.Errorf("CredentialRef not zeroed")
+	}
+	if res.Settings != nil {
+		t.Errorf("Settings not zeroed")
+	}
+	if res.Tags != nil {
+		t.Errorf("Tags not zeroed")
+	}
+	if res.Color != "" {
+		t.Errorf("Color not zeroed")
+	}
+	if res.Icon != "" {
+		t.Errorf("Icon not zeroed")
+	}
+	if res.Environment != "" {
+		t.Errorf("Environment not zeroed")
+	}
+	if res.Description != "" {
+		t.Errorf("Description not zeroed")
+	}
+}
+
+func TestInheritanceResolve_CopyFolderField_All(t *testing.T) {
+	parent := &FolderNode{
+		ID: NewID(),
+		Defaults: FolderDefaults{
+			ProtocolID:    "ssh",
+			Host:          "host",
+			Port:          22,
+			Username:      "user",
+			AuthMethod:    protocol.AuthPassword,
+			CredentialRef: credential.Reference{ProviderID: "p"},
+			Settings:      map[string]any{"a": "b"},
+			Tags:          []string{"tag"},
+			Color:         "color",
+			Icon:          "icon",
+			Environment:   "env",
+			Description:   "desc",
+		},
+	}
+	node := &ConnectionNode{ID: NewID()}
+
+	res := node.Inheritance.Resolve(node, []*FolderNode{parent})
+
+	if res.ProtocolID != "ssh" {
+		t.Errorf("ProtocolID not copied")
+	}
+	if res.Host != "host" {
+		t.Errorf("Host not copied")
+	}
+	if res.Port != 22 {
+		t.Errorf("Port not copied")
+	}
+	if res.Username != "user" {
+		t.Errorf("Username not copied")
+	}
+	if res.AuthMethod != protocol.AuthPassword {
+		t.Errorf("AuthMethod not copied")
+	}
+	if res.CredentialRef.ProviderID != "p" {
+		t.Errorf("CredentialRef not copied")
+	}
+	if len(res.Settings) != 1 {
+		t.Errorf("Settings not copied")
+	}
+	if len(res.Tags) != 1 {
+		t.Errorf("Tags not copied")
+	}
+	if res.Color != "color" {
+		t.Errorf("Color not copied")
+	}
+	if res.Icon != "icon" {
+		t.Errorf("Icon not copied")
+	}
+	if res.Environment != "env" {
+		t.Errorf("Environment not copied")
+	}
+	if res.Description != "desc" {
+		t.Errorf("Description not copied")
+	}
+}
+
+func TestInheritanceResolve_MiscPaths(t *testing.T) {
+	// Cover ReverseFolders
+	folders := []*FolderNode{
+		{ID: NewID(), Name: "1"},
+		{ID: NewID(), Name: "2"},
+	}
+	reversed := ReverseFolders(folders)
+	if len(reversed) != 2 || reversed[0].Name != "2" || reversed[1].Name != "1" {
+		t.Errorf("ReverseFolders failed")
+	}
+
+	// Cover cloneRef empty string handling
+	ref := credential.Reference{ProviderID: "p", Hints: map[string]string{"h": "val"}}
+	cRef := cloneRef(ref)
+	if cRef.Hints["h"] != "val" {
+		t.Errorf("cloneRef hints not copied")
+	}
+
+	// Cover copyNodeField remaining branch
+	node := &ConnectionNode{ID: NewID()}
+	node.Inheritance.SetExplicit(FieldTags)
+	node.Inheritance.SetExplicit(FieldSettings)
+	node.Inheritance.SetExplicit(FieldCredentialRef)
+
+	res := node.Inheritance.Resolve(node, nil)
+	if res.Tags != nil || res.Settings != nil {
+		t.Errorf("expected nils for explicit zero node fields")
+	}
+}
+
+func TestInheritanceResolve_EdgeCases(t *testing.T) {
+	// 1. Test nil ancestor
+	gp := &FolderNode{ID: NewID(), Name: "gp", Defaults: FolderDefaults{Host: "gp.example"}}
+	node := &ConnectionNode{ID: NewID(), Name: "n"}
+
+	// Set explicit inherit to force the walk
+	node.Inheritance.SetInherit(FieldHost)
+
+	res := node.Inheritance.Resolve(node, []*FolderNode{gp, nil})
+	if res.Host != "gp.example" {
+		t.Errorf("expected gp.example, got %q", res.Host)
+	}
+
+	// 2. Test unknown field fallback in isNodeFieldZero
+	if !isNodeFieldZero(node, Field("unknown")) {
+		t.Errorf("expected true for unknown field in isNodeFieldZero")
+	}
+
+	// 3. Test unknown field fallback in isFolderDefaultZero
+	if !isFolderDefaultZero(gp, Field("unknown")) {
+		t.Errorf("expected true for unknown field in isFolderDefaultZero")
 	}
 }

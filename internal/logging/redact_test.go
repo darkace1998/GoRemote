@@ -66,6 +66,7 @@ func TestRedactingHandlerWithGroupEmptyPending(t *testing.T) {
 type testLogValuer struct {
 	v slog.Value
 }
+
 func (t testLogValuer) LogValue() slog.Value {
 	return t.v
 }
@@ -161,7 +162,6 @@ func TestRedactingHandlerHandle(t *testing.T) {
 	}
 }
 
-
 func TestRedactingHandlerWithAttrsDedup(t *testing.T) {
 	mem := &memoryHandler{}
 	h := &redactingHandler{
@@ -224,13 +224,14 @@ func TestRedactingHandlerWithAttrsDedupNotReplaced(t *testing.T) {
 type stringLogValuer struct {
 	v string
 }
+
 func (s stringLogValuer) LogValue() slog.Value {
 	return slog.StringValue(s.v)
 }
 
 func TestRedactAttrLogValuerString(t *testing.T) {
 	h := &redactingHandler{
-		keys: map[string]struct{}{"secret": {}},
+		keys:     map[string]struct{}{"secret": {}},
 		patterns: DefaultSensitivePatterns,
 	}
 

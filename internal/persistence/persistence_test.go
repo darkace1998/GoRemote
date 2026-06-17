@@ -474,7 +474,6 @@ func TestMigrator_FromRawError(t *testing.T) {
 	}
 }
 
-
 func TestMigrator_FromRawResidualError(t *testing.T) {
 	// A residual key becomes key+".json". If the value is unmarshalable, it should error.
 	mig := &Migrator{Migrations: []Migration{
@@ -979,4 +978,87 @@ func TestFolderCycleDirect(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMigrator_Run_CustomSteps(t *testing.T) {
+	mig := &Migrator{Migrations: []Migration{
+		{
+			From: 0,
+			To:   CurrentVersion,
+			Migrate: func(raw map[string]any) (map[string]any, error) {
+				if testMap, ok := raw["test"].(map[string]any); ok {
+					if val, ok := testMap["value"]; ok && val == "old" {
+						testMap["value"] = "new"
+					}
+				}
+				return raw, nil
+			},
+		},
+	}}
+
+	// Happy path
+	t.Run("happy path", func(t *testing.T) {
+		meta := &Meta{Version: 0}
+		files := map[string][]byte{
+			"test.json": []byte(`{"value": "old"}`),
+		}
+
+		out, err := mig.Run(meta, files)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if meta.Version != CurrentVersion {
+			t.Errorf("meta.Version got %d, want %d", meta.Version, CurrentVersion)
+		}
+
+		if len(out) != 1 {
+			t.Fatalf("expected 1 file in output, got %d", len(out))
+		}
+
+		var result map[string]any
+		if err := json.Unmarshal(out["test.json"], &result); err != nil {
+			t.Fatalf("failed to unmarshal output: %v", err)
+		}
+
+		if result["value"] != "new" {
+			t.Errorf("expected value 'new', got %v", result["value"])
+		}
+	})
+
+	// Error conditions
+	t.Run("nil meta", func(t *testing.T) {
+		files := map[string][]byte{"test.json": []byte(`{"value": "old"}`)}
+		_, err := mig.Run(nil, files)
+		if err == nil {
+			t.Fatal("expected error for nil meta, got nil")
+		}
+		if err.Error() != "persistence: nil meta" {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("newer version", func(t *testing.T) {
+		meta := &Meta{Version: CurrentVersion + 1}
+		files := map[string][]byte{"test.json": []byte(`{"value": "old"}`)}
+		_, err := mig.Run(meta, files)
+		if err == nil {
+			t.Fatal("expected error for newer version, got nil")
+		}
+		if err.Error() != "persistence: on-disk version 2 is newer than supported 1" {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("same version", func(t *testing.T) {
+		meta := &Meta{Version: CurrentVersion}
+		files := map[string][]byte{"test.json": []byte(`{"value": "old"}`)}
+		out, err := mig.Run(meta, files)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if string(out["test.json"]) != `{"value": "old"}` {
+			t.Errorf("expected original files, got %v", string(out["test.json"]))
+		}
+	})
 }

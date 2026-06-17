@@ -310,16 +310,44 @@ func (r *Registry) refreshLocked() error {
 		if err != nil {
 			continue
 		}
+
 		lfi, lserr := os.Lstat(manifestPath)
-		if lserr != nil || !lfi.Mode().IsRegular() {
+		if lserr != nil {
 			continue
 		}
+
+		expectedLstat := lfi
+
+		if lfi.Mode()&os.ModeSymlink != 0 {
+			resolvedManifest, err := filepath.EvalSymlinks(manifestPath)
+			if err != nil {
+				continue
+			}
+			resolvedPluginDir, err := filepath.EvalSymlinks(pluginDir)
+			if err != nil {
+				continue
+			}
+
+			rel, err := filepath.Rel(resolvedPluginDir, resolvedManifest)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				continue
+			}
+
+			fi, err := os.Stat(manifestPath)
+			if err != nil || !fi.Mode().IsRegular() {
+				continue
+			}
+			expectedLstat = fi
+		} else if !lfi.Mode().IsRegular() {
+			continue
+		}
+
 		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
 		if err != nil {
 			continue
 		}
-		if fi, err := f.Stat(); err != nil || !os.SameFile(lfi, fi) {
+		if fi, err := f.Stat(); err != nil || !os.SameFile(expectedLstat, fi) {
 			_ = f.Close()
 			continue
 		}
@@ -349,7 +377,7 @@ func (r *Registry) loadOneLocked(dirName, manifestPath string, src io.Reader) *E
 	// manifest could claim a different id to evade Forget() (which constructs
 	// the removal path from the id). If the manifest declares an id that
 	// differs from the directory name, reject the plugin.
-	if m.ID != "" && m.ID != dirName {
+	if m.ID != dirName {
 		e.Status = StatusBroken
 		e.Error = fmt.Sprintf("manifest id %q does not match directory name %q; possible spoofing attempt", m.ID, dirName)
 		return e

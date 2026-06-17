@@ -32,6 +32,30 @@ func TestDefaultAuthMethod(t *testing.T) {
 			want:       protocol.AuthAgent,
 		},
 		{
+			name:       "ssh with password and private key prefers password",
+			protocolID: "ssh",
+			material:   protocol.CredentialMaterial{Password: "secret", PrivateKey: []byte("keydata")},
+			want:       protocol.AuthPassword,
+		},
+		{
+			name:       "protocol id starting with dot resolves to ssh",
+			protocolID: ".ssh",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthAgent,
+		},
+		{
+			name:       "protocol id with multiple dots resolves to mosh",
+			protocolID: "a.b.c.mosh",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthAgent,
+		},
+		{
+			name:       "plugin.v1.ssh empty material extracts ssh and defaults to agent",
+			protocolID: "plugin.v1.ssh",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthAgent,
+		},
+		{
 			name:       "mosh with full protocol id and password",
 			protocolID: "io.goremote.protocol.mosh",
 			material:   protocol.CredentialMaterial{Password: "secret"},
@@ -58,6 +82,30 @@ func TestDefaultAuthMethod(t *testing.T) {
 		{
 			name:       "vnc with empty material",
 			protocolID: "vnc",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthNone,
+		},
+		{
+			name:       "rdp with password and private key prefers password",
+			protocolID: "rdp",
+			material:   protocol.CredentialMaterial{Password: "secret", PrivateKey: []byte("keydata")},
+			want:       protocol.AuthPassword,
+		},
+		{
+			name:       "sftp with private key defaults to none",
+			protocolID: "sftp",
+			material:   protocol.CredentialMaterial{PrivateKey: []byte("keydata")},
+			want:       protocol.AuthNone,
+		},
+		{
+			name:       "protocol id ending in dot extracts empty string and defaults to none",
+			protocolID: "ssh.",
+			material:   protocol.CredentialMaterial{},
+			want:       protocol.AuthNone,
+		},
+		{
+			name:       "empty protocol id",
+			protocolID: "",
 			material:   protocol.CredentialMaterial{},
 			want:       protocol.AuthNone,
 		},

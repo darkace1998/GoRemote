@@ -27,7 +27,8 @@ type NodeView struct {
 // TreeView is the full tree shape consumed by the UI. Root is a virtual node
 // whose Children are the root-level folders and connections.
 type TreeView struct {
-	Root *NodeView `json:"root"`
+	Root    *NodeView            `json:"root"`
+	NodeMap map[string]*NodeView `json:"-"`
 }
 
 // CredentialRefView mirrors sdk/credential.Reference for JSON-friendly output.
@@ -66,6 +67,18 @@ type ConnectionView struct {
 }
 
 // SessionInfo is the lightweight descriptor returned by ListSessions.
+// FolderView is the hint-rich view of a FolderNode.
+type FolderView struct {
+	ID          string                `json:"id"`
+	ParentID    string                `json:"parent_id,omitempty"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Tags        []string              `json:"tags,omitempty"`
+	Icon        string                `json:"icon,omitempty"`
+	Color       string                `json:"color,omitempty"`
+	Defaults    domain.FolderDefaults `json:"defaults,omitempty"`
+}
+
 type SessionInfo struct {
 	ID           string `json:"id"`
 	ConnectionID string `json:"connection_id"`

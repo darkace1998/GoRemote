@@ -98,7 +98,7 @@ func (s *fileStore) Get(ctx context.Context) (Settings, error) {
 		s.logger.Error("settings: read", "path", s.path, "err", err.Error())
 		return Default(), nil
 	}
-	// BUG-ST1: decode the raw JSON map so we can tell which keys are
+	// decode the raw JSON map so we can tell which keys are
 	// explicitly present. An explicit zero (e.g. reconnectMaxN=0) in the
 	// file must not be overridden by the defaults — only truly absent keys
 	// should fall back to their default values.
@@ -211,12 +211,10 @@ func mergeWithDefaults(in Settings, present map[string]any) Settings {
 	if _, has := normalized["confirmonclose"]; !has {
 		in.ConfirmOnClose = d.ConfirmOnClose
 	}
-	// Only apply reconnect defaults when both fields are absent from the JSON.
-	// If either is present (even as 0) the user's intent is preserved.
-	_, hasMaxN := normalized["reconnectmaxn"]
-	_, hasDelayMs := normalized["reconnectdelayms"]
-	if !hasMaxN && !hasDelayMs {
+	if _, presentMaxN := normalized["reconnectmaxn"]; !presentMaxN {
 		in.ReconnectMaxN = d.ReconnectMaxN
+	}
+	if _, presentDelayMs := normalized["reconnectdelayms"]; !presentDelayMs {
 		in.ReconnectDelayMs = d.ReconnectDelayMs
 	}
 	if in.LogLevel == "" {

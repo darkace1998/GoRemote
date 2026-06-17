@@ -61,8 +61,11 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	sessions := &sessionRegistry{
 		tabs:          tabs,
 		items:         make(map[domain.ID]*sessionTab),
+		connItems:     make(map[string]*sessionTab),
 		openConns:     make(map[string]struct{}),
 		groups:        make(map[*container.TabItem]*paneGroup),
+		tabToSession:  make(map[*container.TabItem]*sessionTab),
+		connToSession: make(map[string]*sessionTab),
 		statusLabel:   statusLabel,
 		sessionsLabel: sessionsLabel,
 		bindings:      b,
@@ -169,7 +172,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		tooltip.NewAction(theme.DocumentCreateIcon(), "Edit selected connection…", func() {
 			editSelectedNode(w, b, tree)
 		}),
-		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected connection", func() {
+		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected", func() {
 			duplicateSelectedNode(w, b, tree)
 		}),
 		tooltip.NewAction(theme.DeleteIcon(), "Delete selected", func() {
@@ -625,8 +628,11 @@ func tabLabelFor(st *sessionTab) string {
 type sessionRegistry struct {
 	mu            sync.Mutex
 	items         map[domain.ID]*sessionTab
+	connItems     map[string]*sessionTab
 	openConns     map[string]struct{}
 	groups        map[*container.TabItem]*paneGroup
+	tabToSession  map[*container.TabItem]*sessionTab
+	connToSession map[string]*sessionTab
 	tabs          *container.DocTabs
 	statusLabel   *widget.Label
 	sessionsLabel *widget.Label
@@ -660,6 +666,7 @@ func (r *sessionRegistry) releaseConn(connID string) {
 func (r *sessionRegistry) add(st *sessionTab) {
 	r.mu.Lock()
 	r.items[st.hid] = st
+	r.connItems[st.connID] = st
 	count := len(r.items)
 	var g *paneGroup
 	var newTab bool
@@ -720,7 +727,14 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	st, ok := r.items[hid]
 	if ok {
 		delete(r.items, hid)
+		delete(r.connItems, st.connID)
 		delete(r.openConns, st.connID)
+		if st.tabItem != nil {
+			delete(r.tabToSession, st.tabItem)
+		}
+		if st.connID != "" {
+			delete(r.connToSession, st.connID)
+		}
 	}
 	count := len(r.items)
 	var g *paneGroup
@@ -792,23 +806,13 @@ func (r *sessionRegistry) findByTab(item *container.TabItem) *sessionTab {
 			return lf.session
 		}
 	}
-	for _, st := range r.items {
-		if st.tabItem == item {
-			return st
-		}
-	}
-	return nil
+	return r.tabToSession[item]
 }
 
 func (r *sessionRegistry) findByConnection(connID string) *sessionTab {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, st := range r.items {
-		if st.connID == connID {
-			return st
-		}
-	}
-	return nil
+	return r.connItems[connID]
 }
 
 func (r *sessionRegistry) snapshot() []*sessionTab {
@@ -1496,6 +1500,11 @@ func (ct *connTree) findNode(root *iapp.NodeView, uid string) *iapp.NodeView {
 	}
 	if root.ID == uid {
 		return root
+	}
+	if ct.view.NodeMap != nil {
+		if n, ok := ct.view.NodeMap[uid]; ok {
+			return n
+		}
 	}
 	for _, c := range root.Children {
 		if found := ct.findNode(c, uid); found != nil {
@@ -2483,32 +2492,66 @@ func deleteSelectedNode(w fyne.Window, b *Bindings, tree *connTree, sessions *se
 
 func duplicateSelectedNode(w fyne.Window, b *Bindings, tree *connTree) {
 	n := tree.selectedNode()
-	if n == nil || n.Kind != "connection" {
-		dialog.ShowInformation("Duplicate", "Select a connection to duplicate.", w)
+	if n == nil || n.ID == "root" {
+		dialog.ShowInformation("Duplicate", "Select a connection or folder to duplicate.", w)
 		return
 	}
-	cv, err := b.GetConnection(context.Background(), n.ID)
-	if err != nil {
-		dialog.ShowError(err, w)
-		return
+
+	var duplicateNodeRecursive func(ctx context.Context, b *Bindings, node *iapp.NodeView, parentID string, isTopLevel bool) error
+	duplicateNodeRecursive = func(ctx context.Context, b *Bindings, node *iapp.NodeView, parentID string, isTopLevel bool) error {
+		if node.Kind == "connection" {
+			cv, err := b.GetConnection(ctx, node.ID)
+			if err != nil {
+				return err
+			}
+			newName := cv.Name
+			if isTopLevel {
+				newName += " (copy)"
+			}
+			in := ConnectionInput{
+				Name:        newName,
+				ProtocolID:  cv.Protocol,
+				Host:        cv.Host,
+				Port:        cv.Port,
+				Username:    cv.Username,
+				AuthMethod:  cv.AuthMethod,
+				Description: cv.Description,
+				Tags:        append([]string(nil), cv.Tags...),
+				Environment: cv.Environment,
+				Settings:    cloneSettingsMap(cv.Settings),
+				CredentialRef: CredentialRefInput{
+					ProviderID: cv.CredentialRef.ProviderID,
+					Key:        cv.CredentialRef.EntryID,
+				},
+			}
+			_, err = b.CreateConnection(ctx, parentID, in)
+			return err
+		} else if node.Kind == "folder" {
+			fv, err := b.GetFolder(ctx, node.ID)
+			if err != nil {
+				return err
+			}
+			newName := fv.Name
+			if isTopLevel {
+				newName += " (copy)"
+			}
+			newFolderID, err := b.CreateFolder(ctx, parentID, newName, fv.Description, append([]string(nil), fv.Tags...), fv.Icon, fv.Color, fv.Defaults)
+			if err != nil {
+				return err
+			}
+			for _, child := range node.Children {
+				if child != nil {
+					if err := duplicateNodeRecursive(ctx, b, child, newFolderID, false); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+		return fmt.Errorf("unknown node kind: %s", node.Kind)
 	}
-	in := ConnectionInput{
-		Name:        cv.Name + " (copy)",
-		ProtocolID:  cv.Protocol,
-		Host:        cv.Host,
-		Port:        cv.Port,
-		Username:    cv.Username,
-		AuthMethod:  cv.AuthMethod,
-		Description: cv.Description,
-		Tags:        append([]string(nil), cv.Tags...),
-		Environment: cv.Environment,
-		Settings:    cloneSettingsMap(cv.Settings),
-		CredentialRef: CredentialRefInput{
-			ProviderID: cv.CredentialRef.ProviderID,
-			Key:        cv.CredentialRef.EntryID,
-		},
-	}
-	if _, err := b.CreateConnection(context.Background(), n.ParentID, in); err != nil {
+
+	if err := duplicateNodeRecursive(context.Background(), b, n, n.ParentID, true); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
@@ -2659,7 +2702,7 @@ func showNewFolderDialog(w fyne.Window, b *Bindings, tree *connTree) {
 		}
 		parent := tree.selectedFolder()
 		ctx := context.Background()
-		if _, err := b.CreateFolder(ctx, parent, name, descEntry.Text, splitTags(tagsEntry.Text)); err != nil {
+		if _, err := b.CreateFolder(ctx, parent, name, descEntry.Text, splitTags(tagsEntry.Text), "", "", domain.FolderDefaults{}); err != nil {
 			dialog.ShowError(err, w)
 			return
 		}
@@ -4095,9 +4138,17 @@ func showTreeContextMenu(w fyne.Window, a fyne.App, b *Bindings, tree *connTree,
 				showNewFolderDialog(w, b, tree)
 			}),
 			fyne.NewMenuItemSeparator(),
-			fyne.NewMenuItem("Expand all", func() {
-				expandAllUnder(tree, n)
-			}),
+		)
+	}
+
+	if n.ID != "root" && n.Kind == "folder" {
+		items = append(items, fyne.NewMenuItem("Duplicate", func() { duplicateSelectedNode(w, b, tree) }))
+		items = append(items, fyne.NewMenuItemSeparator())
+	}
+	if n.Kind == "folder" || n.ID == "root" {
+		items = append(items, fyne.NewMenuItem("Expand all", func() {
+			expandAllUnder(tree, n)
+		}),
 			fyne.NewMenuItem("Collapse all", func() {
 				collapseAllUnder(tree, n)
 			}),

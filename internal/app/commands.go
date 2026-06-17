@@ -373,12 +373,131 @@ func (a *App) DeleteNode(ctx context.Context, id domain.ID) error {
 	return nil
 }
 
+// DuplicateNode creates a deep copy of the node identified by id. If it is a connection,
+// it is duplicated directly. If it is a folder, the folder and all its descendants are
+// recursively copied. The new root node is created under the same parent and its name
+// is appended with " (copy)".
+func (a *App) DuplicateNode(ctx context.Context, id domain.ID) (domain.ID, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.NilID, err
+	}
+	if id == domain.NilID {
+		return domain.NilID, fmt.Errorf("app: cannot duplicate root")
+	}
+	a.treeMu.Lock()
+	n, err := a.tree.FindByID(id)
+	if err != nil {
+		a.treeMu.Unlock()
+		return domain.NilID, err
+	}
+
+	idMap := make(map[domain.ID]domain.ID)
+	var newRootID domain.ID
+	var newRootKind string
+	var newRootName string
+	var parentID = n.NodeParent()
+
+	walkErr := a.tree.Walk(func(node domain.Node) error {
+		if node.NodeID() == id {
+			// This is the root of the duplication
+			newRootID = domain.NewID()
+			idMap[id] = newRootID
+			newRootKind = string(node.NodeKind())
+			if f, ok := node.(*domain.FolderNode); ok {
+				nf := *f
+				nf.ID = newRootID
+				nf.Name = f.Name + " (copy)"
+				newRootName = nf.Name
+				nf.Tags = append([]string(nil), f.Tags...)
+				if len(f.Defaults.Tags) > 0 {
+					nf.Defaults.Tags = append([]string(nil), f.Defaults.Tags...)
+				}
+				if len(f.Defaults.Settings) > 0 {
+					nf.Defaults.Settings = cloneSettings(f.Defaults.Settings)
+				}
+				if len(f.Defaults.CredentialRef.Hints) > 0 {
+					nf.Defaults.CredentialRef.Hints = cloneStringMap(f.Defaults.CredentialRef.Hints)
+				}
+				return a.tree.AddFolder(&nf)
+			}
+			if c, ok := node.(*domain.ConnectionNode); ok {
+				nc := *c
+				nc.ID = newRootID
+				nc.Name = c.Name + " (copy)"
+				newRootName = nc.Name
+				nc.Tags = append([]string(nil), c.Tags...)
+				nc.Settings = cloneSettings(c.Settings)
+				if len(c.CredentialRef.Hints) > 0 {
+					nc.CredentialRef.Hints = cloneStringMap(c.CredentialRef.Hints)
+				}
+				return a.tree.AddConnection(&nc)
+			}
+		} else if newParentID, ok := idMap[node.NodeParent()]; ok {
+			// This is a descendant of the duplicated root
+			newID := domain.NewID()
+			idMap[node.NodeID()] = newID
+			if f, ok := node.(*domain.FolderNode); ok {
+				nf := *f
+				nf.ID = newID
+				nf.ParentID = newParentID
+				nf.Tags = append([]string(nil), f.Tags...)
+				if len(f.Defaults.Tags) > 0 {
+					nf.Defaults.Tags = append([]string(nil), f.Defaults.Tags...)
+				}
+				if len(f.Defaults.Settings) > 0 {
+					nf.Defaults.Settings = cloneSettings(f.Defaults.Settings)
+				}
+				if len(f.Defaults.CredentialRef.Hints) > 0 {
+					nf.Defaults.CredentialRef.Hints = cloneStringMap(f.Defaults.CredentialRef.Hints)
+				}
+				return a.tree.AddFolder(&nf)
+			}
+			if c, ok := node.(*domain.ConnectionNode); ok {
+				nc := *c
+				nc.ID = newID
+				nc.ParentID = newParentID
+				nc.Tags = append([]string(nil), c.Tags...)
+				nc.Settings = cloneSettings(c.Settings)
+				if len(c.CredentialRef.Hints) > 0 {
+					nc.CredentialRef.Hints = cloneStringMap(c.CredentialRef.Hints)
+				}
+				return a.tree.AddConnection(&nc)
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		a.treeMu.Unlock()
+		return domain.NilID, fmt.Errorf("app: duplicate failed: %w", walkErr)
+	}
+
+	a.treeMu.Unlock()
+	a.markDirty()
+	a.publish(Event{
+		Kind: EventNodeCreated, NodeID: newRootID, ParentID: parentID,
+		NodeKind: newRootKind, Name: newRootName,
+	})
+	return newRootID, nil
+}
+
+func cloneStringMap(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
 // ListTree returns a read-only projection of the entire tree.
 func (a *App) ListTree(ctx context.Context) TreeView {
 	a.treeMu.RLock()
 	defer a.treeMu.RUnlock()
 
 	root := &NodeView{Kind: "root"}
+	nodeMap := make(map[string]*NodeView)
 	byID := map[domain.ID]*NodeView{domain.NilID: root}
 	_ = a.tree.Walk(func(n domain.Node) error {
 		var nv *NodeView
@@ -396,9 +515,10 @@ func (a *App) ListTree(ctx context.Context) TreeView {
 		}
 		parent.Children = append(parent.Children, nv)
 		byID[n.NodeID()] = nv
+		nodeMap[n.NodeID().String()] = nv
 		return nil
 	})
-	return TreeView{Root: root}
+	return TreeView{Root: root, NodeMap: nodeMap}
 }
 
 // GetConnection returns a ConnectionView for the given connection id with
@@ -463,6 +583,36 @@ func (a *App) GetConnection(ctx context.Context, id domain.ID) (ConnectionView, 
 
 // Search returns all nodes matching the query, as flat NodeViews (no
 // Children populated).
+// GetFolder returns a FolderView for the given folder id.
+func (a *App) GetFolder(ctx context.Context, id domain.ID) (FolderView, error) {
+	if err := ctx.Err(); err != nil {
+		return FolderView{}, err
+	}
+	if id == domain.NilID {
+		return FolderView{}, fmt.Errorf("%w: nil folder ID", domain.ErrNotFound)
+	}
+	a.treeMu.RLock()
+	defer a.treeMu.RUnlock()
+	f, err := a.tree.Folder(id)
+	if err != nil {
+		return FolderView{}, err
+	}
+
+	v := FolderView{
+		ID:          f.ID.String(),
+		Name:        f.Name,
+		Description: f.Description,
+		Tags:        append([]string(nil), f.Tags...),
+		Icon:        f.Icon,
+		Color:       f.Color,
+		Defaults:    cloneFolderDefaults(f.Defaults),
+	}
+	if f.ParentID != domain.NilID {
+		v.ParentID = f.ParentID.String()
+	}
+	return v, nil
+}
+
 func (a *App) Search(ctx context.Context, q SearchQuery) []NodeView {
 	a.treeMu.RLock()
 	defer a.treeMu.RUnlock()
@@ -601,6 +751,23 @@ func (a *App) RestoreSnapshot(ctx context.Context, path string) error {
 }
 
 // cloneSettings returns a shallow copy of m, or nil when m is nil/empty.
+func cloneFolderDefaults(d domain.FolderDefaults) domain.FolderDefaults {
+	return domain.FolderDefaults{
+		ProtocolID:    d.ProtocolID,
+		Host:          d.Host,
+		Port:          d.Port,
+		Username:      d.Username,
+		AuthMethod:    d.AuthMethod,
+		CredentialRef: d.CredentialRef,
+		Settings:      cloneSettings(d.Settings),
+		Tags:          append([]string(nil), d.Tags...),
+		Color:         d.Color,
+		Icon:          d.Icon,
+		Environment:   d.Environment,
+		Description:   d.Description,
+	}
+}
+
 func cloneSettings(m map[string]any) map[string]any {
 	if len(m) == 0 {
 		return nil

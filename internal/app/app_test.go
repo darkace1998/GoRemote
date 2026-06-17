@@ -582,3 +582,83 @@ func TestUpdateConnectionFavoritePatch(t *testing.T) {
 		t.Errorf("favorite still true after patch")
 	}
 }
+
+func TestDuplicateNode(t *testing.T) {
+	a, _ := newTestApp(t)
+	defer a.Shutdown(context.Background())
+	ctx := context.Background()
+	if err := a.Start(ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	// Setup: Folder with a connection
+	folderID, err := a.CreateFolder(ctx, domain.NilID, "original folder", FolderOpts{})
+	if err != nil {
+		t.Fatalf("CreateFolder: %v", err)
+	}
+
+	connID, err := a.CreateConnection(ctx, folderID, ConnectionOpts{
+		Name: "original conn", ProtocolID: "io.goremote.protocol.ssh", Host: "h1",
+	})
+	if err != nil {
+		t.Fatalf("CreateConnection: %v", err)
+	}
+
+	// Duplicate folder
+	newFolderID, err := a.DuplicateNode(ctx, folderID)
+	if err != nil {
+		t.Fatalf("DuplicateNode(folder): %v", err)
+	}
+
+	// Duplicate connection
+	newConnID, err := a.DuplicateNode(ctx, connID)
+	if err != nil {
+		t.Fatalf("DuplicateNode(conn): %v", err)
+	}
+
+	// Verify tree
+	tv := a.ListTree(ctx)
+
+	// Count folders and connections
+	folders := 0
+	conns := 0
+	var walk func(n *NodeView)
+	walk = func(n *NodeView) {
+		if n.Kind == string(domain.NodeKindFolder) {
+			folders++
+			if n.ID == newFolderID.String() {
+				if n.Name != "original folder (copy)" {
+					t.Errorf("expected new folder name 'original folder (copy)', got %q", n.Name)
+				}
+				if len(n.Children) != 1 {
+					t.Errorf("expected duplicated folder to have 1 child, got %d", len(n.Children))
+				} else if n.Children[0].Name != "original conn" {
+					t.Errorf("expected duplicated child to be 'original conn', got %q", n.Children[0].Name)
+				}
+			}
+		} else if n.Kind == string(domain.NodeKindConnection) {
+			conns++
+			if n.ID == newConnID.String() {
+				if n.Name != "original conn (copy)" {
+					t.Errorf("expected new conn name 'original conn (copy)', got %q", n.Name)
+				}
+				if n.ParentID != folderID.String() {
+					t.Errorf("expected duplicated conn to have parent %q, got %q", folderID.String(), n.ParentID)
+				}
+			}
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(tv.Root)
+
+	// Original folder, duplicated folder
+	if folders != 2 {
+		t.Errorf("expected 2 folders, got %d", folders)
+	}
+	// Original conn, duplicated conn in duplicated folder, explicitly duplicated conn in original folder
+	if conns != 3 {
+		t.Errorf("expected 3 conns, got %d", conns)
+	}
+}

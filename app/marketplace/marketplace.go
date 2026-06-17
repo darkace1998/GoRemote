@@ -211,6 +211,21 @@ func (l *Listing) Validate() error {
 	if strings.ContainsAny(l.ID, "/\\") || strings.HasPrefix(l.ID, ".") {
 		return fmt.Errorf("invalid id %q", l.ID)
 	}
+	if len(l.Manifest) > 0 {
+		var m sdkplugin.Manifest
+		if err := json.Unmarshal(l.Manifest, &m); err != nil {
+			return fmt.Errorf("marketplace: inline manifest json: %w", err)
+		}
+		if err := m.Validate(); err != nil {
+			return fmt.Errorf("marketplace: inline manifest invalid: %w", err)
+		}
+		if m.ID != l.ID {
+			return fmt.Errorf("marketplace: inline manifest id mismatch (got %q, want %q)", m.ID, l.ID)
+		}
+		if m.Version != l.Version {
+			return fmt.Errorf("marketplace: inline manifest version mismatch (got %q, want %q)", m.Version, l.Version)
+		}
+	}
 	return nil
 }
 
@@ -309,16 +324,7 @@ func (c *Client) Install(ctx context.Context, l Listing, destDir string) error {
 		if err != nil {
 			return err
 		}
-		// BUG-M1: validate the inline manifest before persisting it so a
-		// malformed or malicious entry cannot install a broken manifest.json
-		// that confuses the local extplugin Registry.
-		var m sdkplugin.Manifest
-		if err := json.Unmarshal(l.Manifest, &m); err != nil {
-			return fmt.Errorf("marketplace: inline manifest json: %w", err)
-		}
-		if err := m.Validate(); err != nil {
-			return fmt.Errorf("marketplace: inline manifest invalid: %w", err)
-		}
+
 		if err := os.WriteFile(mp, []byte(l.Manifest), 0o600); err != nil {
 			return err
 		}
