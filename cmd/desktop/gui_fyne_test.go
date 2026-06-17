@@ -19,13 +19,14 @@ func TestTreeRowDoubleTappedOpensConnection(t *testing.T) {
 	ct := newConnTree(nil, func(id string) {
 		opened = id
 	})
+	node := &iapp.NodeView{ID: "conn-1", Kind: "connection", Name: "Prod SSH", Protocol: "ssh", Host: "prod.example.com"}
 	ct.view = iapp.TreeView{Root: &iapp.NodeView{
 		ID:   "",
 		Kind: "folder",
 		Children: []*iapp.NodeView{
-			{ID: "conn-1", Kind: "connection", Name: "Prod SSH", Protocol: "ssh", Host: "prod.example.com"},
+			node,
 		},
-	}}
+	}, NodeMap: map[string]*iapp.NodeView{"conn-1": node}}
 
 	row := newTreeRow(ct)
 	row.uid = "conn-1"
@@ -47,20 +48,20 @@ func TestTreeRowDoubleTappedTogglesFolderWithoutOpeningSession(t *testing.T) {
 	ct := newConnTree(nil, func(id string) {
 		opened = id
 	})
+	connNode := &iapp.NodeView{ID: "conn-1", Kind: "connection", Name: "Prod SSH"}
+	folderNode := &iapp.NodeView{
+		ID:   "folder-1",
+		Kind: "folder",
+		Name: "Production",
+		Children: []*iapp.NodeView{connNode},
+	}
 	ct.view = iapp.TreeView{Root: &iapp.NodeView{
 		ID:   "",
 		Kind: "folder",
 		Children: []*iapp.NodeView{
-			{
-				ID:   "folder-1",
-				Kind: "folder",
-				Name: "Production",
-				Children: []*iapp.NodeView{
-					{ID: "conn-1", Kind: "connection", Name: "Prod SSH"},
-				},
-			},
+			folderNode,
 		},
-	}}
+	}, NodeMap: map[string]*iapp.NodeView{"folder-1": folderNode, "conn-1": connNode}}
 
 	row := newTreeRow(ct)
 	row.uid = "folder-1"
@@ -92,14 +93,16 @@ func TestConnectionDetailTextIncludesProtocolEndpointAndEnvironment(t *testing.T
 
 func TestSelectedConnectionReturnsOnlyConnectionNodes(t *testing.T) {
 	ct := newConnTree(nil, nil)
+	folderNode := &iapp.NodeView{ID: "folder-1", Kind: "folder", Name: "Production"}
+	connNode := &iapp.NodeView{ID: "conn-1", Kind: "connection", Name: "Prod SSH"}
 	ct.view = iapp.TreeView{Root: &iapp.NodeView{
 		ID:   "",
 		Kind: "folder",
 		Children: []*iapp.NodeView{
-			{ID: "folder-1", Kind: "folder", Name: "Production"},
-			{ID: "conn-1", Kind: "connection", Name: "Prod SSH"},
+			folderNode,
+			connNode,
 		},
-	}}
+	}, NodeMap: map[string]*iapp.NodeView{"folder-1": folderNode, "conn-1": connNode}}
 
 	ct.selID = "folder-1"
 	if got := ct.selectedConnection(); got != "" {
@@ -117,13 +120,14 @@ func TestUpdateItemClearsConnectionDetailsWhenNodeMissing(t *testing.T) {
 	defer test.NewApp()
 
 	ct := newConnTree(nil, nil)
+	connNode := &iapp.NodeView{ID: "conn-1", Kind: "connection", Name: "Prod SSH", Protocol: "ssh", Host: "prod.example.com", Favorite: true}
 	ct.view = iapp.TreeView{Root: &iapp.NodeView{
 		ID:   "",
 		Kind: "folder",
 		Children: []*iapp.NodeView{
-			{ID: "conn-1", Kind: "connection", Name: "Prod SSH", Protocol: "ssh", Host: "prod.example.com", Favorite: true},
+			connNode,
 		},
-	}}
+	}, NodeMap: map[string]*iapp.NodeView{"conn-1": connNode}}
 	row := newTreeRow(ct)
 
 	ct.updateItem("conn-1", row)
