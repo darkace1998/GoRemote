@@ -1501,6 +1501,11 @@ func (ct *connTree) findNode(root *iapp.NodeView, uid string) *iapp.NodeView {
 	if root.ID == uid {
 		return root
 	}
+	if ct.view.NodeMap != nil {
+		if n, ok := ct.view.NodeMap[uid]; ok {
+			return n
+		}
+	}
 	for _, c := range root.Children {
 		if found := ct.findNode(c, uid); found != nil {
 			return found

@@ -16,9 +16,9 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | Rlogin       | ✅        | ✅ **Ready**       | RFC 1282 handshake; in-band window-size updates. |
 | Raw socket   | ✅        | ✅ **Ready**       | Configurable EOL (lf / crlf / none), keepalive, configurable encoding. |
 | PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned before registration. |
-| HTTP / HTTPS | ✅        | 🔶 **Experimental** | In-process `net/http` GET/probe session. Browser/webview integration is not part of the protocol system. |
+| HTTP / HTTPS | ✅        | ❌ **Dropped**       | Embedded WebView dropped; the system-browser launcher path is the supported design. |
 | RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
-| VNC          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full RFB negotiation/auth/framebuffer pipeline still planned. |
+| VNC          | ✅        | ❌ **Dropped**       | Pure-Go RFB client dropped; the supported path is the external `vncviewer` launcher. |
 | IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
 | External app | ✅        | 🔶 **Planned**     | External tool launching is outside the protocol plugin system. |
 | MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
@@ -72,11 +72,11 @@ Source of truth for the feature list: `requirements.md`, `architecture.md`, `sta
 | Per-session colors / icons / labels              | 🟡 **Partial**  | Color/label persisted; icon picker deferred |
 | Notifications / status indicators                | ✅ **Ready**    | Event bus + UI banner |
 | Workspace persistence across restarts            | ✅ **Ready**    | `app/workspace` |
-| Embedded Go-native protocol modules             | 🟡 **Partial**  | Ready terminal protocols plus experimental RDP / VNC / TN5250 / HTTP / MOSH scaffolding |
+| Embedded Go-native protocol modules             | 🟡 **Partial**  | Ready terminal protocols plus experimental RDP / TN5250 / MOSH scaffolding |
 
 ### 4.3 Protocols
 
-See the protocols table above. Ready terminal protocols are available today; graphical protocols, TN5250, HTTP, MOSH, and PowerShell remoting are tracked as experimental or planned until their Go-native engines are complete.
+See the protocols table above. Ready terminal protocols are available today; graphical protocols like RDP, TN5250, MOSH, and PowerShell remoting are tracked as experimental or planned until their Go-native engines are complete.
 
 ### 4.4 Credential providers
 
