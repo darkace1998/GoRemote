@@ -310,16 +310,44 @@ func (r *Registry) refreshLocked() error {
 		if err != nil {
 			continue
 		}
+
 		lfi, lserr := os.Lstat(manifestPath)
-		if lserr != nil || !lfi.Mode().IsRegular() {
+		if lserr != nil {
 			continue
 		}
+
+		expectedLstat := lfi
+
+		if lfi.Mode()&os.ModeSymlink != 0 {
+			resolvedManifest, err := filepath.EvalSymlinks(manifestPath)
+			if err != nil {
+				continue
+			}
+			resolvedPluginDir, err := filepath.EvalSymlinks(pluginDir)
+			if err != nil {
+				continue
+			}
+
+			rel, err := filepath.Rel(resolvedPluginDir, resolvedManifest)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				continue
+			}
+
+			fi, err := os.Stat(manifestPath)
+			if err != nil || !fi.Mode().IsRegular() {
+				continue
+			}
+			expectedLstat = fi
+		} else if !lfi.Mode().IsRegular() {
+			continue
+		}
+
 		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
 		if err != nil {
 			continue
 		}
-		if fi, err := f.Stat(); err != nil || !os.SameFile(lfi, fi) {
+		if fi, err := f.Stat(); err != nil || !os.SameFile(expectedLstat, fi) {
 			_ = f.Close()
 			continue
 		}
