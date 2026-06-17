@@ -581,6 +581,36 @@ func (a *App) GetConnection(ctx context.Context, id domain.ID) (ConnectionView, 
 
 // Search returns all nodes matching the query, as flat NodeViews (no
 // Children populated).
+// GetFolder returns a FolderView for the given folder id.
+func (a *App) GetFolder(ctx context.Context, id domain.ID) (FolderView, error) {
+	if err := ctx.Err(); err != nil {
+		return FolderView{}, err
+	}
+	if id == domain.NilID {
+		return FolderView{}, fmt.Errorf("%w: nil folder ID", domain.ErrNotFound)
+	}
+	a.treeMu.RLock()
+	defer a.treeMu.RUnlock()
+	f, err := a.tree.Folder(id)
+	if err != nil {
+		return FolderView{}, err
+	}
+
+	v := FolderView{
+		ID:          f.ID.String(),
+		Name:        f.Name,
+		Description: f.Description,
+		Tags:        append([]string(nil), f.Tags...),
+		Icon:        f.Icon,
+		Color:       f.Color,
+		Defaults:    cloneFolderDefaults(f.Defaults),
+	}
+	if f.ParentID != domain.NilID {
+		v.ParentID = f.ParentID.String()
+	}
+	return v, nil
+}
+
 func (a *App) Search(ctx context.Context, q SearchQuery) []NodeView {
 	a.treeMu.RLock()
 	defer a.treeMu.RUnlock()
@@ -719,6 +749,23 @@ func (a *App) RestoreSnapshot(ctx context.Context, path string) error {
 }
 
 // cloneSettings returns a shallow copy of m, or nil when m is nil/empty.
+func cloneFolderDefaults(d domain.FolderDefaults) domain.FolderDefaults {
+	return domain.FolderDefaults{
+		ProtocolID:    d.ProtocolID,
+		Host:          d.Host,
+		Port:          d.Port,
+		Username:      d.Username,
+		AuthMethod:    d.AuthMethod,
+		CredentialRef: d.CredentialRef,
+		Settings:      cloneSettings(d.Settings),
+		Tags:          append([]string(nil), d.Tags...),
+		Color:         d.Color,
+		Icon:          d.Icon,
+		Environment:   d.Environment,
+		Description:   d.Description,
+	}
+}
+
 func cloneSettings(m map[string]any) map[string]any {
 	if len(m) == 0 {
 		return nil

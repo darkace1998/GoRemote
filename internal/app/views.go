@@ -66,6 +66,18 @@ type ConnectionView struct {
 }
 
 // SessionInfo is the lightweight descriptor returned by ListSessions.
+// FolderView is the hint-rich view of a FolderNode.
+type FolderView struct {
+	ID          string                `json:"id"`
+	ParentID    string                `json:"parent_id,omitempty"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty"`
+	Tags        []string              `json:"tags,omitempty"`
+	Icon        string                `json:"icon,omitempty"`
+	Color       string                `json:"color,omitempty"`
+	Defaults    domain.FolderDefaults `json:"defaults,omitempty"`
+}
+
 type SessionInfo struct {
 	ID           string `json:"id"`
 	ConnectionID string `json:"connection_id"`
