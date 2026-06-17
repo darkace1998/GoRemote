@@ -66,9 +66,9 @@ Select a connection in the tree, then either:
 * Click the toolbar icon whose tooltip is `"Connect (open selected)"`.
 
 A new tab opens in the right pane with a live terminal for ready terminal
-protocols (SSH / Telnet / Rlogin / Raw / Serial / SFTP). HTTP, RDP, VNC,
-TN5250, and MOSH currently surface experimental/planned Go-native protocol
-work rather than launching external viewers.
+protocols (SSH / Telnet / Rlogin / Raw / Serial / SFTP). RDP, TN5250,
+and MOSH currently surface experimental/planned Go-native protocol
+work. HTTP and VNC rely on external launchers.
 
 ## 6. Tabs, splits, and detached windows
 
