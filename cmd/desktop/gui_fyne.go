@@ -172,7 +172,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		tooltip.NewAction(theme.DocumentCreateIcon(), "Edit selected connection…", func() {
 			editSelectedNode(w, b, tree)
 		}),
-		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected connection", func() {
+		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected", func() {
 			duplicateSelectedNode(w, b, tree)
 		}),
 		tooltip.NewAction(theme.DeleteIcon(), "Delete selected", func() {
@@ -2487,32 +2487,11 @@ func deleteSelectedNode(w fyne.Window, b *Bindings, tree *connTree, sessions *se
 
 func duplicateSelectedNode(w fyne.Window, b *Bindings, tree *connTree) {
 	n := tree.selectedNode()
-	if n == nil || n.Kind != "connection" {
-		dialog.ShowInformation("Duplicate", "Select a connection to duplicate.", w)
+	if n == nil || n.ID == "root" {
+		dialog.ShowInformation("Duplicate", "Select a folder or connection to duplicate.", w)
 		return
 	}
-	cv, err := b.GetConnection(context.Background(), n.ID)
-	if err != nil {
-		dialog.ShowError(err, w)
-		return
-	}
-	in := ConnectionInput{
-		Name:        cv.Name + " (copy)",
-		ProtocolID:  cv.Protocol,
-		Host:        cv.Host,
-		Port:        cv.Port,
-		Username:    cv.Username,
-		AuthMethod:  cv.AuthMethod,
-		Description: cv.Description,
-		Tags:        append([]string(nil), cv.Tags...),
-		Environment: cv.Environment,
-		Settings:    cloneSettingsMap(cv.Settings),
-		CredentialRef: CredentialRefInput{
-			ProviderID: cv.CredentialRef.ProviderID,
-			Key:        cv.CredentialRef.EntryID,
-		},
-	}
-	if _, err := b.CreateConnection(context.Background(), n.ParentID, in); err != nil {
+	if _, err := b.DuplicateNode(context.Background(), n.ID); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
