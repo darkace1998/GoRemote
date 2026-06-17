@@ -497,6 +497,7 @@ func (a *App) ListTree(ctx context.Context) TreeView {
 	defer a.treeMu.RUnlock()
 
 	root := &NodeView{Kind: "root"}
+	nodeMap := make(map[string]*NodeView)
 	byID := map[domain.ID]*NodeView{domain.NilID: root}
 	_ = a.tree.Walk(func(n domain.Node) error {
 		var nv *NodeView
@@ -514,9 +515,10 @@ func (a *App) ListTree(ctx context.Context) TreeView {
 		}
 		parent.Children = append(parent.Children, nv)
 		byID[n.NodeID()] = nv
+		nodeMap[n.NodeID().String()] = nv
 		return nil
 	})
-	return TreeView{Root: root}
+	return TreeView{Root: root, NodeMap: nodeMap}
 }
 
 // GetConnection returns a ConnectionView for the given connection id with
