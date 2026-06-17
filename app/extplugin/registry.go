@@ -349,7 +349,7 @@ func (r *Registry) loadOneLocked(dirName, manifestPath string, src io.Reader) *E
 	// manifest could claim a different id to evade Forget() (which constructs
 	// the removal path from the id). If the manifest declares an id that
 	// differs from the directory name, reject the plugin.
-	if m.ID != "" && m.ID != dirName {
+	if m.ID != dirName {
 		e.Status = StatusBroken
 		e.Error = fmt.Sprintf("manifest id %q does not match directory name %q; possible spoofing attempt", m.ID, dirName)
 		return e

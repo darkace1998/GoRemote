@@ -300,6 +300,19 @@ func (b *Bindings) DeleteNode(ctx context.Context, id string) error {
 	return nil
 }
 
+// DuplicateNode copies a connection or folder and all its descendants.
+func (b *Bindings) DuplicateNode(ctx context.Context, id string) (string, error) {
+	nid, err := parseID(id)
+	if err != nil {
+		return "", err
+	}
+	newID, err := b.app.DuplicateNode(ctx, nid)
+	if err != nil {
+		return "", err
+	}
+	return newID.String(), nil
+}
+
 // GetConnection returns a resolved view of a single connection.
 func (b *Bindings) GetConnection(ctx context.Context, id string) (app.ConnectionView, error) {
 	nid, err := parseID(id)

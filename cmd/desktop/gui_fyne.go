@@ -172,7 +172,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		tooltip.NewAction(theme.DocumentCreateIcon(), "Edit selected connection…", func() {
 			editSelectedNode(w, b, tree)
 		}),
-		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected connection", func() {
+		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate selected", func() {
 			duplicateSelectedNode(w, b, tree)
 		}),
 		tooltip.NewAction(theme.DeleteIcon(), "Delete selected", func() {
