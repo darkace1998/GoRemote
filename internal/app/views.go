@@ -27,7 +27,8 @@ type NodeView struct {
 // TreeView is the full tree shape consumed by the UI. Root is a virtual node
 // whose Children are the root-level folders and connections.
 type TreeView struct {
-	Root *NodeView `json:"root"`
+	Root    *NodeView            `json:"root"`
+	NodeMap map[string]*NodeView `json:"-"`
 }
 
 // CredentialRefView mirrors sdk/credential.Reference for JSON-friendly output.

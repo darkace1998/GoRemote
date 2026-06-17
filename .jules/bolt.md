@@ -12,3 +12,6 @@
 ## 2025-02-23 - Settings.json Secret Redaction Logic
 **Learning:** `redactValue` function logic in `app/diagnostics/bundle.go` used exact key match equality checking, causing variants (such as myToken) to slip past the redaction filters unredacted. Using a lowercased subset match `strings.Contains(lowerK, strings.ToLower(sk))` handles prefix and suffixed secret variants successfully.
 **Action:** When filtering json keys for secrets, make sure to consider prefix or suffix string modifiers that could be appended to the expected string to bypass redaction checks.
+## 2026-06-17 - JSON Tagging for Internal Struct Indexes
+**Learning:** When extending struct models used in API responses or UI boundaries (like `TreeView`) with internal caching structures (like maps for O(1) lookup), it's critical to consider the serialization side-effects.
+**Action:** Always tag internal fields like `NodeMap` with `json:"-"` to prevent data duplication and bloat in JSON responses/exports.
