@@ -16,9 +16,9 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | Rlogin       | ✅        | ✅ **Ready**       | RFC 1282 handshake; in-band window-size updates. |
 | Raw socket   | ✅        | ✅ **Ready**       | Configurable EOL (lf / crlf / none), keepalive, configurable encoding. |
 | PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned before registration. |
-| HTTP / HTTPS | ✅        | ❌ **Dropped**       | Embedded WebView dropped; the system-browser launcher path is the supported design. |
+| HTTP / HTTPS | ✅        | 🔶 **Experimental** | Go-native in-process HTTP client. Fetches URLs without spawning a browser. |
 | RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
-| VNC          | ✅        | ❌ **Dropped**       | Pure-Go RFB client dropped; the supported path is the external `vncviewer` launcher. |
+| VNC          | ✅        | 🔶 **Experimental** | Experimental Go-native in-process TCP/RFB session. |
 | IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
 | External app | ✅        | 🔶 **Planned**     | External tool launching is outside the protocol plugin system. |
 | MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
