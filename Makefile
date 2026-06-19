@@ -1,4 +1,4 @@
-.PHONY: all build build-desktop test test-desktop test-race vet lint vuln sec audit tidy clean dist dist-linux dist-darwin dist-darwin-arm64 dist-windows
+.PHONY: all build build-desktop run test test-desktop test-race vet lint vuln sec audit tidy clean dist dist-linux dist-darwin dist-darwin-arm64 dist-windows
 
 GO ?= go
 GOBIN ?= $(shell $(GO) env GOPATH)/bin
@@ -35,6 +35,9 @@ test:
 	else \
 		$(GO) test -race $(NON_DESKTOP_PACKAGES); \
 	fi
+
+run:
+	$(GO) run ./cmd/desktop
 
 test-desktop:
 	$(GO) test -race ./cmd/desktop
