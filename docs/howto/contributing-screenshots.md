@@ -15,6 +15,7 @@ commit the image with the listed name.
 | File | Captured from |
 |---|---|
 | `getting-started-main-window.png` | Main window: tree + tab area + toolbar. |
+| `managing-connections.png` | Main window with multiple items checked in the tree and bulk action icons enabled. |
 | `settings-git-sync.png` | Settings dialog scrolled to the Git sync section. |
 | `import-mremoteng-dialog.png` | Import dialog mid-import (with at least one warning visible). |
 | `credentials-unlock.png` | Credentials dialog with the unlock prompt visible. |

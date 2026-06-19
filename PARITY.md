@@ -55,7 +55,7 @@ Source of truth for the feature list: `requirements.md`, `architecture.md`, `sta
 | Inheritance of connection properties             | ✅ **Ready**    | `InheritanceProfile.Resolve` (with provenance) |
 | Connection templates / quick-connect             | ✅ **Ready**    | App command + UI modal |
 | Search / filter / tagging                        | ✅ **Ready**    | `internal/domain/search.go` |
-| Bulk edit / duplicate / move / copy              | 🟡 **Partial**  | Bulk move and bulk delete shipped via toolbar (`✓` add, `Bulk move`, `Bulk delete`); multi-row diff-style bulk *edit* still deferred |
+| Bulk edit / duplicate / move / copy              | 🟡 **Partial**  | Bulk move and bulk delete shipped via toolbar (`"Add selection to multi-select"`, `"Move selected to folder…"`, `"Bulk delete selected"`); multi-row diff-style bulk *edit* still deferred |
 | Favorites / recents / environment grouping       | ✅ **Ready**    | Favorites flag, Recents ring (max 20), Environment filter Select |
 | Import / export XML and CSV                      | ✅ **Ready**    | `internal/import/mremoteng` |
 | Native versioned config format                   | ✅ **Ready**    | `internal/persistence` (atomic JSON + migrator) |
