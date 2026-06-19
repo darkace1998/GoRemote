@@ -34,7 +34,7 @@ import (
 
 // Build-time variables.
 var (
-	Version = "0.9.0"
+	Version = "1.12.0"
 )
 
 // runGUI creates a Fyne application window, wires up all GUI components,

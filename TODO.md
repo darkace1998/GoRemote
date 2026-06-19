@@ -206,9 +206,9 @@ to close.
 
 - [ ] Populate `docs/screenshots/` (placeholder README only). Helps the
   README and any future plugin marketplace listings.
-- [ ] `Makefile`: add `make run` (currently you have to read the build line
+- [x] `Makefile`: add `make run` (currently you have to read the build line
   out of `dist-linux`).
-- [ ] Bump `Version` injection — there's drift between `1.11.0`, `1.11.1`
+- [x] Bump `Version` injection — there's drift between `1.11.0`, `1.11.1`
   and the tagless main commit. Tag a release after the next P0/P1 batch.
 - [x] Trim `webui/` (archived React shell) — done; the directory has been
   removed from the main tree (the only remaining reference is a stale
