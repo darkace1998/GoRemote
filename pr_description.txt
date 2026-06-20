@@ -1,5 +1,0 @@
-🎯 **What:** Fixed a "Command Execution with Unvalidated Executable" (G204) security vulnerability in the Bitwarden credential provider.
-
-⚠️ **Risk:** If a malicious executable was placed in the current working directory or early in the system PATH, the application could be tricked into executing it instead of the genuine Bitwarden CLI when `opts.BWBinary` was unvalidated or dynamically resolved.
-
-🛡️ **Solution:** The executable path provided via `opts.BWBinary` is now resolved securely using `exec.LookPath` during provider initialization. The resolved absolute path is cached, ensuring that subsequent calls to `exec.CommandContext` use the validated binary instead of resolving it dynamically at runtime. The validation is bypassed for mock test runners to prevent breaking tests.

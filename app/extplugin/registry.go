@@ -316,31 +316,14 @@ func (r *Registry) refreshLocked() error {
 			continue
 		}
 
-		expectedLstat := lfi
-
-		if lfi.Mode()&os.ModeSymlink != 0 {
-			resolvedManifest, err := filepath.EvalSymlinks(manifestPath)
-			if err != nil {
-				continue
-			}
-			resolvedPluginDir, err := filepath.EvalSymlinks(pluginDir)
-			if err != nil {
-				continue
-			}
-
-			rel, err := filepath.Rel(resolvedPluginDir, resolvedManifest)
-			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				continue
-			}
-
-			fi, err := os.Stat(manifestPath)
-			if err != nil || !fi.Mode().IsRegular() {
-				continue
-			}
-			expectedLstat = fi
-		} else if !lfi.Mode().IsRegular() {
+		if !lfi.Mode().IsRegular() {
+			e := &Entry{ID: d.Name(), ManifestPath: manifestPath, Status: StatusBroken}
+			e.Error = "manifest.json is not a regular file (e.g. symlink)"
+			r.entries[e.ID] = e
 			continue
 		}
+
+		expectedLstat := lfi
 
 		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
@@ -373,7 +356,7 @@ func (r *Registry) loadOneLocked(dirName, manifestPath string, src io.Reader) *E
 		e.Error = fmt.Sprintf("manifest invalid: %v", err)
 		return e
 	}
-	// BUG-E1: use the on-disk directory name as the canonical id. A spoofed
+	// use the on-disk directory name as the canonical id. A spoofed
 	// manifest could claim a different id to evade Forget() (which constructs
 	// the removal path from the id). If the manifest declares an id that
 	// differs from the directory name, reject the plugin.

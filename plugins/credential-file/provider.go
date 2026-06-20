@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -152,7 +153,7 @@ func (p *Provider) Resolve(ctx context.Context, ref credential.Reference) (*cred
 	outRef := credential.Reference{
 		ProviderID: ManifestID,
 		EntryID:    e.ID,
-		Hints:      copyStringMap(e.Hints),
+		Hints:      maps.Clone(e.Hints),
 	}
 	mat := &credential.Material{
 		Reference:  outRef,
@@ -182,7 +183,7 @@ func (p *Provider) List(ctx context.Context) ([]credential.Reference, error) {
 		refs = append(refs, credential.Reference{
 			ProviderID: ManifestID,
 			EntryID:    e.ID,
-			Hints:      copyStringMap(e.Hints),
+			Hints:      maps.Clone(e.Hints),
 		})
 	}
 	return refs, nil
@@ -207,7 +208,7 @@ func (p *Provider) Put(ctx context.Context, mat credential.Material) (credential
 		PrivateKey: append([]byte(nil), mat.PrivateKey...),
 		Passphrase: mat.Passphrase,
 		OTP:        mat.OTP,
-		Hints:      copyStringMap(mat.Reference.Hints),
+		Hints:      maps.Clone(mat.Reference.Hints),
 		UpdatedAt:  time.Now().UTC(),
 	}
 	replaced := false
@@ -227,7 +228,7 @@ func (p *Provider) Put(ctx context.Context, mat credential.Material) (credential
 	return credential.Reference{
 		ProviderID: ManifestID,
 		EntryID:    id,
-		Hints:      copyStringMap(newEntry.Hints),
+		Hints:      maps.Clone(newEntry.Hints),
 	}, nil
 }
 
@@ -385,14 +386,3 @@ var (
 	_ credential.Provider = (*Provider)(nil)
 	_ credential.Writer   = (*Provider)(nil)
 )
-
-func copyStringMap(m map[string]string) map[string]string {
-	if m == nil {
-		return nil
-	}
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
-}

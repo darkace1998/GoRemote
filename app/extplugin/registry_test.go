@@ -220,7 +220,7 @@ func TestSetStatusRejectsInvalid(t *testing.T) {
 	}
 }
 
-// BUG-E1: a manifest whose id field differs from the containing directory
+// a manifest whose id field differs from the containing directory
 // name must be rejected as a possible spoofing attempt.
 func TestSpoofedManifestIDRejected(t *testing.T) {
 	root := t.TempDir()
@@ -279,12 +279,13 @@ func TestSymlinkedManifestRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	// The symlinked plugin must not appear in the registry.
-	if _, ok := r.Get("io.example.sym"); ok {
-		t.Error("plugin with symlinked manifest.json must not be registered")
+	// The symlinked plugin must be marked as broken
+	e, ok := r.Get("io.example.sym")
+	if !ok {
+		t.Fatal("plugin with symlinked manifest.json must be registered as broken")
 	}
-	if len(r.Entries()) != 0 {
-		t.Errorf("expected 0 entries, got %d", len(r.Entries()))
+	if e.Status != StatusBroken {
+		t.Errorf("expected status broken, got %q", e.Status)
 	}
 }
 

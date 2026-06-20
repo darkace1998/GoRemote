@@ -50,9 +50,9 @@ func TestTreeRowDoubleTappedTogglesFolderWithoutOpeningSession(t *testing.T) {
 	})
 	connNode := &iapp.NodeView{ID: "conn-1", Kind: "connection", Name: "Prod SSH"}
 	folderNode := &iapp.NodeView{
-		ID:   "folder-1",
-		Kind: "folder",
-		Name: "Production",
+		ID:       "folder-1",
+		Kind:     "folder",
+		Name:     "Production",
 		Children: []*iapp.NodeView{connNode},
 	}
 	ct.view = iapp.TreeView{Root: &iapp.NodeView{
