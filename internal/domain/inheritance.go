@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/darkace1998/GoRemote/sdk/credential"
 	"github.com/darkace1998/GoRemote/sdk/protocol"
 )
@@ -332,10 +335,7 @@ func isRefZero(r credential.Reference) bool {
 func cloneRef(r credential.Reference) credential.Reference {
 	out := credential.Reference{ProviderID: r.ProviderID, EntryID: r.EntryID}
 	if len(r.Hints) > 0 {
-		out.Hints = make(map[string]string, len(r.Hints))
-		for k, v := range r.Hints {
-			out.Hints[k] = v
-		}
+		out.Hints = maps.Clone(r.Hints)
 	}
 	return out
 }
@@ -344,18 +344,12 @@ func cloneSettings(m map[string]any) map[string]any {
 	if len(m) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(m)
 }
 
 func cloneTags(t []string) []string {
 	if len(t) == 0 {
 		return nil
 	}
-	out := make([]string, len(t))
-	copy(out, t)
-	return out
+	return slices.Clone(t)
 }

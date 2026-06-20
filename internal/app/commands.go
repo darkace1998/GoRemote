@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"sort"
 	"strings"
 
@@ -484,11 +485,7 @@ func cloneStringMap(m map[string]string) map[string]string {
 	if len(m) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(m)
 }
 
 // ListTree returns a read-only projection of the entire tree.
@@ -772,9 +769,5 @@ func cloneSettings(m map[string]any) map[string]any {
 	if len(m) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(m)
 }
