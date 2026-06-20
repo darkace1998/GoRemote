@@ -220,7 +220,7 @@ func TestSetStatusRejectsInvalid(t *testing.T) {
 	}
 }
 
-// BUG-E1: a manifest whose id field differs from the containing directory
+// a manifest whose id field differs from the containing directory
 // name must be rejected as a possible spoofing attempt.
 func TestSpoofedManifestIDRejected(t *testing.T) {
 	root := t.TempDir()

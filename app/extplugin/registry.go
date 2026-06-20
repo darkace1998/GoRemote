@@ -373,7 +373,7 @@ func (r *Registry) loadOneLocked(dirName, manifestPath string, src io.Reader) *E
 		e.Error = fmt.Sprintf("manifest invalid: %v", err)
 		return e
 	}
-	// BUG-E1: use the on-disk directory name as the canonical id. A spoofed
+	// use the on-disk directory name as the canonical id. A spoofed
 	// manifest could claim a different id to evade Forget() (which constructs
 	// the removal path from the id). If the manifest declares an id that
 	// differs from the directory name, reject the plugin.
