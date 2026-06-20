@@ -18,7 +18,8 @@ import (
 	"path/filepath"
 )
 
-// maxReadFileBytes is the maximum allowed size to read from a configuration file.
+// maxReadFileBytes caps config file reads at 100 MiB; larger files are rejected
+// by the caller before the data is loaded into memory.
 const maxReadFileBytes = 100 << 20 // 100 MiB
 
 // WriteAtomic writes data to path atomically: it writes into a sibling

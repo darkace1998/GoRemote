@@ -318,7 +318,7 @@ func (r *Registry) refreshLocked() error {
 
 		if !lfi.Mode().IsRegular() {
 			e := &Entry{ID: d.Name(), ManifestPath: manifestPath, Status: StatusBroken}
-			e.Error = "manifest.json is not a regular file (e.g. symlink)"
+			e.Error = "manifest.json must be a regular file (symlinks and special files are not allowed)"
 			r.entries[e.ID] = e
 			continue
 		}
