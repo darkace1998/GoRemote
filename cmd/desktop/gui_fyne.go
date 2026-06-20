@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image/color"
 	"log/slog"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -3301,11 +3302,7 @@ func cloneSettingsMap(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(m)
 }
 
 func containsString(opts []string, v string) bool {

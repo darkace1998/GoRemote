@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"slices"
+
 	"encoding/json"
 	"fmt"
 )
@@ -170,9 +172,7 @@ func rawKey(name string) string {
 func cloneFiles(in map[string][]byte) map[string][]byte {
 	out := make(map[string][]byte, len(in))
 	for k, v := range in {
-		b := make([]byte, len(v))
-		copy(b, v)
-		out[k] = b
+		out[k] = slices.Clone(v)
 	}
 	return out
 }
