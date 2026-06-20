@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -303,7 +304,7 @@ func (p *Provider) Resolve(ctx context.Context, ref credential.Reference) (*cred
 		Reference: credential.Reference{
 			ProviderID: ManifestID,
 			EntryID:    ref.EntryID,
-			Hints:      copyStringMap(ref.Hints),
+			Hints:      maps.Clone(ref.Hints),
 		},
 		Fields: map[string]string{},
 	}
@@ -385,18 +386,6 @@ func (p *Provider) Put(ctx context.Context, mat credential.Material) (credential
 // Delete implements credential.Writer but always returns ErrReadOnly.
 func (p *Provider) Delete(ctx context.Context, ref credential.Reference) error {
 	return credential.ErrReadOnly
-}
-
-// copyStringMap returns a shallow copy of m (or nil for nil/empty m).
-func copyStringMap(m map[string]string) map[string]string {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }
 
 // Compile-time interface checks.

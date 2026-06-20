@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"sync"
 	"time"
@@ -206,14 +207,14 @@ func (p *Provider) Resolve(ctx context.Context, ref credential.Reference) (*cred
 		Reference: credential.Reference{
 			ProviderID: ManifestID,
 			EntryID:    entryID,
-			Hints:      copyStringMap(resolved.Reference.Hints),
+			Hints:      maps.Clone(resolved.Reference.Hints),
 		},
 		Username:   s.User,
 		Password:   s.Pass,
 		Domain:     s.Realm,
 		Passphrase: s.Phrase,
 		OTP:        s.Code,
-		Extra:      copyStringMap(s.Metadata),
+		Extra:      maps.Clone(s.Metadata),
 	}
 	if len(s.KeyData) > 0 {
 		mat.PrivateKey = append([]byte(nil), s.KeyData...)
@@ -231,7 +232,7 @@ func (p *Provider) List(ctx context.Context) ([]credential.Reference, error) {
 		refs = append(refs, credential.Reference{
 			ProviderID: ManifestID,
 			EntryID:    e.Reference.EntryID,
-			Hints:      copyStringMap(e.Reference.Hints),
+			Hints:      maps.Clone(e.Reference.Hints),
 		})
 	}
 	return refs, nil
@@ -254,7 +255,7 @@ func (p *Provider) Put(ctx context.Context, mat credential.Material) (credential
 		KeyData:  append([]byte(nil), mat.PrivateKey...),
 		Phrase:   mat.Passphrase,
 		Code:     mat.OTP,
-		Metadata: copyStringMap(mat.Extra),
+		Metadata: maps.Clone(mat.Extra),
 	}
 	payload, err := encodeStoredCredential(s)
 	if err != nil {
@@ -263,7 +264,7 @@ func (p *Provider) Put(ctx context.Context, mat credential.Material) (credential
 	if err := p.kc.Set(KeychainService, id, string(payload)); err != nil {
 		return credential.Reference{}, fmt.Errorf("keychain set: %w", err)
 	}
-	hints := copyStringMap(mat.Reference.Hints)
+	hints := maps.Clone(mat.Reference.Hints)
 	ref := credential.Reference{
 		ProviderID: ManifestID,
 		EntryID:    id,
@@ -386,18 +387,6 @@ func matchHints(got, want map[string]string) bool {
 		}
 	}
 	return true
-}
-
-// copyStringMap returns a shallow copy of m, or nil if m is nil/empty.
-func copyStringMap(m map[string]string) map[string]string {
-	if len(m) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }
 
 // Compile-time interface checks.
