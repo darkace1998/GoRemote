@@ -106,7 +106,14 @@ func readFileIfExists(path string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, maxReadFileBytes))
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	if fi.Size() > maxReadFileBytes {
+		return nil, false, fmt.Errorf("persistence: %s exceeds size limit", filepath.Base(path))
+	}
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, false, err
 	}

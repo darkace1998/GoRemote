@@ -323,14 +323,12 @@ func (r *Registry) refreshLocked() error {
 			continue
 		}
 
-		expectedLstat := lfi
-
 		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
 		if err != nil {
 			continue
 		}
-		if fi, err := f.Stat(); err != nil || !os.SameFile(expectedLstat, fi) {
+		if fi, err := f.Stat(); err != nil || !os.SameFile(lfi, fi) {
 			_ = f.Close()
 			continue
 		}
