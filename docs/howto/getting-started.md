@@ -89,6 +89,11 @@ work.
 * The toolbar icon with tooltip `"Open a favorite…"` opens a quick
   picker over connections marked as favorites.
 
+## 8. About GoRemote
+
+Click the toolbar icon whose tooltip is `"About GoRemote"` to open
+the About dialog which shows the version and license information.
+
 ## Related buttons
 
 | Tooltip | What it does |
@@ -96,7 +101,10 @@ work.
 | `New folder…` | Create a tree folder |
 | `New connection…` | Create a connection in the selected folder |
 | `Connect (open selected)` | Open a session for the highlighted connection |
+| `Close tab` | Close the active tab |
 | `Disconnect current session` | Cleanly close the active session |
 | `Detach current tab to its own window` | Float the active tab as a window |
+| `Move this tab back into the main window` | Reattach a detached tab |
 | `Recent connections` | Reopen something you used recently |
 | `Open a favorite…` | Quick-pick a favorited connection |
+| `About GoRemote` | Open the About dialog |
