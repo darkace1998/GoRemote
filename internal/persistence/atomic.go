@@ -18,6 +18,9 @@ import (
 	"path/filepath"
 )
 
+// maxReadFileBytes is the maximum allowed size to read from a configuration file.
+const maxReadFileBytes = 100 << 20 // 100 MiB
+
 // WriteAtomic writes data to path atomically: it writes into a sibling
 // temp file, fsyncs the file, renames it over the destination, and then
 // fsyncs the containing directory so the rename is durable. Any temp
@@ -102,7 +105,7 @@ func readFileIfExists(path string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	defer f.Close()
-	data, err := io.ReadAll(f)
+	data, err := io.ReadAll(io.LimitReader(f, maxReadFileBytes))
 	if err != nil {
 		return nil, false, err
 	}
