@@ -318,19 +318,17 @@ func (r *Registry) refreshLocked() error {
 
 		if !lfi.Mode().IsRegular() {
 			e := &Entry{ID: d.Name(), ManifestPath: manifestPath, Status: StatusBroken}
-			e.Error = "manifest.json is not a regular file (e.g. symlink)"
+			e.Error = "manifest.json must be a regular file (symlinks and special files are not allowed)"
 			r.entries[e.ID] = e
 			continue
 		}
-
-		expectedLstat := lfi
 
 		// #nosec G304 -- manifestPath is constrained to a discovered child directory under the registry root.
 		f, err := os.Open(manifestPath)
 		if err != nil {
 			continue
 		}
-		if fi, err := f.Stat(); err != nil || !os.SameFile(expectedLstat, fi) {
+		if fi, err := f.Stat(); err != nil || !os.SameFile(lfi, fi) {
 			_ = f.Close()
 			continue
 		}

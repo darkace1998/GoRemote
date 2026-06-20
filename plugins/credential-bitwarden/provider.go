@@ -89,6 +89,11 @@ func New(opts Options) *Provider {
 		r = execRunner{}
 	}
 	bin := opts.BWBinary
+	if _, isExec := r.(execRunner); isExec && bin != "" {
+		if path, err := exec.LookPath(bin); err == nil {
+			bin = path
+		}
+	}
 	if bin == "" {
 		if path, err := exec.LookPath("bw"); err == nil {
 			bin = path
