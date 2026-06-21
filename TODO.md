@@ -134,10 +134,7 @@ to close.
   working `Resize` via `ResizePseudoConsole`. The legacy stdin/stdout-pipe
   fallback has been removed; Windows 10 1809+ is required (every
   supported Windows release).
-- [x] **Pure-Go RFB client** — formally **dropped**. The "🔶 Experimental"
-  row has been removed from `PARITY.md`; the supported VNC path remains
-  the external `vncviewer` launcher. There was never any RFB code in
-  `plugins/protocol-vnc/` to remove — only the aspiration.
+- [ ] **Pure-Go RFB client** — Experimental scaffolding added as `plugins/protocol-vnc/`. Full RFB protocol framing, auth, and TLS are not yet implemented.
 - [x] **SFTP browser tab** — shipped as `plugins/protocol-sftp`. Renders an
   interactive file-browser shell (ls/cd/pwd/get/put/mkdir/rmdir/rm/mv/
   chmod/lcd/lls/lpwd, plus quote-aware tokenisation) inside the host's
@@ -150,9 +147,7 @@ to close.
   Windows `COMn`) with configurable baud / data-bits / parity / stop-bits
   / EOL. Powered by `go.bug.st/serial`. Renders through the existing
   terminal pane.
-- [ ] **HTTP/HTTPS — embedded WebView**: **dropped**. The system-browser
-  launcher path is the supported design going forward; an embedded
-  CGO browser engine (`webview/webview`, CEF, etc.) is out of scope.
+- [x] **HTTP/HTTPS — in-process client** — shipped as `plugins/protocol-http/`. Experimental Go-native in-process HTTP client that fetches URLs without spawning a browser.
 
 ## 4. Plugin / extensibility hardening (P2)
 
