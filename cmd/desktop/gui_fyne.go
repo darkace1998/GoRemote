@@ -182,6 +182,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		widget.NewToolbarSeparator(),
 		tooltip.NewAction(theme.ConfirmIcon(), "Add selection to multi-select", func() { tree.multiAddSelected() }),
 		tooltip.NewAction(theme.CancelIcon(), "Clear multi-select", func() { tree.multiClear() }),
+		tooltip.NewAction(theme.ContentCopyIcon(), "Bulk duplicate selected", func() { bulkDuplicateSelected(w, b, tree) }),
 		tooltip.NewAction(theme.MoveDownIcon(), "Move selected to folder…", func() { bulkMoveSelected(w, b, tree) }),
 		tooltip.NewAction(theme.ContentClearIcon(), "Bulk delete selected", func() { bulkDeleteSelected(w, b, tree, sessions) }),
 		widget.NewToolbarSeparator(),
@@ -2498,65 +2499,37 @@ func duplicateSelectedNode(w fyne.Window, b *Bindings, tree *connTree) {
 		return
 	}
 
-	var duplicateNodeRecursive func(ctx context.Context, b *Bindings, node *iapp.NodeView, parentID string, isTopLevel bool) error
-	duplicateNodeRecursive = func(ctx context.Context, b *Bindings, node *iapp.NodeView, parentID string, isTopLevel bool) error {
-		if node.Kind == "connection" {
-			cv, err := b.GetConnection(ctx, node.ID)
-			if err != nil {
-				return err
-			}
-			newName := cv.Name
-			if isTopLevel {
-				newName += " (copy)"
-			}
-			in := ConnectionInput{
-				Name:        newName,
-				ProtocolID:  cv.Protocol,
-				Host:        cv.Host,
-				Port:        cv.Port,
-				Username:    cv.Username,
-				AuthMethod:  cv.AuthMethod,
-				Description: cv.Description,
-				Tags:        append([]string(nil), cv.Tags...),
-				Environment: cv.Environment,
-				Settings:    cloneSettingsMap(cv.Settings),
-				CredentialRef: CredentialRefInput{
-					ProviderID: cv.CredentialRef.ProviderID,
-					Key:        cv.CredentialRef.EntryID,
-				},
-			}
-			_, err = b.CreateConnection(ctx, parentID, in)
-			return err
-		} else if node.Kind == "folder" {
-			fv, err := b.GetFolder(ctx, node.ID)
-			if err != nil {
-				return err
-			}
-			newName := fv.Name
-			if isTopLevel {
-				newName += " (copy)"
-			}
-			newFolderID, err := b.CreateFolder(ctx, parentID, newName, fv.Description, append([]string(nil), fv.Tags...), fv.Icon, fv.Color, fv.Defaults)
-			if err != nil {
-				return err
-			}
-			for _, child := range node.Children {
-				if child != nil {
-					if err := duplicateNodeRecursive(ctx, b, child, newFolderID, false); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		}
-		return fmt.Errorf("unknown node kind: %s", node.Kind)
-	}
-
-	if err := duplicateNodeRecursive(context.Background(), b, n, n.ParentID, true); err != nil {
+	if _, err := b.DuplicateNode(context.Background(), n.ID); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
 	tree.refresh()
+}
+
+// bulkDuplicateSelected duplicates every node currently in the bulk-edit set
+// after a single confirmation.
+func bulkDuplicateSelected(w fyne.Window, b *Bindings, tree *connTree) {
+	ids := tree.multiList()
+	if len(ids) == 0 {
+		dialog.ShowInformation("Bulk duplicate", "No items in selection. Use the ✓ button to add the highlighted node first.", w)
+		return
+	}
+
+	msg := fmt.Sprintf("Duplicate %d items?", len(ids))
+	dialog.ShowConfirm("Confirm bulk duplicate", msg, func(ok bool) {
+		if !ok {
+			return
+		}
+		ctx := context.Background()
+		for _, id := range ids {
+			if _, err := b.DuplicateNode(ctx, id); err != nil {
+				dialog.ShowError(fmt.Errorf("duplicate %s: %w", id, err), w)
+				break
+			}
+		}
+		tree.multiClear()
+		tree.refresh()
+	}, w)
 }
 
 // bulkDeleteSelected removes every node currently in the bulk-edit set
