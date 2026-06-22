@@ -258,7 +258,17 @@ func buildPluginRow(w fyne.Window, reg *extplugin.Registry, e extplugin.Entry, o
 		onChange()
 	}
 
-	enable := widget.NewButtonWithIcon("Enable", theme.ConfirmIcon(), func() { setStatus(extplugin.StatusEnabled) })
+	enable := widget.NewButtonWithIcon("Enable", theme.ConfirmIcon(), func() {
+		if e.TrustLevel != sdkplugin.TrustVerified {
+			dialog.ShowConfirm("Unverified Plugin", "This plugin is not cryptographically verified by a trusted key.\nAre you sure you want to trust it and enable it?", func(ok bool) {
+				if ok {
+					setStatus(extplugin.StatusEnabled)
+				}
+			}, w)
+			return
+		}
+		setStatus(extplugin.StatusEnabled)
+	})
 	disable := widget.NewButtonWithIcon("Disable", theme.CancelIcon(), func() { setStatus(extplugin.StatusDisabled) })
 	quarantine := widget.NewButton("Quarantine", func() { setStatus(extplugin.StatusQuarantined) })
 	forget := widget.NewButtonWithIcon("Forget", theme.DeleteIcon(), func() {
