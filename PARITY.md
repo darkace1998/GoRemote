@@ -18,7 +18,7 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned before registration. |
 | HTTP / HTTPS | ✅        | ✅ **Ready**        | Go-native in-process HTTP client (no external browser). |
 | RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
-| VNC          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full RFB pipeline still planned. |
+| VNC          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full RFB protocol framing still planned. |
 | IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
 | External app | ✅        | 🔶 **Planned**     | External tool launching is outside the protocol plugin system. |
 | MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
@@ -30,7 +30,8 @@ Plugins shipped today (`plugins/`):
 ```
 protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
 protocol-rawsocket  protocol-rdp        protocol-tn5250     protocol-mosh
-protocol-serial     protocol-powershell (planned, not registered)
+protocol-serial     protocol-http       protocol-vnc
+protocol-powershell (planned, not registered)
 ```
 
 ## Credential providers
