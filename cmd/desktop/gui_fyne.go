@@ -4116,9 +4116,13 @@ func showTreeContextMenu(w fyne.Window, a fyne.App, b *Bindings, tree *connTree,
 		items = append(items, fyne.NewMenuItemSeparator())
 	}
 	if n.Kind == "folder" || n.ID == "root" {
-		items = append(items, fyne.NewMenuItem("Expand all", func() {
-			expandAllUnder(tree, n)
+		items = append(items, fyne.NewMenuItem("Connect all", func() {
+			connectAllUnder(w, b, sessions, n)
 		}),
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Expand all", func() {
+				expandAllUnder(tree, n)
+			}),
 			fyne.NewMenuItem("Collapse all", func() {
 				collapseAllUnder(tree, n)
 			}),
@@ -4156,4 +4160,46 @@ func collapseAllUnder(tree *connTree, n *iapp.NodeView) {
 		}
 	}
 	tree.tree.CloseBranch(n.ID)
+}
+
+// connectAllUnder recursively connects to all connections under the given folder.
+func connectAllUnder(w fyne.Window, b *Bindings, sessions *sessionRegistry, n *iapp.NodeView) {
+	if n == nil {
+		return
+	}
+	var toConnect []string
+	var walk func(node *iapp.NodeView)
+	walk = func(node *iapp.NodeView) {
+		if node == nil {
+			return
+		}
+		if node.Kind == "connection" {
+			toConnect = append(toConnect, node.ID)
+		}
+		for _, child := range node.Children {
+			walk(child)
+		}
+	}
+	walk(n)
+
+	if len(toConnect) == 0 {
+		dialog.ShowInformation("Connect All", "No connections found in this folder.", w)
+		return
+	}
+
+	doConnect := func() {
+		for _, id := range toConnect {
+			openSession(w, b, sessions, id)
+		}
+	}
+
+	if len(toConnect) > 5 {
+		dialog.ShowConfirm("Confirm Connect All", fmt.Sprintf("Are you sure you want to open %d connections?", len(toConnect)), func(ok bool) {
+			if ok {
+				doConnect()
+			}
+		}, w)
+	} else {
+		doConnect()
+	}
 }
