@@ -42,6 +42,14 @@ buttons:
 *Note: Multi-row bulk editing of connection properties is not yet
 supported.*
 
+## Favorites
+
+You can mark frequently used connections as favorites to access them quickly from the `"Open a favorite…"` toolbar picker. A yellow ★ icon appears next to favorited connections in the tree.
+
+To add or remove a favorite:
+* **Context menu:** Right-click a connection in the tree and choose **"Add to favorites"** or **"Remove from favorites"**.
+* **Properties dialog:** Edit the connection and toggle the **Favorite** checkbox.
+
 ## Drag and drop
 
 GoRemote supports drag-and-drop to reorder items or move them between
