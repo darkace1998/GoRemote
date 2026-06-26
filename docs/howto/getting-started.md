@@ -21,6 +21,8 @@ A single window opens with three regions:
 
 1. **Left pane** — the connection tree, an environment selector, a
    search box, and a tree-action toolbar.
+   - Use the **search box** to filter the tree by connection name, host, or tag (shortcut: `Ctrl/Cmd + F`).
+   - Use the **environment selector** to filter the tree to only show connections matching a specific environment.
 2. **Top toolbar** — global actions (new folder, new connection,
    connect, disconnect, settings, plugins, sync, …).
 3. **Right pane** — a tabbed area that hosts session terminals.
