@@ -60,12 +60,22 @@ func NewFileStore(path string, log Logger) Store {
 
 // DefaultPath returns the on-disk location of the workspace document:
 // $UserConfigDir/goremote/workspace.json.
+// Deprecated: use ProfilePath instead.
 func DefaultPath() (string, error) {
+	return ProfilePath("default")
+}
+
+// ProfilePath returns the on-disk location of the workspace document for
+// the given profile name.
+func ProfilePath(profile string) (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("workspace: user config dir: %w", err)
 	}
-	return filepath.Join(dir, "goremote", "workspace.json"), nil
+	if profile == "" || profile == "default" {
+		return filepath.Join(dir, "goremote", "workspace.json"), nil
+	}
+	return filepath.Join(dir, "goremote", fmt.Sprintf("workspace_%s.json", profile)), nil
 }
 
 // Load returns the persisted workspace, or Default() on missing/corrupt.

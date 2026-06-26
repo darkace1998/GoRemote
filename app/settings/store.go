@@ -220,6 +220,9 @@ func mergeWithDefaults(in Settings, present map[string]any) Settings {
 	if in.LogLevel == "" {
 		in.LogLevel = d.LogLevel
 	}
+	if in.WorkspaceProfile == "" {
+		in.WorkspaceProfile = d.WorkspaceProfile
+	}
 	return in
 }
 
