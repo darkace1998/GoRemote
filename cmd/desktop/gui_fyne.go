@@ -8,6 +8,8 @@ import (
 	"image/color"
 	"log/slog"
 	"maps"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -1666,6 +1668,7 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		tooltip.NewAction(theme.UploadIcon(), "Restore from a zip…", func() { showRestoreDialog(w, b, tree) }),
 		widget.NewToolbarSeparator(),
 		tooltip.NewAction(theme.LoginIcon(), "Manage credentials…", func() { showCredentialsDialog(w, b) }),
+		tooltip.NewAction(theme.AccountIcon(), "Workspace Profiles…", func() { showWorkspaceProfilesDialog(w, b, sessions) }),
 		tooltip.NewAction(theme.SettingsIcon(), "Settings…", func() { showSettingsDialog(w, b, a) }),
 		tooltip.NewAction(theme.ListIcon(), "Plugins…", func() { showPluginsDialog(w, b) }),
 		tooltip.NewAction(theme.DocumentPrintIcon(), "View logs…", func() { showLogViewerDialog(w, b) }),
@@ -1674,6 +1677,108 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		tooltip.NewAction(theme.ViewRefreshIcon(), "Check for updates", func() { runUpdateCheck(w, b) }),
 		tooltip.NewAction(theme.InfoIcon(), "About GoRemote", func() { showAboutDialog(w) }),
 	)
+}
+
+func showWorkspaceProfilesDialog(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	dir := filepath.Join(configDir, "goremote")
+	matches, err := filepath.Glob(filepath.Join(dir, "workspace*.json"))
+	if err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	profiles := []string{"default"}
+	for _, match := range matches {
+		base := filepath.Base(match)
+		if base == "workspace.json" {
+			continue
+		}
+		// Extract profile name from workspace_<profile>.json
+		if strings.HasPrefix(base, "workspace_") && strings.HasSuffix(base, ".json") {
+			name := strings.TrimPrefix(base, "workspace_")
+			name = strings.TrimSuffix(name, ".json")
+			if name != "" {
+				profiles = append(profiles, name)
+			}
+		}
+	}
+
+	activeProfile := "default"
+	if s, err := b.GetSettings(context.Background()); err == nil && s.WorkspaceProfile != "" {
+		activeProfile = s.WorkspaceProfile
+	}
+
+	profileSel := widget.NewSelect(profiles, nil)
+	profileSel.SetSelected(activeProfile)
+
+	newProfileEntry := widget.NewEntry()
+	newProfileEntry.SetPlaceHolder("or enter new profile name")
+
+	items := []*widget.FormItem{
+		widget.NewFormItem("Existing Profile", profileSel),
+		widget.NewFormItem("New Profile", newProfileEntry),
+	}
+
+	d := dialog.NewForm("Workspace Profiles", "Switch", "Cancel", items, func(ok bool) {
+		if !ok {
+			return
+		}
+		newProfile := strings.TrimSpace(newProfileEntry.Text)
+		if newProfile == "" {
+			newProfile = profileSel.Selected
+		}
+		if newProfile == "" || newProfile == activeProfile {
+			return
+		}
+
+		// Validate new profile name
+		for _, r := range newProfile {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+				dialog.ShowError(fmt.Errorf("profile name %q contains invalid characters", newProfile), w)
+				return
+			}
+		}
+
+		// Save current state
+		persistWorkspace(b, sessions)
+
+		// Close all open sessions and clear the UI tabs
+		sessions.mu.Lock()
+		for _, st := range sessions.items {
+			sessions.tabs.Remove(st.tabItem)
+			// Launch close in background so we don't block
+			go func(handle string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := b.CloseSession(ctx, handle); err != nil {
+					slog.Warn("close session on profile switch", "handle", handle, "err", err)
+				}
+			}(st.handle)
+		}
+		// Reset maps
+		clear(sessions.items)
+		clear(sessions.connItems)
+		clear(sessions.openConns)
+		clear(sessions.groups)
+		clear(sessions.tabToSession)
+		clear(sessions.connToSession)
+		sessions.mu.Unlock()
+
+		// Switch store
+		if err := b.SwitchWorkspaceProfile(context.Background(), newProfile); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+
+		// Load new layout
+		restoreWorkspace(w, b, sessions)
+	}, w)
+	d.Resize(fyne.NewSize(350, 150))
+	d.Show()
 }
 
 // runSyncNow triggers an explicit git-sync commit-and-push in a

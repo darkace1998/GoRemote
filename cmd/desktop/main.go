@@ -101,6 +101,28 @@ func (b *Bindings) WithWorkspaceStore(s workspace.Store) *Bindings {
 	return b
 }
 
+// SwitchWorkspaceProfile changes the active workspace profile in settings
+// and injects a new workspace store bound to the corresponding path.
+func (b *Bindings) SwitchWorkspaceProfile(ctx context.Context, newProfile string) error {
+	if b.settings == nil {
+		return fmt.Errorf("settings store unavailable")
+	}
+	s, err := b.settings.Get(ctx)
+	if err != nil {
+		return err
+	}
+	s.WorkspaceProfile = newProfile
+	if _, err := b.settings.Update(ctx, s); err != nil {
+		return err
+	}
+	wp, err := workspace.ProfilePath(newProfile)
+	if err != nil {
+		return err
+	}
+	b.WithWorkspaceStore(workspace.NewFileStore(wp, workspace.NewSlogLogger(b.logger)))
+	return nil
+}
+
 // WithLogLevelVar attaches a runtime-mutable log level to the bindings so the
 // settings UI can change verbosity without restarting the application.
 func (b *Bindings) WithLogLevelVar(v *slog.LevelVar) *Bindings {
@@ -984,7 +1006,13 @@ func main() {
 
 	// Workspace store. Failures are non-fatal: the UI starts with an
 	// empty workspace.
-	if wp, err := workspace.DefaultPath(); err != nil {
+	activeProfile := "default"
+	if bindings.settings != nil {
+		if s, err := bindings.settings.Get(context.Background()); err == nil && s.WorkspaceProfile != "" {
+			activeProfile = s.WorkspaceProfile
+		}
+	}
+	if wp, err := workspace.ProfilePath(activeProfile); err != nil {
 		logger.Error("workspace: resolve path", slog.String("err", err.Error()))
 	} else {
 		bindings.WithWorkspaceStore(workspace.NewFileStore(wp, workspace.NewSlogLogger(logger)))
