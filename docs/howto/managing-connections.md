@@ -14,7 +14,7 @@ the toolbar:
 
 | Tooltip | What it does |
 |---|---|
-| `Edit selected connection…` / `Edit selected folder…` | Open the properties dialog to rename the item or change its settings (protocol, credentials, inheritance). |
+| `Edit selected connection…` | Open the properties dialog to rename the item or change its settings (protocol, credentials, inheritance). |
 | `Duplicate selected` | Create an exact copy of the selected item in the same folder. The new item's name will have `(copy)` appended. |
 | `Delete selected` | Remove the selected item. If a folder is deleted, all its contents are also deleted. This action prompts for confirmation. |
 
@@ -36,6 +36,7 @@ buttons:
 
 | Tooltip | What it does |
 |---|---|
+| `Bulk duplicate selected` | Creates an exact copy of each checked item in the same folder. |
 | `Move selected to folder…` | Opens a dialog to pick a new parent folder, then moves all checked items into it. |
 | `Bulk delete selected` | Deletes all checked items after a single confirmation prompt. Any active sessions for deleted connections are forcefully closed. |
 
@@ -65,5 +66,6 @@ drop it between two items to place it there.
 | `Delete selected` | Remove a single item |
 | `Add selection to multi-select` | Mark an item for bulk action |
 | `Clear multi-select` | Deselect all marked items |
+| `Bulk duplicate selected` | Bulk clone marked items |
 | `Move selected to folder…` | Bulk move marked items |
 | `Bulk delete selected` | Bulk delete marked items |
