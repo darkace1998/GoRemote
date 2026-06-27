@@ -75,6 +75,9 @@ type Settings struct {
 	// local only; nothing is uploaded.
 	CrashReportsDisabled bool `json:"crashReportsDisabled,omitempty"`
 
+	// WorkspaceProfile specifies the active UI workspace profile name.
+	WorkspaceProfile string `json:"workspaceProfile,omitempty"`
+
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
@@ -90,6 +93,7 @@ func Default() Settings {
 		ReconnectDelayMs: 2000,
 		TelemetryEnabled: false,
 		LogLevel:         LogLevelInfo,
+		WorkspaceProfile: "default",
 	}
 }
 
@@ -129,6 +133,16 @@ func (s *Settings) Validate() error {
 		if s.AutoUpdatePublicKey == "" {
 			errs = append(errs, fmt.Errorf("autoUpdatePublicKey required when autoUpdateEnabled is true"))
 		}
+	}
+	if s.WorkspaceProfile != "" {
+		for _, r := range s.WorkspaceProfile {
+			if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+				errs = append(errs, fmt.Errorf("workspaceProfile %q contains invalid characters; only alphanumeric, dash, and underscore are allowed", s.WorkspaceProfile))
+				break
+			}
+		}
+	} else {
+		errs = append(errs, fmt.Errorf("workspaceProfile cannot be empty"))
 	}
 	if len(errs) == 0 {
 		return nil
