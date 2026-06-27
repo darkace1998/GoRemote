@@ -65,7 +65,8 @@ is resolved from the parent folder chain.
 Select a connection in the tree, then either:
 
 * Press **Enter**, or
-* Click the toolbar icon whose tooltip is `"Connect (open selected)"`.
+* Click the tree-action toolbar icon whose tooltip is `"Connect selected connection"`, or
+* Click the main toolbar icon whose tooltip is `"Connect (open selected)"`.
 
 A new tab opens in the right pane with a live terminal for ready terminal
 protocols (SSH / Telnet / Rlogin / Raw / Serial / SFTP). HTTP, VNC, RDP, TN5250,
@@ -101,7 +102,8 @@ the About dialog which shows the version and license information.
 |---|---|
 | `New folder…` | Create a tree folder |
 | `New connection…` | Create a connection in the selected folder |
-| `Connect (open selected)` | Open a session for the highlighted connection |
+| `Connect selected connection` | Open a session for the highlighted connection (tree toolbar) |
+| `Connect (open selected)` | Open a session for the highlighted connection (main toolbar) |
 | `Close tab` | Close the active tab |
 | `Disconnect current session` | Cleanly close the active session |
 | `Detach current tab to its own window` | Float the active tab as a window |
