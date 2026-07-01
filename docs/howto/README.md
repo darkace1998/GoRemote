@@ -11,6 +11,7 @@ on "how do I do X in the running app".
 | Guide | Topic |
 |---|---|
 | [Getting started](./getting-started.md) | First launch, choosing a credential provider, creating folders & connections, opening a session |
+| [Workspace profiles](./workspace-profiles.md) | Isolating connection trees and active tabs by environment (e.g. Work vs Personal) |
 | [Managing connections](./managing-connections.md) | Editing, duplicating, deleting, and bulk-moving items |
 | [Importing from mRemoteNG](./importing-from-mremoteng.md) | Streaming XML / CSV importer, inheritance, warnings vs silent drops |
 | [Credentials](./credentials.md) | OS keychain, encrypted file vault, 1Password (`op`), Bitwarden (`bw`), lock/unlock |

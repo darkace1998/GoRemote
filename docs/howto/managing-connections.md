@@ -51,6 +51,16 @@ To add or remove a favorite:
 * **Context menu:** Right-click a connection in the tree and choose **"Add to favorites"** or **"Remove from favorites"**.
 * **Properties dialog:** Edit the connection and toggle the **Favorite** checkbox.
 
+## Customising icons and colors
+
+By default, connections use an icon representing their protocol. You can customise the icon and highlight color in the properties dialog to make important connections stand out.
+
+To assign a custom icon or color:
+1. Select a connection and click **Edit selected connection…** (or right-click and choose **Edit**).
+2. In the properties dialog, pick a new icon from the **Icon** dropdown.
+3. To set a custom color, type a hex code (e.g. `#FF5733`) or a named color into the **Color** field.
+4. Save the connection. The tree will instantly update to show the new icon and background color.
+
 ## Drag and drop
 
 GoRemote supports drag-and-drop to reorder items or move them between

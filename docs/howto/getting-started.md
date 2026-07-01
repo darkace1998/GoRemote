@@ -76,6 +76,8 @@ and MOSH currently surface experimental/planned Go-native protocol work.
 
 * **Close** the active tab with the per-tab `"Close tab"` button or
   with `Ctrl/Cmd + W`.
+* **Reorder** the active tab by pressing `Ctrl+Shift+PageUp` (move left) or `Ctrl+Shift+PageDown` (move right).
+* **Split** the active tab horizontally or vertically. Press `Ctrl+Shift+\` to split the pane right, or `Ctrl+Shift+-` to split it down.
 * **Detach** the active tab into its own window using the toolbar icon
   whose tooltip is `"Detach current tab to its own window"`. From the
   detached window, the **Reattach to main** button (tooltip: `"Move
@@ -110,4 +112,5 @@ the About dialog which shows the version and license information.
 | `Move this tab back into the main window` | Reattach a detached tab |
 | `Recent connections` | Reopen something you used recently |
 | `Open a favorite…` | Quick-pick a favorited connection |
+| `Workspace Profiles…` | Switch between different workspace profiles |
 | `About GoRemote` | Open the About dialog |
