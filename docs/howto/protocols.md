@@ -16,10 +16,10 @@ plugin system.
 | **Telnet** | Linemode + character mode with optional TLS-STARTTLS. |
 | **Rlogin** | Mostly here for legacy parity with mRemoteNG. |
 | **Raw socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
-| **HTTP** | **Experimental** Go-native in-process HTTP client. |
+| **HTTP** | **Dropped** as a native module; relies on external system browser. |
 | **Serial / COM** | Local serial ports (`/dev/ttyUSB0`, `COM3`, …) at configurable baud rate / parity. |
 | **RDP** | **Experimental** Go-native TCP scaffold; full graphical protocol pipeline is planned. |
-| **VNC** | **Experimental** Go-native TCP/RFB session. |
+| **VNC** | **Dropped** as a native module; relies on external `vncviewer` launcher. |
 | **TN5250** | **Experimental** Go-native TCP scaffold; full 5250 negotiation/screen model is planned. |
 | **MOSH** | **Experimental** Go-native package; session start is unsupported until MOSH UDP transport lands. |
 | **PowerShell remoting** | **Planned** Go-native remoting protocol; local process launching is intentionally unsupported. |
