@@ -97,5 +97,6 @@ Go's native `plugin` package. The reference implementation lives in
 | `Re-scan the plugin folder for changes` | Pick up plugins added by hand. |
 | `Open the plugin folder in your file manager` | Reveal the plugin root. |
 | `Enable this plugin` / `Disable this plugin` / `Quarantine this plugin (block it pending review)` / `Forget this plugin (remove from registry; folder kept)` | Per-plugin lifecycle. |
-| `Add a trusted publisher's ed25519 public key` / `Remove this trusted publisher key` | Manage trust. |
+| `Add a trusted publisher's ed25519 public key` | Add a key to the trusted publisher list. |
+| `Remove this trusted publisher key` | Remove a key from the trusted publisher list. |
 | `Save the marketplace URL to settings` / `Fetch listings from the marketplace URL` / `Download and install this plugin` | Marketplace flow. |
