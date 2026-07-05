@@ -54,6 +54,10 @@ External (out-of-process) plugins must use the IPC reference implementation at `
 4. Tests must cover: successful open, context cancellation, idempotent close, malformed input, and any protocol-specific negotiation.
 5. Update `PARITY.md`.
 
+## Protocols vs External Tools
+
+Go-native protocols must be implemented as in-process packages compiled directly into the binary (see `architecture.md`). Do not use the protocol plugin system for graphical protocols that rely on shelling out to external vendor viewers (like `vncviewer` or `mstsc.exe`). External tool launching is a separate planned feature outside the protocol plugin system.
+
 ## Adding a new credential provider
 
 1. Create `plugins/credential-<name>/`.
