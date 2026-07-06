@@ -61,7 +61,7 @@ Switching between modes takes effect on the next refresh.
 Click the button whose tooltip is `"Add a trusted publisher's ed25519
 public key"`, paste the publisher's base64-encoded ed25519 public key
 (32 bytes), give it a label, and save. Remove a key with the matching
-`"Remove this trusted publisher key"` button.
+`"Remove"` button.
 
 ## Marketplace
 
@@ -98,5 +98,5 @@ Go's native `plugin` package. The reference implementation lives in
 | `Open the plugin folder in your file manager` | Reveal the plugin root. |
 | `Enable this plugin` / `Disable this plugin` / `Quarantine this plugin (block it pending review)` / `Forget this plugin (remove from registry; folder kept)` | Per-plugin lifecycle. |
 | `Add a trusted publisher's ed25519 public key` | Add a key to the trusted publisher list. |
-| `Remove this trusted publisher key` | Remove a key from the trusted publisher list. |
+| `Remove` | Remove a key from the trusted publisher list. |
 | `Save the marketplace URL to settings` / `Fetch listings from the marketplace URL` / `Download and install this plugin` | Marketplace flow. |

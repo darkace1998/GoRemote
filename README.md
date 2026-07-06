@@ -45,7 +45,7 @@ docs/screenshots/       Reserved for screenshots once the UI stabilizes
 
 ## Prerequisites
 
-- **Go 1.26.2+** (pinned via the `go.mod` toolchain directive).
+- **Go 1.26** (pinned via the `go.mod` toolchain directive).
 - For desktop builds:
   - Linux: `libgl1-mesa-dev xorg-dev` (OpenGL + X11 headers for Fyne).
   - macOS: Xcode command-line tools.
