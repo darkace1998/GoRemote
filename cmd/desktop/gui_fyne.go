@@ -64,8 +64,8 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	sessions := &sessionRegistry{
 		tabs:          tabs,
 		items:         make(map[domain.ID]*sessionTab),
-		connItems:     make(map[string]*sessionTab),
-		openConns:     make(map[string]struct{}),
+		connItems:     make(map[string][]*sessionTab),
+		openConns:     make(map[string]int),
 		groups:        make(map[*container.TabItem]*paneGroup),
 		tabToSession:  make(map[*container.TabItem]*sessionTab),
 		connToSession: make(map[string]*sessionTab),
@@ -101,7 +101,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	}
 
 	tree := newConnTree(b, func(connID string) {
-		openSession(w, b, sessions, connID)
+		openSession(w, b, sessions, connID, false)
 	})
 	tree.onError = func(err error) {
 		fyne.Do(func() { dialog.ShowError(err, w) })
@@ -166,7 +166,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	treeActions := widget.NewToolbar(
 		tooltip.NewAction(theme.MediaPlayIcon(), "Connect selected connection", func() {
 			if id := tree.selectedConnection(); id != "" {
-				openSession(w, b, sessions, id)
+				openSession(w, b, sessions, id, false)
 				return
 			}
 			dialog.ShowInformation("No selection", "Select a connection to open.", w)
@@ -220,6 +220,9 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyR, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
 		reconnectCurrentSession(w, b, sessions)
 	})
+	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift}, func(_ fyne.Shortcut) {
+		duplicateCurrentSession(w, b, sessions)
+	})
 	w.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyD, Modifier: fyne.KeyModifierShortcutDefault}, func(_ fyne.Shortcut) {
 		detachCurrentTab(a, sessions)
 	})
@@ -231,7 +234,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
 	}, func(_ fyne.Shortcut) {
 		if id := tree.selectedConnection(); id != "" {
-			openSessionInSplit(w, b, sessions, id, "h")
+			openSessionInSplit(w, b, sessions, id, "h", false)
 		}
 	})
 	w.Canvas().AddShortcut(&desktop.CustomShortcut{
@@ -239,7 +242,7 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		Modifier: fyne.KeyModifierShortcutDefault | fyne.KeyModifierShift,
 	}, func(_ fyne.Shortcut) {
 		if id := tree.selectedConnection(); id != "" {
-			openSessionInSplit(w, b, sessions, id, "v")
+			openSessionInSplit(w, b, sessions, id, "v", false)
 		}
 	})
 	// Ctrl+Shift+PageUp / PageDown move the active tab one slot left
@@ -325,7 +328,7 @@ func installSystemTray(w fyne.Window, a fyne.App, b *Bindings, sessions *session
 					fyne.Do(func() {
 						w.Show()
 						w.RequestFocus()
-						openSession(w, b, sessions, r.ID)
+						openSession(w, b, sessions, r.ID, false)
 					})
 				}))
 			}
@@ -632,8 +635,8 @@ func tabLabelFor(st *sessionTab) string {
 type sessionRegistry struct {
 	mu            sync.Mutex
 	items         map[domain.ID]*sessionTab
-	connItems     map[string]*sessionTab
-	openConns     map[string]struct{}
+	connItems     map[string][]*sessionTab
+	openConns     map[string]int
 	groups        map[*container.TabItem]*paneGroup
 	tabToSession  map[*container.TabItem]*sessionTab
 	connToSession map[string]*sessionTab
@@ -651,26 +654,29 @@ type sessionRegistry struct {
 	addedHook func(*sessionTab)
 }
 
-func (r *sessionRegistry) reserveConn(connID string) bool {
+func (r *sessionRegistry) reserveConn(connID string, allowDuplicate bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.openConns[connID]; ok {
+	if r.openConns[connID] > 0 && !allowDuplicate {
 		return false
 	}
-	r.openConns[connID] = struct{}{}
+	r.openConns[connID]++
 	return true
 }
 
 func (r *sessionRegistry) releaseConn(connID string) {
 	r.mu.Lock()
-	delete(r.openConns, connID)
+	r.openConns[connID]--
+	if r.openConns[connID] <= 0 {
+		delete(r.openConns, connID)
+	}
 	r.mu.Unlock()
 }
 
 func (r *sessionRegistry) add(st *sessionTab) {
 	r.mu.Lock()
 	r.items[st.hid] = st
-	r.connItems[st.connID] = st
+	r.connItems[st.connID] = append(r.connItems[st.connID], st)
 	count := len(r.items)
 	var g *paneGroup
 	var newTab bool
@@ -731,8 +737,24 @@ func (r *sessionRegistry) remove(hid domain.ID) {
 	st, ok := r.items[hid]
 	if ok {
 		delete(r.items, hid)
-		delete(r.connItems, st.connID)
-		delete(r.openConns, st.connID)
+
+		var newConnItems []*sessionTab
+		for _, v := range r.connItems[st.connID] {
+			if v.hid != st.hid {
+				newConnItems = append(newConnItems, v)
+			}
+		}
+		if len(newConnItems) == 0 {
+			delete(r.connItems, st.connID)
+		} else {
+			r.connItems[st.connID] = newConnItems
+		}
+
+		r.openConns[st.connID]--
+		if r.openConns[st.connID] <= 0 {
+			delete(r.openConns, st.connID)
+		}
+
 		if st.tabItem != nil {
 			delete(r.tabToSession, st.tabItem)
 		}
@@ -816,7 +838,11 @@ func (r *sessionRegistry) findByTab(item *container.TabItem) *sessionTab {
 func (r *sessionRegistry) findByConnection(connID string) *sessionTab {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.connItems[connID]
+	items := r.connItems[connID]
+	if len(items) > 0 {
+		return items[0]
+	}
+	return nil
 }
 
 func (r *sessionRegistry) snapshot() []*sessionTab {
@@ -1656,8 +1682,9 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 				dialog.ShowInformation("No selection", "Select a connection to open.", w)
 				return
 			}
-			openSession(w, b, sessions, id)
+			openSession(w, b, sessions, id, false)
 		}),
+		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate session", func() { duplicateCurrentSession(w, b, sessions) }),
 		tooltip.NewAction(theme.MediaStopIcon(), "Disconnect current session", func() { closeCurrentSession(sessions) }),
 		tooltip.NewAction(theme.WindowMaximizeIcon(), "Detach current tab to its own window", func() { detachCurrentTab(a, sessions) }),
 		tooltip.NewAction(theme.HistoryIcon(), "Recent connections", func() { showRecentsMenu(w, b, sessions) }),
@@ -1875,7 +1902,7 @@ func showRecentsMenu(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 		if d != nil {
 			d.Hide()
 		}
-		openSession(w, b, sessions, id)
+		openSession(w, b, sessions, id, false)
 	}
 	scroll := container.NewVScroll(list)
 	scroll.SetMinSize(fyne.NewSize(360, 320))
@@ -1914,7 +1941,7 @@ func showFavoritesPicker(w fyne.Window, b *Bindings, sessions *sessionRegistry) 
 		if d != nil {
 			d.Hide()
 		}
-		openSession(w, b, sessions, id)
+		openSession(w, b, sessions, id, false)
 	}
 	scroll := container.NewVScroll(list)
 	scroll.SetMinSize(fyne.NewSize(360, 320))
@@ -1941,8 +1968,8 @@ func focusExistingSession(sessions *sessionRegistry, connID string) bool {
 	return true
 }
 
-func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID string) {
-	if !sessions.reserveConn(connID) {
+func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID string, allowDuplicate bool) {
+	if !sessions.reserveConn(connID, allowDuplicate) {
 		// Switch to the existing tab instead of opening a duplicate.
 		if focusExistingSession(sessions, connID) {
 			return
@@ -1963,7 +1990,7 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 
 	needPassword := needsInteractivePassword(cv)
 	if needPassword {
-		promptPasswordAndOpen(w, b, sessions, cv, connID)
+		promptPasswordAndOpen(w, b, sessions, cv, connID, allowDuplicate)
 		return
 	}
 
@@ -1979,10 +2006,10 @@ func openSession(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID s
 							if !retry {
 								return
 							}
-							if !sessions.reserveConn(connID) {
+							if !sessions.reserveConn(connID, allowDuplicate) {
 								return
 							}
-							promptPasswordAndOpen(w, b, sessions, cv, connID)
+							promptPasswordAndOpen(w, b, sessions, cv, connID, allowDuplicate)
 						}, w)
 				})
 				return
@@ -2033,7 +2060,7 @@ func needsInteractivePassword(cv iapp.ConnectionView) bool {
 	return false
 }
 
-func promptPasswordAndOpen(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string) {
+func promptPasswordAndOpen(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string, allowDuplicate bool) {
 	userEntry := widget.NewEntry()
 	userEntry.SetText(cv.Username)
 	userEntry.SetPlaceHolder("username")
@@ -2147,7 +2174,7 @@ func attachSessionInto(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv
 // the currently-selected tab using the given split orientation ("h" or
 // "v"). Falls back to a regular tab if no tab is selected or the
 // selected tab already hosts two panes.
-func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID, orientation string) {
+func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, connID, orientation string, allowDuplicate bool) {
 	target := sessions.tabs.Selected()
 	if target == nil {
 		dialog.ShowInformation("No Active Tab", "Open a session first, then split it.", w)
@@ -2157,7 +2184,7 @@ func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, c
 		dialog.ShowInformation("Cannot Split", "Selected tab is empty.", w)
 		return
 	}
-	if !sessions.reserveConn(connID) {
+	if !sessions.reserveConn(connID, allowDuplicate) {
 		dialog.ShowInformation("Already Open", "A session for this connection is already active.", w)
 		return
 	}
@@ -2170,7 +2197,7 @@ func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, c
 	}
 	sessions.setStatus(fmt.Sprintf("Connecting to %s…", cv.Name))
 	if needsInteractivePassword(cv) {
-		promptPasswordAndAttach(w, b, sessions, cv, connID, target, orientation)
+		promptPasswordAndAttach(w, b, sessions, cv, connID, target, orientation, allowDuplicate)
 		return
 	}
 	go func() {
@@ -2186,7 +2213,7 @@ func openSessionInSplit(w fyne.Window, b *Bindings, sessions *sessionRegistry, c
 
 // promptPasswordAndAttach is the split-aware version of
 // promptPasswordAndOpen.
-func promptPasswordAndAttach(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string, targetTab *container.TabItem, orientation string) {
+func promptPasswordAndAttach(w fyne.Window, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string, targetTab *container.TabItem, orientation string, allowDuplicate bool) {
 	userEntry := widget.NewEntry()
 	userEntry.SetText(cv.Username)
 	userEntry.SetPlaceHolder("username")
@@ -2222,8 +2249,8 @@ func promptPasswordAndAttach(w fyne.Window, b *Bindings, sessions *sessionRegist
 // openSessionInWindow opens a session for connID in a brand-new fyne.Window
 // rather than as a tab. Useful when the user wants a side-by-side or
 // secondary-monitor layout. Closing the window terminates the session.
-func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry, connID string) {
-	if !sessions.reserveConn(connID) {
+func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry, connID string, allowDuplicate bool) {
+	if !sessions.reserveConn(connID, allowDuplicate) {
 		dialog.ShowInformation("Already Open",
 			"A session for this connection is already active. Close it before opening a new window.", parent)
 		return
@@ -2236,7 +2263,7 @@ func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *
 		return
 	}
 	if needsInteractivePassword(cv) {
-		promptPasswordAndOpenInWindow(parent, a, b, sessions, cv, connID)
+		promptPasswordAndOpenInWindow(parent, a, b, sessions, cv, connID, allowDuplicate)
 		return
 	}
 	go func() {
@@ -2250,7 +2277,7 @@ func openSessionInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *
 	}()
 }
 
-func promptPasswordAndOpenInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string) {
+func promptPasswordAndOpenInWindow(parent fyne.Window, a fyne.App, b *Bindings, sessions *sessionRegistry, cv iapp.ConnectionView, connID string, allowDuplicate bool) {
 	userEntry := widget.NewEntry()
 	userEntry.SetText(cv.Username)
 	userEntry.SetPlaceHolder("username")
@@ -2503,6 +2530,20 @@ func moveCurrentTab(sessions *sessionRegistry, dir int) {
 
 // reconnectCurrentSession closes the current tab's session and immediately
 // re-opens its connection. Useful when a remote drops or after sleep/wake.
+func duplicateCurrentSession(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
+	selected := sessions.tabs.Selected()
+	if selected == nil {
+		return
+	}
+	st := sessions.findByTab(selected)
+	if st == nil {
+		return
+	}
+	connID := st.connID
+
+	openSession(w, b, sessions, connID, true)
+}
+
 func reconnectCurrentSession(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 	selected := sessions.tabs.Selected()
 	if selected == nil {
@@ -2526,7 +2567,7 @@ func reconnectCurrentSession(w fyne.Window, b *Bindings, sessions *sessionRegist
 			}
 			time.Sleep(50 * time.Millisecond)
 		}
-		fyne.Do(func() { openSession(w, b, sessions, connID) })
+		fyne.Do(func() { openSession(w, b, sessions, connID, false) })
 	}()
 }
 
@@ -3857,7 +3898,7 @@ func restoreWorkspace(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 				continue
 			}
 			connID := t.ConnectionID
-			fyne.Do(func() { openSession(w, b, sessions, connID) })
+			fyne.Do(func() { openSession(w, b, sessions, connID, false) })
 		}
 		// Wait for every reopened session's add() to land, with a
 		// per-session timeout so a session that fails to open never
@@ -4156,10 +4197,10 @@ func showTreeContextMenu(w fyne.Window, a fyne.App, b *Bindings, tree *connTree,
 		connID := n.ID
 		host := n.Host
 		port := n.Port
-		connectItem := fyne.NewMenuItem("Connect", func() { openSession(w, b, sessions, connID) })
-		newWinItem := fyne.NewMenuItem("Open in new window…", func() { openSessionInWindow(w, a, b, sessions, connID) })
-		splitRightItem := fyne.NewMenuItem("Open in split right", func() { openSessionInSplit(w, b, sessions, connID, "h") })
-		splitBelowItem := fyne.NewMenuItem("Open in split below", func() { openSessionInSplit(w, b, sessions, connID, "v") })
+		connectItem := fyne.NewMenuItem("Connect", func() { openSession(w, b, sessions, connID, false) })
+		newWinItem := fyne.NewMenuItem("Open in new window…", func() { openSessionInWindow(w, a, b, sessions, connID, false) })
+		splitRightItem := fyne.NewMenuItem("Open in split right", func() { openSessionInSplit(w, b, sessions, connID, "h", false) })
+		splitBelowItem := fyne.NewMenuItem("Open in split below", func() { openSessionInSplit(w, b, sessions, connID, "v", false) })
 		canSplit := false
 		if sel := sessions.tabs.Selected(); sel != nil {
 			if g := sessions.groupFor(sel); g != nil && g.root != nil {
@@ -4294,7 +4335,7 @@ func connectAllUnder(w fyne.Window, b *Bindings, sessions *sessionRegistry, n *i
 
 	doConnect := func() {
 		for _, id := range toConnect {
-			openSession(w, b, sessions, id)
+			openSession(w, b, sessions, id, false)
 		}
 	}
 
