@@ -25,6 +25,8 @@ commit the image with the listed name.
 | `update-check.png` | Update-check result dialog (up to date or update available). |
 | `logs-viewer.png` | Log viewer dialog with sample content visible. |
 | `toolbar.png` | Wide capture of the main toolbar with hover tooltips visible. |
+| `workspace-profiles.png` | Workspace Profiles dialog showing the profile list. |
+| `settings-dialog.png` | Settings dialog showing appearance and behaviour options. |
 
 ## Capture conventions
 

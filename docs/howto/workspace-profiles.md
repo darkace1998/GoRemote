@@ -4,6 +4,8 @@ GoRemote supports multiple independent **Workspace Profiles**. Each profile has 
 
 You can use profiles to separate different environments (e.g. "Work" vs "Personal", or "Prod" vs "Lab") so that connections and active tabs are kept isolated.
 
+> _Screenshot pending — see [contributing-screenshots.md](./contributing-screenshots.md). Suggested filename: `workspace-profiles.png`._
+
 ## Switch profiles
 
 To switch to a different profile:

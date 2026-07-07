@@ -19,6 +19,7 @@ on "how do I do X in the running app".
 | [Plugins](./plugins.md) | Discovering, enabling, quarantining; trust policy & keys; marketplace |
 | [Backup & restore](./backup-and-restore.md) | Zip backups, restore safety checks, integrity validator |
 | [Git sync](./git-sync.md) | Mirror your workspace as a git repo and auto-commit on every save |
+| [Settings](./settings.md) | Configuring appearance, behaviour, telemetry, and crash reports |
 | [Updates](./updates.md) | Auto-update channel, manifest signing, manual "check for updates" |
 | [Logs & diagnostics](./logs-and-diagnostics.md) | Log file location, redaction, Diagnostics dialog, support bundles |
 | [Contributing screenshots](./contributing-screenshots.md) | How to capture and submit screenshots for these pages |
