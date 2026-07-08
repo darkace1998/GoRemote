@@ -25,8 +25,7 @@ plugin system.
 | **PowerShell remoting** | **Planned** Go-native remoting protocol; local process launching is intentionally unsupported. |
 
 Open any of these by selecting the connection in the tree and
-clicking the toolbar icon whose tooltip reads `"Connect (open
-selected)"`.
+clicking the toolbar icon whose tooltip reads `"Connect (open selected)"`.
 
 ## Choosing per-connection settings
 
