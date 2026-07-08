@@ -8,8 +8,7 @@ connection trees. Both `.xml` (the standard mRemoteNG export) and
 
 ## 1. Open the importer
 
-Click the toolbar icon whose tooltip reads `"Import from mRemoteNG
-(XML/CSV)…"`. Pick the file with the system file picker.
+Click the toolbar icon whose tooltip reads `"Import from mRemoteNG (XML/CSV)…"`. Pick the file with the system file picker.
 
 ## 2. What gets imported
 

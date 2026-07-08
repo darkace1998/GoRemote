@@ -31,8 +31,7 @@ Hover over any toolbar icon for a tooltip describing the action.
 
 ## 2. Pick a credential provider (optional but recommended)
 
-Open **Settings → Credentials** by clicking the toolbar icon whose
-tooltip reads `"Manage credentials…"`.
+Open **Settings → Credentials** by clicking the toolbar icon whose tooltip reads `"Manage credentials…"`.
 
 GoRemote ships with several providers (see
 [credentials.md](./credentials.md)). For most users the easiest path is:
@@ -80,8 +79,7 @@ and MOSH currently surface experimental/planned Go-native protocol work.
 * **Split** the active tab horizontally or vertically. Press `Ctrl+Shift+\` to split the pane right, or `Ctrl+Shift+-` to split it down.
 * **Detach** the active tab into its own window using the toolbar icon
   whose tooltip is `"Detach current tab to its own window"`. From the
-  detached window, the **Reattach to main** button (tooltip: `"Move
-  this tab back into the main window"`) drops it back into the tab
+  detached window, the **Reattach to main** button (tooltip: `"Move this tab back into the main window"`) drops it back into the tab
   strip without disturbing the underlying session.
 * **Disconnect** the active session with the toolbar icon whose
   tooltip is `"Disconnect current session"`.

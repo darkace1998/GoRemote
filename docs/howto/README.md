@@ -27,8 +27,7 @@ on "how do I do X in the running app".
 ## Conventions used in these docs
 
 * **Toolbar reference.** Every page that talks about a UI control names
-  the exact hover-tooltip string used in the app, e.g. `"Sync now
-  (commit & push to Git)"`. If you hover over an icon and see that
+  the exact hover-tooltip string used in the app, e.g. `"Sync now (commit & push to Git)"`. If you hover over an icon and see that
   label, you've found the right button.
 * **Screenshot stubs.** Where a screenshot would be helpful but has not
   been captured yet, the page contains a stub like

@@ -26,8 +26,7 @@ This is the same boundary git-sync uses, for the same reason.
 
 ## Create a backup
 
-1. Click the toolbar icon whose tooltip reads `"Backup connections to
-   a zip…"`.
+1. Click the toolbar icon whose tooltip reads `"Backup connections to a zip…"`.
 2. Pick a destination path. The dialog suggests
    `goremote-backup-<timestamp>.zip` by default.
 3. The archive is written atomically — on failure no partial file is
@@ -50,8 +49,7 @@ This is the same boundary git-sync uses, for the same reason.
 ## Re-syncing git-sync after restore
 
 If git-sync is enabled, the restored workspace is committed and pushed
-on the next save. You can also click `"Sync now (commit & push to
-Git)"` to commit the restored state immediately. See
+on the next save. You can also click `"Sync now (commit & push to Git)"` to commit the restored state immediately. See
 [git-sync.md](./git-sync.md).
 
 ## Related buttons
