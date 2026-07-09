@@ -440,6 +440,20 @@ func (b *Bindings) ListRecents(ctx context.Context) []app.NodeView {
 	return out
 }
 
+// ClearRecents empties the list of recently opened connections from the workspace.
+func (b *Bindings) ClearRecents(ctx context.Context) error {
+	if b.workspace == nil {
+		return errors.New("workspace store not initialised")
+	}
+	w, err := b.workspace.Load(ctx)
+	if err != nil {
+		return err
+	}
+	w.ClearRecents()
+	return b.workspace.Save(ctx, w)
+}
+
+
 // --- Session commands ---------------------------------------------------
 
 // OpenSession starts a session for a connection and returns the handle.

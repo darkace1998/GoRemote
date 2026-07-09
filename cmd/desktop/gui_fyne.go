@@ -1906,7 +1906,20 @@ func showRecentsMenu(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
 	}
 	scroll := container.NewVScroll(list)
 	scroll.SetMinSize(fyne.NewSize(360, 320))
-	d = dialog.NewCustom("Recent Connections", "Close", scroll, w)
+
+	clearBtn := widget.NewButtonWithIcon("Clear recent connections", theme.DeleteIcon(), func() {
+		if err := b.ClearRecents(context.Background()); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		if d != nil {
+			d.Hide()
+		}
+		dialog.ShowInformation("Recents", "Recent connections cleared.", w)
+	})
+	content := container.NewBorder(nil, container.NewHBox(clearBtn), nil, nil, scroll)
+
+	d = dialog.NewCustom("Recent Connections", "Close", content, w)
 	d.Show()
 }
 
