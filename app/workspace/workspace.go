@@ -72,6 +72,12 @@ func (w *Workspace) TouchRecent(connID string, at time.Time) {
 	w.Recents = out
 }
 
+// ClearRecents empties the list of recent connections.
+func (w *Workspace) ClearRecents() {
+	w.Recents = nil
+}
+
+
 // PaneLayout describes the split structure of a single tab that hosts
 // more than one session pane. GroupID is the stable identifier shared
 // by all TabStates that belong to this group (TabState.PaneGroup).

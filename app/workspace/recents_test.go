@@ -73,3 +73,12 @@ func TestRecentsRoundTripJSON(t *testing.T) {
 		t.Errorf("first Recents = %q, want conn-2", got.Recents[0].ConnectionID)
 	}
 }
+
+func TestClearRecents(t *testing.T) {
+	w := Default()
+	w.TouchRecent("conn-a", time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC))
+	w.ClearRecents()
+	if got := len(w.Recents); got != 0 {
+		t.Fatalf("len(Recents) = %d, want 0", got)
+	}
+}
