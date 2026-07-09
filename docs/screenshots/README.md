@@ -21,6 +21,8 @@ committing an image.
 | `update-check.png` | Update check result | [updates.md](../howto/updates.md) |
 | `logs-viewer.png` | Log viewer dialog | [logs-and-diagnostics.md](../howto/logs-and-diagnostics.md) |
 | `toolbar.png` | Main toolbar with tooltip visible | [getting-started.md](../howto/getting-started.md) |
+| `workspace-profiles.png` | Workspace Profiles dialog | [workspace-profiles.md](../howto/workspace-profiles.md) |
+| `settings-dialog.png` | Settings dialog | [settings.md](../howto/settings.md) |
 
 If you add a new how-to page that needs a screenshot, also add the
 filename here and in

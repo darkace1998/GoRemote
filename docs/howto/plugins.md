@@ -87,7 +87,7 @@ a small JSON-framed IPC (see
 [`proto/plugin/v1/`](../../proto/plugin/v1/)). This isolates plugin
 crashes from the host and avoids ABI surprises that would come from
 Go's native `plugin` package. The reference implementation lives in
-[`plugins/external-example/`](../../plugins/external-example/).
+[`host/plugin/ipc/`](../../host/plugin/ipc/).
 
 ## Related buttons
 
