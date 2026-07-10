@@ -73,6 +73,7 @@ and MOSH currently surface experimental/planned Go-native protocol work.
 
 ## 6. Tabs, splits, and detached windows
 
+* **Duplicate** the active session with the toolbar icon whose tooltip is `"Duplicate session"` or `Ctrl/Cmd + D`.
 * **Close** the active tab with the per-tab `"Close tab"` button or
   with `Ctrl/Cmd + W`.
 * **Reorder** the active tab by pressing `Ctrl+Shift+PageUp` (move left) or `Ctrl+Shift+PageDown` (move right).
@@ -105,6 +106,7 @@ the About dialog which shows the version and license information.
 | `Connect selected connection` | Open a session for the highlighted connection (tree toolbar) |
 | `Connect (open selected)` | Open a session for the highlighted connection (main toolbar) |
 | `Close tab` | Close the active tab |
+| `Duplicate session` | Open a duplicate of the active session tab |
 | `Disconnect current session` | Cleanly close the active session |
 | `Detach current tab to its own window` | Float the active tab as a window |
 | `Move this tab back into the main window` | Reattach a detached tab |
