@@ -114,3 +114,13 @@ the About dialog which shows the version and license information.
 | `Open a favorite…` | Quick-pick a favorited connection |
 | `Workspace Profiles…` | Switch between different workspace profiles |
 | `About GoRemote` | Open the About dialog |
+| `Import from mRemoteNG (XML/CSV)…` | Open the mRemoteNG import dialog |
+| `Backup connections to a zip…` | Create a zip backup of the connection tree |
+| `Restore from a zip…` | Restore the connection tree from a zip backup |
+| `Manage credentials…` | Open the credential manager |
+| `Settings…` | Open application settings |
+| `Plugins…` | Open the plugin manager |
+| `View logs…` | Open the log viewer |
+| `Diagnostics` | Open the diagnostics dialog |
+| `Sync now (commit & push to Git)` | Trigger a git sync manually |
+| `Check for updates` | Check for application updates |

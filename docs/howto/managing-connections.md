@@ -39,7 +39,6 @@ buttons:
 | `Bulk duplicate selected` | Creates an exact copy of each checked item in the same folder. |
 | `Move selected to folder…` | Opens a dialog to pick a new parent folder, then moves all checked items into it. |
 | `Bulk delete selected` | Deletes all checked items after a single confirmation prompt. Any active sessions for deleted connections are forcefully closed. |
-| `Reload from disk` | Refresh the connection tree from disk |
 
 *Note: Multi-row bulk editing of connection properties is not yet
 supported.*
