@@ -77,7 +77,7 @@ and MOSH currently surface experimental/planned Go-native protocol work.
 * **Close** the active tab with the per-tab `"Close tab"` button or
   with `Ctrl/Cmd + W`.
 * **Reorder** the active tab by pressing `Ctrl+Shift+PageUp` (move left) or `Ctrl+Shift+PageDown` (move right).
-* **Split** the active tab horizontally or vertically. Press `Ctrl+Shift+\` to split the pane right, or `Ctrl+Shift+-` to split it down.
+* **Split** the active tab horizontally or vertically. Press `Ctrl+Shift+\` to split the pane right, or `Ctrl+Shift+-` to split it down. You can also right-click a connection in the tree and choose **"Open in split right"** or **"Open in split below"** to open it as a split pane in the active tab.
 * **Detach** the active tab into its own window using the toolbar icon
   whose tooltip is `"Detach current tab to its own window"`. From the
   detached window, the **Reattach to main** button (tooltip: `"Move this tab back into the main window"`) drops it back into the tab
