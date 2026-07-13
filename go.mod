@@ -7,11 +7,11 @@ toolchain go1.26.2
 require (
 	fyne.io/fyne/v2 v2.8.0-rc2
 	github.com/fyne-io/terminal v0.0.0-20260529110433-47cc6acb72ae
-	github.com/pkg/sftp v1.13.10
+	github.com/pkg/sftp v1.13.11
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.7.1
-	golang.org/x/crypto v0.53.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/crypto v0.54.0
+	golang.org/x/sys v0.47.0
 )
 
 require (
@@ -52,7 +52,7 @@ require (
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/image v0.42.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
