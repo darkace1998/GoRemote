@@ -29,7 +29,7 @@ The new profile will start with an empty connection tree. All new folders and co
 
 ## How profiles are stored
 
-Profiles are stored alongside the default workspace in your OS-specific state directory (see [logs-and-diagnostics.md](./logs-and-diagnostics.md)). The `workspace.json` file represents the default profile, and additional profiles are stored as `workspace-<profile-name>.json`.
+Profiles are stored alongside the default workspace in your OS-specific state directory (see [logs-and-diagnostics.md](./logs-and-diagnostics.md)). The `workspace.json` file represents the default profile, and additional profiles are stored as `workspace_<profile-name>.json`.
 
 ## Related buttons
 

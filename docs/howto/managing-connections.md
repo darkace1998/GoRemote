@@ -57,7 +57,7 @@ By default, connections use an icon representing their protocol. You can customi
 
 To assign a custom icon or color:
 1. Select a connection and click **Edit selected connection…** (or right-click and choose **Edit**).
-2. In the properties dialog, pick a new icon from the **Icon** dropdown.
+2. In the properties dialog, pick a new icon from the **Icon** dropdown (or leave it blank to use the default protocol icon).
 3. To set a custom color, type a hex code (e.g. `#FF5733`) or a named color into the **Color** field.
 4. Save the connection. The tree will instantly update to show the new icon and background color.
 
