@@ -19,13 +19,20 @@ plugin system.
 | **HTTP/HTTPS** | **Experimental** Go-native in-process client that fetches URLs without spawning a browser. |
 | **Serial / COM** | Local serial ports (`/dev/ttyUSB0`, `COM3`, …) at configurable baud rate / parity. |
 | **RDP** | **Experimental** Go-native TCP scaffold; full graphical protocol pipeline is planned. |
-| **VNC** | **Experimental** Go-native TCP scaffold; full RFB protocol framing is planned. |
 | **TN5250** | **Experimental** Go-native TCP scaffold; full 5250 negotiation/screen model is planned. |
 | **MOSH** | **Experimental** Go-native package; session start is unsupported until MOSH UDP transport lands. |
 | **PowerShell remoting** | **Planned** Go-native remoting protocol; local process launching is intentionally unsupported. |
 
 Open any of these by selecting the connection in the tree and
 clicking the toolbar icon whose tooltip reads `"Connect (open selected)"`.
+
+
+## External launchers
+
+| Protocol | Notes |
+|---|---|
+| **HTTP / HTTPS** | Launches the default system browser via external command. |
+| **VNC** | Launches the system `vncviewer` via external command. |
 
 ## Choosing per-connection settings
 
