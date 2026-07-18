@@ -12,6 +12,7 @@ committing an image.
 | File | Captured from | How-to page |
 |---|---|---|
 | `getting-started-main-window.png` | Main window | [getting-started.md](../howto/getting-started.md) |
+| `managing-connections.png` | Main window with multiple items checked | [managing-connections.md](../howto/managing-connections.md) |
 | `settings-git-sync.png` | Settings → Git sync | [git-sync.md](../howto/git-sync.md) |
 | `import-mremoteng-dialog.png` | Import dialog | [importing-from-mremoteng.md](../howto/importing-from-mremoteng.md) |
 | `credentials-unlock.png` | Credentials dialog (locked) | [credentials.md](../howto/credentials.md) |

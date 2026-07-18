@@ -14,8 +14,9 @@ plugin system.
 | **SSH** | Native Go SSH client. Supports agent / key / password / keyboard-interactive. |
 | **SFTP** | Same auth surface as SSH; renders a file browser tab. |
 | **Telnet** | Linemode + character mode with optional TLS-STARTTLS. |
-| **Rlogin** | Mostly here for legacy parity with mRemoteNG. |
-| **Raw socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
+| **rlogin** | Mostly here for legacy parity with mRemoteNG. |
+| **Raw Socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
+| **HTTP/HTTPS** | **Experimental** Go-native in-process client that fetches URLs without spawning a browser. |
 | **Serial / COM** | Local serial ports (`/dev/ttyUSB0`, `COM3`, …) at configurable baud rate / parity. |
 | **RDP** | **Experimental** Go-native TCP scaffold; full graphical protocol pipeline is planned. |
 | **TN5250** | **Experimental** Go-native TCP scaffold; full 5250 negotiation/screen model is planned. |
