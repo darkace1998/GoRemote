@@ -17,6 +17,7 @@ plugin system.
 | **rlogin** | Mostly here for legacy parity with mRemoteNG. |
 | **Raw Socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
 | **HTTP/HTTPS** | **Experimental** Go-native in-process client that fetches URLs without spawning a browser. |
+| **VNC** | **Experimental** Go-native in-process TCP/RFB session. |
 | **Serial / COM** | Local serial ports (`/dev/ttyUSB0`, `COM3`, …) at configurable baud rate / parity. |
 | **RDP** | **Experimental** Go-native TCP scaffold; full graphical protocol pipeline is planned. |
 | **TN5250** | **Experimental** Go-native TCP scaffold; full 5250 negotiation/screen model is planned. |
@@ -27,12 +28,6 @@ Open any of these by selecting the connection in the tree and
 clicking the toolbar icon whose tooltip reads `"Connect (open selected)"`.
 
 
-## External launchers
-
-| Protocol | Notes |
-|---|---|
-| **HTTP / HTTPS** | Launches the default system browser via external command. |
-| **VNC** | Launches the system `vncviewer` via external command. |
 
 ## Choosing per-connection settings
 
