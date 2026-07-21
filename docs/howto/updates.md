@@ -55,6 +55,6 @@ ones; you cannot use the manual button to bypass an unsigned manifest.
 
 | Tooltip | What it does |
 |---|---|
-| `Settings…` | Where you set the manifest URL and public key. |
-| `Check for updates` | Run a manual update check now. |
-| `View logs…` | Diagnose failed checks. |
+| `"Settings…"` | Where you set the manifest URL and public key. |
+| `"Check for updates"` | Run a manual update check now. |
+| `"View logs…"` | Diagnose failed checks. |
