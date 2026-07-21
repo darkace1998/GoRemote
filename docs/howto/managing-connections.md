@@ -14,9 +14,9 @@ the toolbar:
 
 | Tooltip | What it does |
 |---|---|
-| `Edit selected connection…` | Open the properties dialog to rename the item or change its settings (protocol, credentials, inheritance). |
-| `Duplicate selected` | Create an exact copy of the selected item in the same folder. The new item's name will have `(copy)` appended. |
-| `Delete selected` | Remove the selected item. If a folder is deleted, all its contents are also deleted. This action prompts for confirmation. |
+| `"Edit selected connection…"` | Open the properties dialog to rename the item or change its settings (protocol, credentials, inheritance). |
+| `"Duplicate selected"` | Create an exact copy of the selected item in the same folder. The new item's name will have `(copy)` appended. |
+| `"Delete selected"` | Remove the selected item. If a folder is deleted, all its contents are also deleted. This action prompts for confirmation. |
 
 ## Bulk operations (Multi-select)
 
@@ -36,9 +36,9 @@ buttons:
 
 | Tooltip | What it does |
 |---|---|
-| `Bulk duplicate selected` | Creates an exact copy of each checked item in the same folder. |
-| `Move selected to folder…` | Opens a dialog to pick a new parent folder, then moves all checked items into it. |
-| `Bulk delete selected` | Deletes all checked items after a single confirmation prompt. Any active sessions for deleted connections are forcefully closed. |
+| `"Bulk duplicate selected"` | Creates an exact copy of each checked item in the same folder. |
+| `"Move selected to folder…"` | Opens a dialog to pick a new parent folder, then moves all checked items into it. |
+| `"Bulk delete selected"` | Deletes all checked items after a single confirmation prompt. Any active sessions for deleted connections are forcefully closed. |
 
 *Note: Multi-row bulk editing of connection properties is not yet
 supported.*
@@ -56,7 +56,7 @@ To add or remove a favorite:
 By default, connections use an icon representing their protocol. You can customise the icon and highlight color in the properties dialog to make important connections stand out.
 
 To assign a custom icon or color:
-1. Select a connection and click **Edit selected connection…** (or right-click and choose **Edit**).
+1. Select a connection and click the toolbar icon whose tooltip reads `"Edit selected connection…"` (or right-click and choose **"Edit"**).
 2. In the properties dialog, pick a new icon from the **Icon** dropdown (or leave it blank to use the default protocol icon).
 3. To set a custom color, type a hex code (e.g. `#FF5733`) or a named color into the **Color** field.
 4. Save the connection. The tree will instantly update to show the new icon and background color.
@@ -71,12 +71,12 @@ drop it between two items to place it there.
 
 | Tooltip | What it does |
 |---|---|
-| `Edit selected connection…` | Change connection properties |
-| `Duplicate selected` | Clone a connection or folder |
-| `Delete selected` | Remove a single item |
-| `Add selection to multi-select` | Mark an item for bulk action |
-| `Clear multi-select` | Deselect all marked items |
-| `Bulk duplicate selected` | Bulk clone marked items |
-| `Move selected to folder…` | Bulk move marked items |
-| `Bulk delete selected` | Bulk delete marked items |
-| `Reload from disk` | Refresh the connection tree from disk |
+| `"Edit selected connection…"` | Change connection properties |
+| `"Duplicate selected"` | Clone a connection or folder |
+| `"Delete selected"` | Remove a single item |
+| `"Add selection to multi-select"` | Mark an item for bulk action |
+| `"Clear multi-select"` | Deselect all marked items |
+| `"Bulk duplicate selected"` | Bulk clone marked items |
+| `"Move selected to folder…"` | Bulk move marked items |
+| `"Bulk delete selected"` | Bulk delete marked items |
+| `"Reload from disk"` | Refresh the connection tree from disk |

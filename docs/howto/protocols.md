@@ -42,7 +42,7 @@ Common knobs:
 
 | Tooltip | What it does |
 |---|---|
-| `New connection…` | Create a connection (you choose the protocol here). |
-| `Connect (open selected)` | Open a session with the protocol configured on the selected connection. |
-| `Disconnect current session` | Cleanly terminate the active session. |
-| `Plugins…` | Where third-party protocol modules surface (see [plugins.md](./plugins.md)). |
+| `"New connection…"` | Create a connection (you choose the protocol here). |
+| `"Connect (open selected)"` | Open a session with the protocol configured on the selected connection. |
+| `"Disconnect current session"` | Cleanly terminate the active session. |
+| `"Plugins…"` | Where third-party protocol modules surface (see [plugins.md](./plugins.md)). |

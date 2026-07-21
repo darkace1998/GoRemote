@@ -35,4 +35,4 @@ Profiles are stored alongside the default workspace in your OS-specific state di
 
 | Tooltip | What it does |
 |---|---|
-| `Workspace Profiles…` | Open the dialog to switch profiles or create a new one. |
+| `"Workspace Profiles…"` | Open the dialog to switch profiles or create a new one. |

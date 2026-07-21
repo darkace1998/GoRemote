@@ -39,4 +39,4 @@ Settings are saved as a JSON document located in the OS-specific state directory
 
 | Tooltip | What it does |
 |---|---|
-| `Settings…` | Open the settings dialog. |
+| `"Settings…"` | Open the settings dialog. |

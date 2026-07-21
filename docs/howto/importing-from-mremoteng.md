@@ -74,6 +74,6 @@ delete the previously-imported subtree first (use the tree-toolbar
 
 | Tooltip | What it does |
 |---|---|
-| `Import from mRemoteNG (XML/CSV)…` | Open the importer dialog. |
-| `Bulk delete selected` | Remove a previously-imported subtree before re-importing. |
-| `Reload from disk` | Refresh the tree if the import completed in the background. |
+| `"Import from mRemoteNG (XML/CSV)…"` | Open the importer dialog. |
+| `"Bulk delete selected"` | Remove a previously-imported subtree before re-importing. |
+| `"Reload from disk"` | Refresh the tree if the import completed in the background. |
