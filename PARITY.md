@@ -22,13 +22,15 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
 | SFTP         | (3rd-party) | ✅ **Ready**       | Interactive SFTP file-browser shell (ls/cd/get/put/mkdir/rm/mv/chmod/...) over an SSH connection. Reuses the SSH plugin's auth + known-hosts machinery. |
 | Serial / COM | ✅ (PuTTY)  | ✅ **Ready**       | Local serial-console terminal sessions. Configurable baud/data-bits/parity/stop-bits/EOL. Cross-platform (Linux/macOS `/dev/tty*`, Windows `COMn`). |
+| HTTP/HTTPS   | ✅        | 🔶 **Experimental** | Go-native in-process HTTP client; fetches URLs without spawning a browser. |
+| VNC          | ✅        | 🔶 **Experimental** | Go-native TCP/RFB session; full RFB handling still experimental. |
 
 Plugins shipped today (`plugins/`):
 
 ```
 protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
 protocol-rawsocket  protocol-rdp        protocol-tn5250     protocol-mosh
-protocol-serial
+protocol-serial     protocol-http       protocol-vnc
 protocol-powershell (planned, not registered)
 ```
 
