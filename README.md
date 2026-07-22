@@ -30,7 +30,7 @@ app/                    App-level features: settings, workspace persistence, upd
                         diagnostics, marketplace, extplugin loader, git-sync
 plugins/
   protocol-{ssh,sftp,telnet,rlogin,rawsocket,serial}/   Ready Go-native terminal protocols
-  protocol-{rdp,tn5250,mosh}/                           Experimental Go-native protocol scaffolds
+  protocol-{rdp,tn5250,mosh,http,vnc}/                  Experimental Go-native protocol scaffolds
   protocol-powershell/                                  Planned Go-native PowerShell remoting module
   credential-{file,keychain,1password,bitwarden}/       Credential providers
 proto/plugin/v1/        Length-prefixed JSON IPC frame + message types for the
