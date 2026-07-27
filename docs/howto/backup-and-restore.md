@@ -56,7 +56,7 @@ on the next save. You can also click `"Sync now (commit & push to Git)"` to comm
 
 | Tooltip | What it does |
 |---|---|
-| `Backup connections to a zip…` | Write the workspace archive. |
-| `Restore from a zip…` | Replace the workspace from an archive (with safety checks). |
-| `Reload from disk` | Reload the in-memory tree after a manual restore. |
-| `Sync now (commit & push to Git)` | Push the restored state to your git remote. |
+| `"Backup connections to a zip…"` | Write the workspace archive. |
+| `"Restore from a zip…"` | Replace the workspace from an archive (with safety checks). |
+| `"Reload from disk"` | Reload the in-memory tree after a manual restore. |
+| `"Sync now (commit & push to Git)"` | Push the restored state to your git remote. |

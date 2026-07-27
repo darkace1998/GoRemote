@@ -43,9 +43,9 @@ shows the tail of the active log file (256 KiB) with three actions:
 
 | Tooltip | What it does |
 |---|---|
-| `Reload the tail of the log file` | Re-read the file from disk. |
-| `Copy the visible log to the clipboard` | Copies the visible content. |
-| `Open the log folder in your file manager` | Opens the log directory in the OS file manager. |
+| `"Reload the tail of the log file"` | Re-read the file from disk. |
+| `"Copy the visible log to the clipboard"` | Copies the visible content. |
+| `"Open the log folder in your file manager"` | Opens the log directory in the OS file manager. |
 
 If no log file is configured (stderr-only run), the viewer says so.
 
@@ -76,8 +76,8 @@ behaviour entirely by toggling **Crash reports disabled** in Settings.
 
 | Tooltip | What it does |
 |---|---|
-| `View logs…` | Open the in-app log viewer. |
-| `Reload the tail of the log file` | Re-read the log file. |
-| `Copy the visible log to the clipboard` | Copy log to clipboard. |
-| `Open the log folder in your file manager` | Reveal the log directory. |
-| `Diagnostics` | Build a support bundle zip. |
+| `"View logs…"` | Open the in-app log viewer. |
+| `"Reload the tail of the log file"` | Re-read the log file. |
+| `"Copy the visible log to the clipboard"` | Copy log to clipboard. |
+| `"Open the log folder in your file manager"` | Reveal the log directory. |
+| `"Diagnostics"` | Build a support bundle zip. |

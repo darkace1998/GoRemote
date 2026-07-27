@@ -36,10 +36,10 @@ Each row exposes:
 
 | Tooltip | What it does |
 |---|---|
-| `Enable this plugin` | Mark the plugin as enabled and start using it. |
-| `Disable this plugin` | Stop using the plugin without removing it. |
-| `Quarantine this plugin (block it pending review)` | Block the plugin even if its trust policy would normally allow it. Use after a plugin misbehaves. |
-| `Forget this plugin (remove from registry; folder kept)` | Drop the plugin from GoRemote's registry but leave the folder on disk. |
+| `"Enable this plugin"` | Mark the plugin as enabled and start using it. |
+| `"Disable this plugin"` | Stop using the plugin without removing it. |
+| `"Quarantine this plugin (block it pending review)"` | Block the plugin even if its trust policy would normally allow it. Use after a plugin misbehaves. |
+| `"Forget this plugin (remove from registry; folder kept)"` | Drop the plugin from GoRemote's registry but leave the folder on disk. |
 
 The status column reflects the chosen state; broken plugins (manifest
 parse failure, missing binary, signature mismatch) include the error
@@ -58,10 +58,9 @@ Switching between modes takes effect on the next refresh.
 
 ### Adding a trusted key
 
-Click the button whose tooltip is `"Add a trusted publisher's ed25519
-public key"`, paste the publisher's base64-encoded ed25519 public key
+Click the button whose tooltip is `"Add a trusted publisher's ed25519 public key"`, paste the publisher's base64-encoded ed25519 public key
 (32 bytes), give it a label, and save. Remove a key with the matching
-`"Remove"` button.
+button whose tooltip reads `"Remove"`.
 
 ## Marketplace
 
@@ -76,9 +75,9 @@ The buttons:
 
 | Tooltip | What it does |
 |---|---|
-| `Save the marketplace URL to settings` | Persist the URL you typed. |
-| `Fetch listings from the marketplace URL` | Pull the listings JSON. |
-| `Download and install this plugin` | Stage the listing into the plugins folder. |
+| `"Save the marketplace URL to settings"` | Persist the URL you typed. |
+| `"Fetch listings from the marketplace URL"` | Pull the listings JSON. |
+| `"Download and install this plugin"` | Stage the listing into the plugins folder. |
 
 ## Out-of-process plugins
 
@@ -93,10 +92,10 @@ Go's native `plugin` package. The reference implementation lives in
 
 | Tooltip | What it does |
 |---|---|
-| `Plugins…` | Opens this dialog. |
-| `Re-scan the plugin folder for changes` | Pick up plugins added by hand. |
-| `Open the plugin folder in your file manager` | Reveal the plugin root. |
-| `Enable this plugin` / `Disable this plugin` / `Quarantine this plugin (block it pending review)` / `Forget this plugin (remove from registry; folder kept)` | Per-plugin lifecycle. |
-| `Add a trusted publisher's ed25519 public key` | Add a key to the trusted publisher list. |
-| `Remove` | Remove a key from the trusted publisher list. |
-| `Save the marketplace URL to settings` / `Fetch listings from the marketplace URL` / `Download and install this plugin` | Marketplace flow. |
+| `"Plugins…"` | Opens this dialog. |
+| `"Re-scan the plugin folder for changes"` | Pick up plugins added by hand. |
+| `"Open the plugin folder in your file manager"` | Reveal the plugin root. |
+| `"Enable this plugin"` / `"Disable this plugin"` / `"Quarantine this plugin (block it pending review)"` / `"Forget this plugin (remove from registry; folder kept)"` | Per-plugin lifecycle. |
+| `"Add a trusted publisher's ed25519 public key"` | Add a key to the trusted publisher list. |
+| `"Remove"` | Remove a key from the trusted publisher list. |
+| `"Save the marketplace URL to settings"` / `"Fetch listings from the marketplace URL"` / `"Download and install this plugin"` | Marketplace flow. |

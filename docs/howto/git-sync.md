@@ -110,7 +110,7 @@ hand.
 
 | Tooltip | What it does |
 |---|---|
-| `Settings…` | Opens settings — including the Git sync section. |
-| `Sync now (commit & push to Git)` | Force a manual commit + push. |
-| `Diagnostics` | Build a support bundle if syncing fails. |
-| `View logs…` | Tail the log file to see git command failures. |
+| `"Settings…"` | Opens settings — including the Git sync section. |
+| `"Sync now (commit & push to Git)"` | Force a manual commit + push. |
+| `"Diagnostics"` | Build a support bundle if syncing fails. |
+| `"View logs…"` | Tail the log file to see git command failures. |

@@ -92,6 +92,6 @@ provider.
 
 | Tooltip | What it does |
 |---|---|
-| `Manage credentials…` | Opens this dialog. |
-| `Unlock credential vault` | Prompt for master password and unlock the selected provider. |
-| `Lock credential vault` | Re-lock the selected provider without closing the app. |
+| `"Manage credentials…"` | Opens this dialog. |
+| `"Unlock credential vault"` | Prompt for master password and unlock the selected provider. |
+| `"Lock credential vault"` | Re-lock the selected provider without closing the app. |
