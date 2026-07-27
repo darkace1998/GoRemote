@@ -43,6 +43,24 @@ buttons:
 *Note: Multi-row bulk editing of connection properties is not yet
 supported.*
 
+## Context menu actions
+
+Right-clicking an item in the connection tree opens a context menu with additional actions:
+
+**For connections:**
+* **Connect:** Open a session for the connection.
+* **Open in new window…:** Open the session in a new, detached window.
+* **Open in split right** / **Open in split below:** Open the session in a split pane within the currently active tab.
+* **Edit…** / **Duplicate** / **Delete…:** Same as the toolbar actions.
+* **Add to favorites** / **Remove from favorites:** Toggle favorite status.
+* **Copy host** / **Copy host:port:** Copy the connection's address to your clipboard.
+
+**For folders (and the root):**
+* **New connection here…** / **New folder here…:** Create new items directly inside this folder.
+* **Connect all:** Opens a session for every connection recursively found within the folder.
+* **Expand all** / **Collapse all:** Quickly open or close all nested folders.
+* **Edit…** / **Duplicate** / **Delete…:** Same as the toolbar actions.
+
 ## Favorites
 
 You can mark frequently used connections as favorites to access them quickly from the `"Open a favorite…"` toolbar picker. A yellow ★ icon appears next to favorited connections in the tree.
