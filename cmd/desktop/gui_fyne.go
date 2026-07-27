@@ -188,6 +188,9 @@ func runGUI(_ *iapp.App, b *Bindings) bool {
 		tooltip.NewAction(theme.MoveDownIcon(), "Move selected to folder…", func() { bulkMoveSelected(w, b, tree) }),
 		tooltip.NewAction(theme.ContentClearIcon(), "Bulk delete selected", func() { bulkDeleteSelected(w, b, tree, sessions) }),
 		widget.NewToolbarSeparator(),
+		tooltip.NewAction(theme.MenuDropDownIcon(), "Expand all", func() { tree.tree.OpenAllBranches() }),
+		tooltip.NewAction(theme.MenuDropUpIcon(), "Collapse all", func() { tree.tree.CloseAllBranches() }),
+		widget.NewToolbarSeparator(),
 		tooltip.NewAction(theme.ViewRefreshIcon(), "Reload from disk", func() {
 			tree.refresh()
 		}),
