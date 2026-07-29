@@ -97,4 +97,6 @@ drop it between two items to place it there.
 | `"Bulk duplicate selected"` | Bulk clone marked items |
 | `"Move selected to folder…"` | Bulk move marked items |
 | `"Bulk delete selected"` | Bulk delete marked items |
+| `"Expand all folders"` | Open all nested folders |
+| `"Collapse all folders"` | Close all nested folders |
 | `"Reload from disk"` | Refresh the connection tree from disk |
