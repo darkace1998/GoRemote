@@ -11,10 +11,10 @@ plugin system.
 
 | Protocol | Notes |
 |---|---|
-| **SSH** | Native Go SSH client. Supports agent / key / password / keyboard-interactive. |
+| **SSH** | Native Go SSH client. Supports ssh-agent / key / password / keyboard-interactive. |
 | **SFTP** | Same auth surface as SSH; renders a file browser tab. |
 | **Telnet** | Linemode + character mode with optional TLS-STARTTLS. |
-| **rlogin** | Mostly here for legacy parity with mRemoteNG. |
+| **rlogin** | Maintained primarily for legacy parity with mRemoteNG. |
 | **Raw Socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
 | **HTTP/HTTPS** | **Experimental** Go-native in-process client that fetches URLs without spawning a browser. |
 | **VNC** | **Experimental** Go-native in-process TCP/RFB session. |
