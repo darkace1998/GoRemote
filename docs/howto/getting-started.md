@@ -14,7 +14,11 @@ go run ./cmd/desktop
 ```
 
 On Linux the app expects the OpenGL/X11 prerequisites listed in the
-top-level [README](../../README.md#prerequisites). On macOS and Windows
+top-level [README](../../README.md#prerequisites). For Ubuntu/Debian, install them via:
+```bash
+sudo apt-get install -y libgl1-mesa-dev xorg-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev xvfb
+```
+On macOS and Windows
 the binary is self-contained.
 
 A single window opens with three regions:
