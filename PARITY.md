@@ -15,7 +15,7 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | Telnet       | ✅        | ✅ **Ready**       | RFC 854 negotiation; NAWS; TTYPE; configurable encoding. |
 | Rlogin       | ✅        | ✅ **Ready**       | RFC 1282 handshake; in-band window-size updates. |
 | Raw socket   | ✅        | ✅ **Ready**       | Configurable EOL (lf / crlf / none), keepalive, configurable encoding. |
-| PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned before registration. |
+| PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned. |
 | RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
 | IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
 | HTTP/HTTPS   | ✅        | 🔶 **Experimental** | Go-native in-process client that fetches URLs without spawning a browser. |
@@ -32,7 +32,7 @@ protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
 protocol-rawsocket  protocol-http       protocol-vnc        protocol-rdp
 protocol-tn5250     protocol-mosh
 protocol-serial
-protocol-powershell (planned, not registered)
+protocol-powershell
 ```
 
 ## Credential providers
