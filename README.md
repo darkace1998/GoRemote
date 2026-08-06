@@ -7,7 +7,7 @@ A Go-based, cross-platform successor to **mRemoteNG**: a modern multi-protocol r
 ## Highlights
 
 - 🖥️ **Cross-platform desktop** — Windows, Linux, macOS via **Fyne v2** (pure-Go, OpenGL-rendered native UI; no browser runtime required).
-- 🔌 **Modular protocols** — Go-native protocol packages for SSH, SFTP, Telnet, Rlogin, Raw socket, Serial / COM, plus experimental HTTP / VNC / RDP / TN5250 / MOSH scaffolding. PowerShell remoting is planned and not registered until a native transport exists. See `plugins/`.
+- 🔌 **Modular protocols** — Go-native protocol packages for SSH, SFTP, Telnet, Rlogin, Raw socket, Serial / COM, plus experimental HTTP / VNC / RDP / TN5250 / MOSH scaffolding. PowerShell remoting is planned until a native transport exists (stub registered). See `plugins/`.
 - 🔐 **Pluggable credentials** — OS keychain, encrypted file vault (AES-256-GCM + Argon2id), 1Password (`op`), Bitwarden (`bw`).
 - 📥 **Trustworthy migration** — streaming XML + CSV importer for mRemoteNG data with explicit warnings instead of silent drops.
 - 🧱 **Stable plugin contract** — versioned SDK in `sdk/`; out-of-process plugin reference implementation in `host/plugin/ipc/`.
