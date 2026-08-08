@@ -13,7 +13,7 @@ go run ./cmd/desktop
 ./goremote
 ```
 
-On Linux the app expects the OpenGL/X11 prerequisites listed in the
+On Linux the app expects the OpenGL/X11 and Wayland prerequisites listed in the
 top-level [README](../../README.md#prerequisites). On macOS and Windows
 the binary is self-contained.
 
