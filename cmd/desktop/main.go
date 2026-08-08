@@ -123,6 +123,23 @@ func (b *Bindings) SwitchWorkspaceProfile(ctx context.Context, newProfile string
 	return nil
 }
 
+// DeleteWorkspaceProfile deletes the specified workspace profile file.
+// It returns an error if attempting to delete the default profile.
+func (b *Bindings) DeleteWorkspaceProfile(ctx context.Context, profile string) error {
+	if profile == "" || profile == "default" {
+		return fmt.Errorf("cannot delete default profile")
+	}
+	wp, err := workspace.ProfilePath(profile)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(wp)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // WithLogLevelVar attaches a runtime-mutable log level to the bindings so the
 // settings UI can change verbosity without restarting the application.
 func (b *Bindings) WithLogLevelVar(v *slog.LevelVar) *Bindings {
@@ -452,7 +469,6 @@ func (b *Bindings) ClearRecents(ctx context.Context) error {
 	w.ClearRecents()
 	return b.workspace.Save(ctx, w)
 }
-
 
 // --- Session commands ---------------------------------------------------
 
