@@ -1748,8 +1748,52 @@ func showWorkspaceProfilesDialog(w fyne.Window, b *Bindings, sessions *sessionRe
 	newProfileEntry := widget.NewEntry()
 	newProfileEntry.SetPlaceHolder("or enter new profile name")
 
+	var delBtn *widget.Button
+	delBtn = widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+		sel := profileSel.Selected
+		if sel == "default" {
+			return
+		}
+		if sel == activeProfile {
+			dialog.ShowInformation("Delete Profile", "You cannot delete the currently active profile. Please switch to another profile first.", w)
+			return
+		}
+		dialog.ShowConfirm("Delete Profile", fmt.Sprintf("Are you sure you want to delete the workspace profile %q?", sel), func(ok bool) {
+			if !ok {
+				return
+			}
+			if err := b.DeleteWorkspaceProfile(context.Background(), sel); err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			var newOpts []string
+			for _, p := range profileSel.Options {
+				if p != sel {
+					newOpts = append(newOpts, p)
+				}
+			}
+			profileSel.Options = newOpts
+			profileSel.SetSelected(activeProfile)
+			profileSel.Refresh()
+		}, w)
+	})
+	tooltip.WrapButton(delBtn, "Delete selected profile")
+
+	profileSel.OnChanged = func(s string) {
+		if s == "default" {
+			delBtn.Disable()
+		} else {
+			delBtn.Enable()
+		}
+	}
+	if activeProfile == "default" {
+		delBtn.Disable()
+	}
+
+	existingRow := container.NewBorder(nil, nil, nil, delBtn, profileSel)
+
 	items := []*widget.FormItem{
-		widget.NewFormItem("Existing Profile", profileSel),
+		widget.NewFormItem("Existing Profile", existingRow),
 		widget.NewFormItem("New Profile", newProfileEntry),
 	}
 
