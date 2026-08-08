@@ -48,7 +48,7 @@ docs/screenshots/       Reserved for screenshots once the UI stabilizes
 - **Go 1.26** (pinned via the `go.mod` toolchain directive).
 - For desktop builds:
   - Linux: `libgl1-mesa-dev xorg-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev` (OpenGL, X11, and Wayland headers for Fyne).
-    - *Ubuntu/Debian:* `sudo apt-get install -y libgl1-mesa-dev xorg-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev xvfb`
+    - *Ubuntu/Debian:* `sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev xvfb`
   - macOS: Xcode command-line tools.
   - Windows (cross-compiling from Linux): `gcc-mingw-w64-x86-64`.
   - Windows (native build): any C compiler; no extra SDK required.
