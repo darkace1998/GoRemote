@@ -1689,6 +1689,7 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		}),
 		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate session", func() { duplicateCurrentSession(w, b, sessions) }),
 		tooltip.NewAction(theme.MediaStopIcon(), "Disconnect current session", func() { closeCurrentSession(sessions) }),
+		tooltip.NewAction(theme.CancelIcon(), "Disconnect all sessions", func() { disconnectAllSessions(w, b, sessions) }),
 		tooltip.NewAction(theme.WindowMaximizeIcon(), "Detach current tab to its own window", func() { detachCurrentTab(a, sessions) }),
 		tooltip.NewAction(theme.HistoryIcon(), "Recent connections", func() { showRecentsMenu(w, b, sessions) }),
 		tooltip.NewAction(theme.SearchIcon(), "Open a favorite…", func() { showFavoritesPicker(w, b, sessions) }),
@@ -4364,4 +4365,43 @@ func connectAllUnder(w fyne.Window, b *Bindings, sessions *sessionRegistry, n *i
 	} else {
 		doConnect()
 	}
+}
+
+func disconnectAllSessions(w fyne.Window, b *Bindings, sessions *sessionRegistry) {
+	sessions.mu.Lock()
+	count := len(sessions.items)
+	sessions.mu.Unlock()
+
+	if count == 0 {
+		dialog.ShowInformation("Disconnect all", "No active sessions to disconnect.", w)
+		return
+	}
+
+	msg := fmt.Sprintf("Disconnect all %d sessions?", count)
+	dialog.ShowConfirm("Confirm disconnect all", msg, func(ok bool) {
+		if !ok {
+			return
+		}
+
+		sessions.mu.Lock()
+		for _, st := range sessions.items {
+			sessions.tabs.Remove(st.tabItem)
+			go func(handle string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := b.CloseSession(ctx, handle); err != nil {
+					slog.Warn("close session", "handle", handle, "err", err)
+				}
+			}(st.handle)
+		}
+		clear(sessions.items)
+		clear(sessions.connItems)
+		clear(sessions.openConns)
+		clear(sessions.groups)
+		clear(sessions.tabToSession)
+		clear(sessions.connToSession)
+		sessions.mu.Unlock()
+		sessions.setStatus("All sessions disconnected.")
+		sessions.setSessionCount(0)
+	}, w)
 }
