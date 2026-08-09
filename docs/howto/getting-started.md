@@ -108,6 +108,7 @@ the About dialog which shows the version and license information.
 | `"Close tab"` | Close the active tab |
 | `"Duplicate session"` | Open a duplicate of the active session tab |
 | `"Disconnect current session"` | Cleanly close the active session |
+| `"Disconnect all sessions"` | Cleanly terminate all active sessions. |
 | `"Detach current tab to its own window"` | Float the active tab as a window |
 | `"Move this tab back into the main window"` | Reattach a detached tab |
 | `"Recent connections"` | Reopen something you used recently |

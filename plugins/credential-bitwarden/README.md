@@ -1,6 +1,6 @@
 # Bitwarden credential provider
 
-Status: implemented. The provider shells out to the Bitwarden CLI (`bw`)
+**Status:** Ready. The provider shells out to the Bitwarden CLI (`bw`)
 with a per-session BW_SESSION token captured from `bw unlock --raw`. It
 supports State, Unlock, Lock, Resolve (`bw get item`), List (`bw list
 items`) and Sync (`bw sync`). Writes are intentionally rejected

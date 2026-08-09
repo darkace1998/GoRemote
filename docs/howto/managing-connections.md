@@ -93,7 +93,7 @@ drop it between two items to place it there.
 | `"Duplicate selected"` | Clone a connection or folder |
 | `"Delete selected"` | Remove a single item |
 | `"Add selection to multi-select"` | Mark an item for bulk action |
-| `"Clear multi-select"` | Deselect all marked items |
+| `"Clear multi-select"` | Deselect all currently selected items in the tree. |
 | `"Bulk duplicate selected"` | Bulk clone marked items |
 | `"Move selected to folder…"` | Bulk move marked items |
 | `"Bulk delete selected"` | Bulk delete marked items |
