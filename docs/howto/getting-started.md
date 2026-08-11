@@ -84,6 +84,8 @@ currently surface experimental/planned Go-native protocol work. HTTP and VNC are
   strip without disturbing the underlying session.
 * **Disconnect** the active session with the toolbar icon whose
   tooltip is `"Disconnect current session"`.
+* **Disconnect all** sessions with the toolbar icon whose
+  tooltip is `"Disconnect all sessions"`.
 
 ## 7. Recents and favorites
 
@@ -108,6 +110,7 @@ the About dialog which shows the version and license information.
 | `"Close tab"` | Close the active tab |
 | `"Duplicate session"` | Open a duplicate of the active session tab |
 | `"Disconnect current session"` | Cleanly close the active session |
+| `"Disconnect all sessions"` | Cleanly close all active sessions |
 | `"Detach current tab to its own window"` | Float the active tab as a window |
 | `"Move this tab back into the main window"` | Reattach a detached tab |
 | `"Recent connections"` | Reopen something you used recently |
