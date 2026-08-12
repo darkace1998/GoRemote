@@ -69,7 +69,7 @@ Select a connection in the tree, then either:
 
 A new tab opens in the right pane with a live terminal for ready terminal
 protocols (SSH / Telnet / Rlogin / Raw / Serial / SFTP). RDP, TN5250, and MOSH
-currently surface experimental/planned Go-native protocol work. HTTP and VNC are experimental in-process protocols.
+currently surface experimental/planned Go-native protocol work. HTTP and VNC rely on external launchers (system browser, vncviewer).
 
 ## 6. Tabs, splits, and detached windows
 
