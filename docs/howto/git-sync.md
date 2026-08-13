@@ -82,7 +82,7 @@ recover:
 
 1. Open a terminal in the workspace directory (`Settings → Logs &
    diagnostics` shows the path; or right-click any folder in the
-   plugins dialog "Open folder" tooltip to find related state dirs).
+   plugins dialog "Open the plugin folder in your file manager" tooltip to find related state dirs).
 2. Resolve the divergence with regular git tooling (`git pull --rebase`,
    `git reset --hard origin/<branch>`, etc.).
 3. Click `"Sync now (commit & push to Git)"` to verify recovery.
