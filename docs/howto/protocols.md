@@ -16,8 +16,6 @@ plugin system.
 | **Telnet** | Linemode + character mode with optional TLS-STARTTLS. |
 | **rlogin** | Maintained primarily for legacy parity with mRemoteNG. |
 | **Raw Socket** | Plain TCP byte stream — useful for serial-over-IP devices. |
-| **HTTP/HTTPS** | **Experimental** Go-native in-process client that fetches URLs without spawning a browser. |
-| **VNC** | **Experimental** Go-native in-process TCP/RFB session. |
 | **Serial / COM** | Local serial ports (`/dev/ttyUSB0`, `COM3`, …) at configurable baud rate / parity. |
 | **RDP** | **Experimental** Go-native TCP scaffold; full graphical protocol pipeline is planned. |
 | **TN5250** | **Experimental** Go-native TCP scaffold; full 5250 negotiation/screen model is planned. |
