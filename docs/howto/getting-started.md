@@ -125,3 +125,5 @@ the About dialog which shows the version and license information.
 | `"Diagnostics"` | Open the diagnostics dialog |
 | `"Sync now (commit & push to Git)"` | Trigger a git sync manually |
 | `"Check for updates"` | Check for application updates |
+| `"Unlock credential vault"` | Unlock the encrypted credential vault |
+| `"Lock credential vault"` | Lock the encrypted credential vault |
