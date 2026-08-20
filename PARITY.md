@@ -18,8 +18,8 @@ This matrix tracks feature parity between **goremote** and mRemoteNG.
 | PowerShell   | ✅        | 🔶 **Planned**     | Local PowerShell process launching was removed from the protocol system; Go-native PSRP/WinRM remoting is planned. |
 | RDP          | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full MS-RDPBCGR graphics/security pipeline still planned. |
 | IBM TN5250   | ✅        | 🔶 **Experimental** | Go-native TCP scaffold; full TN5250 negotiation/screen model still planned. |
-| HTTP/HTTPS   | ✅        | ❌ **Dropped**       | Relies on external system browser launcher. |
-| VNC          | ✅        | ❌ **Dropped**       | Relies on external vncviewer launcher. |
+| HTTP/HTTPS   | ✅        | 🔶 **Experimental** | Go-native in-process HTTP client; no browser spawned. |
+| VNC          | ✅        | 🔶 **Experimental** | Go-native in-process TCP/RFB session; no external binary. |
 | External app | ✅        | 🔶 **Planned**     | External tool launching is outside the protocol plugin system. |
 | MOSH         | (3rd-party) | 🔶 **Planned / Experimental** | Go-native package exists, but Start returns unsupported until MOSH UDP transport is implemented. |
 | SFTP         | (3rd-party) | ✅ **Ready**       | Interactive SFTP file-browser shell (ls/cd/get/put/mkdir/rm/mv/chmod/...) over an SSH connection. Reuses the SSH plugin's auth + known-hosts machinery. |
@@ -29,7 +29,7 @@ Plugins shipped today (`plugins/`):
 
 ```
 protocol-ssh        protocol-sftp       protocol-telnet     protocol-rlogin
-protocol-rawsocket  protocol-rdp
+protocol-rawsocket  protocol-rdp          protocol-http       protocol-vnc
 protocol-tn5250     protocol-mosh
 protocol-serial
 protocol-powershell
