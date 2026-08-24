@@ -1689,6 +1689,7 @@ func buildToolbar(w fyne.Window, b *Bindings, tree *connTree, sessions *sessionR
 		}),
 		tooltip.NewAction(theme.ContentCopyIcon(), "Duplicate session", func() { duplicateCurrentSession(w, b, sessions) }),
 		tooltip.NewAction(theme.MediaStopIcon(), "Disconnect current session", func() { closeCurrentSession(sessions) }),
+		tooltip.NewAction(theme.ViewRefreshIcon(), "Reconnect current session", func() { reconnectCurrentSession(w, b, sessions) }),
 		tooltip.NewAction(theme.CancelIcon(), "Disconnect all sessions", func() { disconnectAllSessions(w, b, sessions) }),
 		tooltip.NewAction(theme.WindowMaximizeIcon(), "Detach current tab to its own window", func() { detachCurrentTab(a, sessions) }),
 		tooltip.NewAction(theme.HistoryIcon(), "Recent connections", func() { showRecentsMenu(w, b, sessions) }),
