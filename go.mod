@@ -1,6 +1,6 @@
 module github.com/darkace1998/GoRemote
 
-go 1.26
+go 1.26.0
 
 toolchain go1.26.2
 
@@ -10,7 +10,7 @@ require (
 	github.com/pkg/sftp v1.13.11
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.8.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/sys v0.47.0
 )
 
